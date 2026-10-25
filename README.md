@@ -40,4 +40,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen am Userscript gegenüber 12.2
 - Batch liegt jetzt im Tampermonkey-Speicher statt im localStorage von babepedia (nötig, damit das Tool ihn lesen kann).
 - Neuer Button **🗂️ Tool öffnen** und automatische Übertragung auf der Tool-Seite.
-- Bugfix: `LIST_AUCH_GELISTET` war nicht definiert, wodurch **🔄 Move Lists Only** bei jedem Profil mit einem Fehler abbrach. Jetzt als optionale Konstante oben im Skript.
+- Listen-Logik richtet sich nach der Seite, auf der du bist (Anzeige über den Buttons):
+  - **NEU-Liste** (ID 204346): geholte Profile werden nach GELISTET verschoben.
+  - **GELISTET-Liste** (ID 157076): Profile werden nur geholt, die Listen bleiben unverändert.
+  - **Profilseite** (➕ Add): Profil wird in GELISTET aufgenommen und aus NEU entfernt.
+  - **Andere Seite**: Das Skript fragt nach.
+- `LIST_AUCH_GELISTET` entfernt (war nicht definiert und ließ **🔄 Move Lists Only** abbrechen).

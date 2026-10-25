@@ -201,6 +201,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 13px; color: var(--text);
 }
 .links a:hover { border-color: var(--accent); text-decoration: none; }
+.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.img-grid img, .img-grid .placeholder {
+  width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 9px; cursor: zoom-in;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 18px;
+}
+.img-grid img:hover { border-color: var(--accent); }
+.img-prev { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.img-prev:empty { display: none; }
+.img-prev img, .img-prev .placeholder {
+  width: 64px; height: 86px; object-fit: cover; border-radius: 7px; cursor: zoom-in;
+  border: 1px solid var(--border); background: var(--surface-2); font-size: 14px;
+}
 .notes { white-space: pre-wrap; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
 
 /* ---------- Form ---------- */

@@ -44,6 +44,9 @@
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt'
   };
+  const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
+  const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
+    .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
   const UNITS = { 'Height': ' cm', 'Weight': ' kg' };
 
   const STORE_KEY = 'bp-organizer-v1';
@@ -379,7 +382,6 @@
       <div class="detail">
         <div class="gallery">
           <div class="main">${imgTag(imgs[0], v(e, 'Name'))}</div>
-          ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((u, i) => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" class="${i === 0 ? 'on' : ''}" data-thumb="${esc(u)}">`).join('')}</div>` : ''}
         </div>
         <div>
           <h1 class="d-title">${esc(v(e, 'Name'))}</h1>
@@ -396,6 +398,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -426,6 +429,9 @@
       input = `<input type="${type}" ${name} value="${esc(val)}" ${f === 'Name' ? 'required' : ''}>`;
     }
     const wide = t === 'area' || f === 'Notes' ? ' wide' : '';
+    if (IMAGE_FIELDS.includes(f)) {
+      return `<div class="field${wide}"><label for="${id}">${esc(f)}</label>${input}${hint}<div class="img-prev" data-prev-for="${esc(f)}">${previewHTML(val)}</div></div>`;
+    }
     return `<div class="field${wide}"><label for="${id}">${esc(f)}${f === 'Name' ? ' *' : ''}</label>${input}${hint}</div>`;
   }
 
@@ -447,7 +453,11 @@
         <button class="btn primary" data-action="save">${isNew ? 'Anlegen' : 'Speichern'}</button>
       </div>`);
     const form = $('#entry-form');
-    form.addEventListener('input', () => { dirty = true; });
+    form.addEventListener('input', (ev) => {
+      dirty = true;
+      const box = $(`[data-prev-for="${CSS.escape(ev.target.name || '')}"]`, form);
+      if (box) box.innerHTML = previewHTML(ev.target.value);
+    });
     form.addEventListener('submit', (ev) => { ev.preventDefault(); saveForm(); });
     $('[name="Name"]', form).focus();
   }
@@ -578,6 +588,8 @@
       return;
     }
     if (t.closest('.gallery .main img')) { lightbox(t.src); return; }
+    const full = t.closest('img[data-full]');
+    if (full) { lightbox(full.dataset.full); return; }
     const tag = t.closest('[data-tag]');
     if (tag) { closeModal(true); $('#q').value = tag.dataset.tag; render(); return; }
     const card = t.closest('[data-id].card, tr[data-id]');
