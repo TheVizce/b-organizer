@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Erkennungsmerkmal für das Userscript – nicht entfernen -->
+  <meta name="bp-organizer" content="1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Babe Organizer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">Babe Organizer</span>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="top-actions">
+      <button class="btn primary" id="btn-new" title="Neuer Eintrag">＋<span class="lbl"> Neuer Eintrag</span></button>
+      <div class="menu-wrap">
+        <button class="btn" id="btn-menu" aria-haspopup="true">Daten ▾</button>
+        <div class="menu" id="menu" hidden>
+          <button data-action="import-file">Importieren (CSV / JSON)…</button>
+          <button data-action="export-json">Backup exportieren (JSON)</button>
+          <button data-action="export-csv">Als CSV exportieren (Notion)</button>
+          <hr>
+          <button data-action="help">Anleitung</button>
+          <button data-action="clear-all" class="danger">Alle Einträge löschen…</button>
+        </div>
+      </div>
+      <input type="file" id="file-input" accept=".csv,.json,text/csv,application/json" hidden>
+    </div>
+  </header>
+
+  <section class="toolbar">
+    <input type="search" id="q" placeholder="Suchen: Name, AKA, Tags, Notizen…" autocomplete="off">
+    <select id="f-nationality"><option value="">Nationalität: alle</option></select>
+    <select id="f-hair"><option value="">Haarfarbe: alle</option></select>
+    <select id="f-eyes"><option value="">Augenfarbe: alle</option></select>
+    <select id="f-body"><option value="">Figur: alle</option></select>
+    <select id="f-active">
+      <option value="">Aktiv: egal</option>
+      <option value="true">nur aktiv</option>
+      <option value="false">nur inaktiv</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="f-fav"> nur Favoriten</label>
+    <select id="sort">
+      <option value="name">Sortierung: Name A–Z</option>
+      <option value="created">Zuletzt hinzugefügt</option>
+      <option value="updated">Zuletzt geändert</option>
+      <option value="global">Global Rating ↓</option>
+      <option value="mine">Meine Bewertung ↓</option>
+      <option value="rank">Rank ↑</option>
+      <option value="young">Alter ↑ (jüngste zuerst)</option>
+      <option value="old">Alter ↓ (älteste zuerst)</option>
+      <option value="height">Größe ↓</option>
+    </select>
+    <div class="seg" role="group" aria-label="Ansicht">
+      <button data-view="grid" class="on" title="Karten">▦</button>
+      <button data-view="table" title="Tabelle">☰</button>
+    </div>
+    <button class="btn ghost" id="btn-reset" title="Filter zurücksetzen">✕ Filter</button>
+  </section>
+
+  <main id="main"></main>
+
+  <!-- Detail / Formular -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
