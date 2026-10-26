@@ -63,3 +63,14 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 13.5
 - Profile, die beim Auto Fetch nicht geholt werden konnten, werden gespeichert. Der Button **↻ Fehlgeschlagene (n)** holt sie erneut (Shift+Klick zeigt die Liste in der Konsole bzw. leert sie).
 - Seiten ohne Profil (z. B. Bot-Schutz oder abgelaufener Login) zählen jetzt als Fehler statt stillschweigend zu fehlen.
+
+## Änderungen in 13.6
+- Verschieben NEU → GELISTET ist jetzt abgesichert: Das Skript wertet die Antwort von Babepedia aus (`success: true`). Nur wenn das Hinzufügen zu GELISTET bestätigt ist, wird aus NEU entfernt. „Schon in GELISTET“ gilt als Erfolg.
+- Schlägt das Verschieben fehl (z. B. ausgeloggt), bleibt das Profil in NEU und landet bei **↻ Fehlgeschlagene**. Bei **➕ Add** erscheint eine Meldung.
+
+## Änderungen in 13.7 (Tool)
+- Daten liegen jetzt in **IndexedDB** statt im localStorage. Der localStorage hat nur ca. 5 MB und wird von allen Seiten unter `deinname.github.io` gemeinsam genutzt – bei ~3700 Profilen war er voll („The quota has been exceeded“), auch für die anderen Tools.
+- Alte Daten werden beim ersten Öffnen automatisch übernommen und danach aus dem localStorage entfernt.
+- Die Übernahme vom Userscript wird erst bestätigt, wenn wirklich gespeichert wurde. Schlägt das Speichern fehl, bleiben die Profile im Userscript.
+- Änderungen erscheinen sofort auch in anderen offenen Tabs des Tools.
+- Unter *Daten → Anleitung* steht, wie viel Speicher belegt ist.

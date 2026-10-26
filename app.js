@@ -177,7 +177,11 @@
 
   const catList = (e) => String(e['Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
   // Abgeleitete Felder immer aus den Rohdaten neu berechnen
-  function derive(e) { e['Profession Category'] = professionCategories(e.Professions); return e; }
+  function derive(e) {
+    if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    e['Profession Category'] = professionCategories(e.Professions);
+    return e;
+  }
 
   // Bewertungsvergleich: My Rating (Tool) vs. User Rating (Babepedia)
   function ratingDiff(e) {
@@ -194,21 +198,75 @@
   const UI_KEY = 'bp-organizer-ui';
 
   // ---------- Zustand ----------
-  let entries = load();
+  // Daten liegen in IndexedDB (viel mehr Platz als localStorage, das sich alle *.github.io-Seiten
+  // eines Kontos teilen). Der localStorage wird nur noch für kleine UI-Einstellungen genutzt.
+  let entries = [];
+  let ready = false;
   const ui = Object.assign({ view: 'grid', sort: 'name' }, safeJSON(localStorage.getItem(UI_KEY), {}));
 
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
   function safeJSON(s, fallback) { try { return s ? JSON.parse(s) : fallback; } catch { return fallback; } }
-  function load() {
-    const d = safeJSON(localStorage.getItem(STORE_KEY), []);
-    return Array.isArray(d) ? d.map(derive) : [];
+  // ---------- IndexedDB ----------
+  const DB_NAME = 'bp-organizer', DB_STORE = 'kv';
+  let dbPromise = null;
+  function db() {
+    if (!dbPromise) dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
   }
-  function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(entries)); }
-    catch (e) { toast('Speichern fehlgeschlagen: ' + e.message, 'err'); }
+  async function idbGet(key) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const r = d.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+    });
   }
+  async function idbSet(key, value) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('Speichern abgebrochen'));
+    });
+  }
+
+  async function load() {
+    let d = await idbGet('entries');
+    if (!Array.isArray(d)) {
+      // Umzug aus dem alten localStorage (Version bis 13.6)
+      const old = safeJSON(localStorage.getItem(STORE_KEY), null);
+      d = Array.isArray(old) ? old : [];
+      if (d.length) {
+        await idbSet('entries', d);
+        toast(`${d.length} Einträge in den neuen Speicher übernommen.`, 'ok');
+      }
+    }
+    // Alten localStorage-Eintrag entfernen -> Platz für die anderen GitHub-Pages-Tools
+    if (localStorage.getItem(STORE_KEY) !== null && Array.isArray(await idbGet('entries'))) {
+      try { localStorage.removeItem(STORE_KEY); } catch {}
+    }
+    return d.map(derive);
+  }
+
+  const channel = 'BroadcastChannel' in window ? new BroadcastChannel('bp-organizer') : null;
+  // Speichert; wirft bei Fehler, damit z. B. die Übernahme vom Userscript nicht bestätigt wird
+  async function save() {
+    try {
+      await idbSet('entries', entries);
+      if (channel) channel.postMessage('changed');
+    } catch (e) {
+      toast('Speichern fehlgeschlagen: ' + (e && e.message || e) + ' – bitte Backup exportieren!', 'err');
+      throw e;
+    }
+  }
+  // Für Klick-Aktionen: Fehler wird schon per Toast gemeldet
+  const saveQuiet = () => save().catch(() => {});
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch {} }
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -265,7 +323,7 @@
     const url = v(e, 'Profile URL').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
     return url ? 'url:' + url : 'name:' + v(e, 'Name').toLowerCase();
   }
-  function importItems(items) {
+  async function importItems(items) {
     let added = 0, updated = 0, skipped = 0;
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const now = Date.now();
@@ -291,9 +349,9 @@
         added++;
       }
     }
-    save();
     refreshFilters();
     render();
+    await save();
     return { added, updated, skipped };
   }
 
@@ -344,7 +402,8 @@
       return;
     }
     if (!items.length) { toast('Keine Einträge in der Datei gefunden.', 'err'); return; }
-    const r = importItems(items);
+    let r;
+    try { r = await importItems(items); } catch { return; }
     toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
   }
 
@@ -353,11 +412,13 @@
     if (ev.origin !== location.origin) return;
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
-    if (d.type === 'BP_PING') window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
-    if (d.type === 'BP_SYNC' && Array.isArray(d.items)) {
-      const r = importItems(d.items);
-      window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
-      toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert.`, 'ok');
+    if (d.type === 'BP_PING' && ready) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+    if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
+      // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
+      importItems(d.items).then(r => {
+        window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
+        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert.`, 'ok');
+      }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
   });
 
@@ -566,7 +627,7 @@
     const e = byId(id); if (!e) return;
     e['My Rating'] = val === '' ? '' : String(val);
     e._updated = Date.now();
-    save(); render(); showDetail(id);
+    saveQuiet(); render(); showDetail(id);
   }
 
   function showDetail(id) {
@@ -690,7 +751,7 @@
       else if (TYPES[f] === 'date') data[f] = isoToDd(el.value);
       else data[f] = el.value.trim();
     }
-    derive(data);
+    data['Profession Category'] = professionCategories(data.Professions);
     if (!data.Name) { toast('Bitte einen Namen eingeben.', 'err'); $('[name="Name"]', form).focus(); return; }
 
     const dupe = entries.find(x => x._id !== id && keyOf(x) === keyOf(data));
@@ -703,7 +764,7 @@
     } else {
       entries.push({ _id: uid(), _created: now, _updated: now, ...data });
     }
-    save(); refreshFilters(); render();
+    saveQuiet(); refreshFilters(); render();
     dirty = false;
     const target = id || entries[entries.length - 1]._id;
     showDetail(target);
@@ -724,10 +785,18 @@
         <h3>Ohne Userscript</h3>
         <p>Über <em>Daten → Importieren</em> kannst du die CSV-Datei deines alten Skripts oder ein JSON-Backup einlesen.</p>
         <h3>Wo liegen die Daten?</h3>
-        <p>Nur in diesem Browser (localStorage). Mach regelmäßig ein Backup über <em>Daten → Backup exportieren</em> – damit kannst du auch auf ein anderes Gerät umziehen.</p>
+        <p>Nur in diesem Browser (IndexedDB). Mach regelmäßig ein Backup über <em>Daten → Backup exportieren</em> – damit kannst du auch auf ein anderes Gerät umziehen.</p>
+        <p id="storage-info" class="muted"></p>
         <h3>Bilder</h3>
         <p>Bilder werden nur verlinkt, nicht gespeichert. Wenn ein Bild nicht lädt, erscheinen die Initialen. Du kannst jederzeit eigene Bild-URLs eintragen.</p>
       </div>`);
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(({ usage, quota }) => {
+        const mb = (x) => (x / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' MB';
+        const el = $('#storage-info');
+        if (el) el.textContent = `Belegt: ${mb(usage || 0)} von ${mb(quota || 0)} verfügbarem Speicher (${entries.length} Einträge).`;
+      }).catch(() => {});
+    }
   }
 
   function lightbox(src) {
@@ -750,7 +819,7 @@
     const e = byId(id); if (!e) return;
     e.Favorite = isTrue(e.Favorite) ? 'false' : 'true';
     e._updated = Date.now();
-    save(); render();
+    saveQuiet(); render();
     if (!overlay.hidden && $('.detail', modal)) showDetail(id);
   }
 
@@ -766,7 +835,7 @@
         const e = byId(el.dataset.id);
         if (e && confirm(`„${e.Name}“ wirklich löschen?`)) {
           entries = entries.filter(x => x._id !== e._id);
-          save(); refreshFilters(); closeModal(true); render();
+          saveQuiet(); refreshFilters(); closeModal(true); render();
           toast('Eintrag gelöscht.');
         }
         break;
@@ -782,7 +851,7 @@
       case 'help': showHelp(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {
-          entries = []; save(); refreshFilters(); render(); toast('Alle Einträge gelöscht.');
+          entries = []; saveQuiet(); refreshFilters(); render(); toast('Alle Einträge gelöscht.');
         }
         break;
     }
@@ -850,12 +919,22 @@
   });
 
   // Änderungen aus anderen Tabs übernehmen
-  window.addEventListener('storage', (ev) => {
-    if (ev.key === STORE_KEY) { entries = load(); refreshFilters(); render(); }
-  });
+  if (channel) channel.onmessage = async () => { entries = await load(); refreshFilters(); render(); };
 
-  refreshFilters();
-  render();
-  // Userscript informieren, dass das Tool bereit ist
-  window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+  (async () => {
+    $('#main').innerHTML = '<div class="empty"><p>Lade Daten…</p></div>';
+    try {
+      entries = await load();
+    } catch (e) {
+      $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
+      return;
+    }
+    // Browser bitten, die Daten nicht automatisch zu löschen
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
+    ready = true;
+    refreshFilters();
+    render();
+    // Userscript informieren, dass das Tool bereit ist
+    window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+  })();
 })();
