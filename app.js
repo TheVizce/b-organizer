@@ -40,7 +40,7 @@
   };
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
-    'Tags': 'kommagetrennt', 'My Rating': '0–10', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
+    'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt'
   };
@@ -48,6 +48,74 @@
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
     .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
   const UNITS = { 'Height': ' cm', 'Weight': ' kg' };
+
+  // Nationalität (englisch, wie auf Babepedia) -> Ländercode
+  const NATIONALITY_CODES = {
+      'afghan': 'AF', 'albanian': 'AL', 'algerian': 'DZ', 'american': 'US', 'andorran': 'AD', 'angolan': 'AO',
+      'argentine': 'AR', 'argentinian': 'AR', 'armenian': 'AM', 'aruban': 'AW', 'australian': 'AU', 'austrian': 'AT',
+      'azerbaijani': 'AZ', 'azeri': 'AZ', 'bahamian': 'BS', 'bahraini': 'BH', 'bangladeshi': 'BD', 'barbadian': 'BB', 'bajan': 'BB',
+      'belarusian': 'BY', 'belgian': 'BE', 'belizean': 'BZ', 'beninese': 'BJ', 'bermudian': 'BM', 'bhutanese': 'BT',
+      'bolivian': 'BO', 'bosnian': 'BA', 'botswanan': 'BW', 'motswana': 'BW', 'brazilian': 'BR', 'bruneian': 'BN',
+      'bulgarian': 'BG', 'burkinabe': 'BF', 'burmese': 'MM', 'burundian': 'BI', 'cambodian': 'KH', 'cameroonian': 'CM',
+      'canadian': 'CA', 'cape verdean': 'CV', 'chadian': 'TD', 'chilean': 'CL', 'chinese': 'CN', 'colombian': 'CO',
+      'congolese': 'CD', 'costa rican': 'CR', 'croatian': 'HR', 'cuban': 'CU', 'curacaoan': 'CW', 'cypriot': 'CY',
+      'czech': 'CZ', 'danish': 'DK', 'djiboutian': 'DJ', 'dominican': 'DO', 'dutch': 'NL', 'ecuadorian': 'EC',
+      'egyptian': 'EG', 'emirati': 'AE', 'eritrean': 'ER', 'estonian': 'EE', 'ethiopian': 'ET', 'fijian': 'FJ',
+      'filipina': 'PH', 'filipino': 'PH', 'finnish': 'FI', 'french': 'FR', 'gabonese': 'GA', 'gambian': 'GM',
+      'georgian': 'GE', 'german': 'DE', 'ghanaian': 'GH', 'greek': 'GR', 'greenlandic': 'GL', 'grenadian': 'GD',
+      'guatemalan': 'GT', 'guinean': 'GN', 'guyanese': 'GY', 'haitian': 'HT', 'honduran': 'HN', 'hong konger': 'HK',
+      'hongkonger': 'HK', 'hungarian': 'HU', 'icelandic': 'IS', 'indian': 'IN', 'indonesian': 'ID', 'iranian': 'IR',
+      'persian': 'IR', 'iraqi': 'IQ', 'irish': 'IE', 'israeli': 'IL', 'italian': 'IT', 'ivorian': 'CI', 'jamaican': 'JM',
+      'japanese': 'JP', 'jordanian': 'JO', 'kazakh': 'KZ', 'kazakhstani': 'KZ', 'kenyan': 'KE', 'korean': 'KR',
+      'south korean': 'KR', 'north korean': 'KP', 'kosovar': 'XK', 'kuwaiti': 'KW', 'kyrgyz': 'KG', 'lao': 'LA', 'laotian': 'LA',
+      'latvian': 'LV', 'lebanese': 'LB', 'liberian': 'LR', 'libyan': 'LY', 'liechtensteiner': 'LI', 'lithuanian': 'LT',
+      'luxembourgish': 'LU', 'luxembourger': 'LU', 'macanese': 'MO', 'macedonian': 'MK', 'north macedonian': 'MK',
+      'malagasy': 'MG', 'malawian': 'MW', 'malaysian': 'MY', 'maldivian': 'MV', 'malian': 'ML', 'maltese': 'MT',
+      'mauritanian': 'MR', 'mauritian': 'MU', 'mexican': 'MX', 'moldovan': 'MD', 'monegasque': 'MC', 'mongolian': 'MN',
+      'montenegrin': 'ME', 'moroccan': 'MA', 'mozambican': 'MZ', 'namibian': 'NA', 'nepalese': 'NP', 'nepali': 'NP',
+      'new zealander': 'NZ', 'kiwi': 'NZ', 'nicaraguan': 'NI', 'nigerian': 'NG', 'nigerien': 'NE', 'norwegian': 'NO',
+      'omani': 'OM', 'pakistani': 'PK', 'palestinian': 'PS', 'panamanian': 'PA', 'papua new guinean': 'PG',
+      'paraguayan': 'PY', 'peruvian': 'PE', 'polish': 'PL', 'portuguese': 'PT', 'puerto rican': 'PR', 'qatari': 'QA',
+      'romanian': 'RO', 'russian': 'RU', 'rwandan': 'RW', 'salvadoran': 'SV', 'salvadorian': 'SV', 'samoan': 'WS',
+      'saudi': 'SA', 'saudi arabian': 'SA', 'senegalese': 'SN', 'serbian': 'RS', 'seychellois': 'SC',
+      'sierra leonean': 'SL', 'singaporean': 'SG', 'slovak': 'SK', 'slovakian': 'SK', 'slovenian': 'SI', 'slovene': 'SI',
+      'somali': 'SO', 'south african': 'ZA', 'spanish': 'ES', 'sri lankan': 'LK', 'sudanese': 'SD', 'surinamese': 'SR',
+      'swazi': 'SZ', 'swedish': 'SE', 'swiss': 'CH', 'syrian': 'SY', 'taiwanese': 'TW', 'tajik': 'TJ', 'tanzanian': 'TZ',
+      'thai': 'TH', 'togolese': 'TG', 'tongan': 'TO', 'trinidadian': 'TT', 'tobagonian': 'TT', 'tunisian': 'TN',
+      'turkish': 'TR', 'turkmen': 'TM', 'ugandan': 'UG', 'ukrainian': 'UA', 'uruguayan': 'UY', 'uzbek': 'UZ',
+      'venezuelan': 'VE', 'vietnamese': 'VN', 'yemeni': 'YE', 'zambian': 'ZM', 'zimbabwean': 'ZW',
+      'british': 'GB', 'english': 'GB-ENG', 'scottish': 'GB-SCT', 'welsh': 'GB-WLS', 'northern irish': 'GB',
+      'czechoslovak': 'CZ', 'yugoslav': 'RS', 'soviet': 'RU'
+  };
+
+  function flagFor(name) {
+      const code = NATIONALITY_CODES[String(name || '').toLowerCase().trim()];
+      if (!code) return '';
+      if (code.startsWith('GB-')) {
+          const sub = { 'GB-ENG': 'eng', 'GB-SCT': 'sct', 'GB-WLS': 'wls' }[code];
+          return '\u{1F3F4}' + [...('gb' + sub)].map(c => String.fromCodePoint(0xE0000 + c.charCodeAt(0))).join('') + '\u{E007F}';
+      }
+      return [...code].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+  }
+
+  // Nationalität: Flaggen/Klammern entfernen und in einzelne Namen zerlegen
+  const natNames = (e) => String(e.Nationality || '')
+    .split(/[,/&]+|\s+and\s+/i)
+    .map(x => x.replace(/[()]/g, '').replace(/^[^A-Za-zÀ-ž]+/, '').trim())
+    .filter(Boolean);
+  const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${n}` : n; };
+  const natDisplay = (e) => natNames(e).map(withFlag).join(', ');
+
+  // Bewertungsvergleich: My Rating (Tool) vs. User Rating (Babepedia)
+  function ratingDiff(e) {
+    const mine = num(e['My Rating']), site = num(e['User Rating']);
+    if (mine === null && site === null) return { state: 'none' };
+    if (mine === null) return { state: 'site-only', site };
+    if (site === null) return { state: 'mine-only', mine };
+    const d = Math.round((mine - site) * 10) / 10;
+    return { state: d === 0 ? 'same' : 'diff', mine, site, d };
+  }
+  const fmtDiff = (d) => (d > 0 ? '+' : '') + String(d).replace('.', ',');
 
   const STORE_KEY = 'bp-organizer-v1';
   const UI_KEY = 'bp-organizer-ui';
@@ -229,10 +297,11 @@
       entries.forEach(e => {
         const raw = v(e, field);
         if (!raw) return;
-        (field === 'Nationality' ? raw.split(',') : [raw]).forEach(x => x.trim() && vals.add(x.trim()));
+        (field === 'Nationality' ? natNames(e) : [raw]).forEach(x => x.trim() && vals.add(x.trim()));
       });
       const first = sel.options[0].outerHTML;
-      sel.innerHTML = first + [...vals].sort((a, b) => a.localeCompare(b, 'de')).map(x => `<option>${esc(x)}</option>`).join('');
+      sel.innerHTML = first + [...vals].sort((a, b) => a.localeCompare(b, 'de'))
+        .map(x => `<option value="${esc(x)}">${esc(field === 'Nationality' ? withFlag(x) : x)}</option>`).join('');
       sel.value = vals.has(cur) ? cur : '';
     }
   }
@@ -243,13 +312,23 @@
     const fv = Object.fromEntries(Object.entries(FILTERS).map(([id, f]) => [f, $('#' + id).value]));
     const act = $('#f-active').value;
     const fav = $('#f-fav').checked;
+    const rf = $('#f-rating').value;
 
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
+      if (rf) {
+        const st = ratingDiff(e).state;
+        if (rf === 'diff' && st !== 'diff') return false;
+        if (rf === 'same' && st !== 'same') return false;
+        if (rf === 'missing' && !(st === 'site-only' || st === 'mine-only')) return false;
+        if (rf === 'site-only' && st !== 'site-only') return false;
+        if (rf === 'mine-only' && st !== 'mine-only') return false;
+        if (rf === 'none' && st !== 'none') return false;
+      }
       if (act && String(v(e, 'Active') || 'false') !== act) return false;
       for (const [f, val] of Object.entries(fv)) {
         if (!val) continue;
-        if (f === 'Nationality' ? !v(e, f).split(',').map(s => s.trim()).includes(val) : v(e, f) !== val) return false;
+        if (f === 'Nationality' ? !natNames(e).includes(val) : v(e, f) !== val) return false;
       }
       if (terms.length) {
         const hay = [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e.Nationality].join(' ').toLowerCase();
@@ -267,7 +346,9 @@
       rank: (a, b) => (num(a.Rank) ?? 1e9) - (num(b.Rank) ?? 1e9),
       young: (a, b) => (age(a) ?? 999) - (age(b) ?? 999),
       old: (a, b) => (age(b) ?? -1) - (age(a) ?? -1),
-      height: (a, b) => (num(b.Height) ?? -1) - (num(a.Height) ?? -1)
+      height: (a, b) => (num(b.Height) ?? -1) - (num(a.Height) ?? -1),
+      site: (a, b) => (num(b['User Rating']) ?? -1) - (num(a['User Rating']) ?? -1),
+      diff: (a, b) => { const ad = (x) => { const d = ratingDiff(x).d; return d === undefined ? -1 : Math.abs(d); }; return ad(b) - ad(a); }
     }[ui.sort] || ((a, b) => 0);
     return list.sort((a, b) => by(a, b) || v(a, 'Name').localeCompare(v(b, 'Name'), 'de'));
   }
@@ -275,7 +356,23 @@
   // ---------- Darstellung ----------
   function metaLine(e) {
     const a = age(e);
-    return [v(e, 'Nationality'), a !== null ? `${a} J.` : '', v(e, 'Height') ? v(e, 'Height') + ' cm' : ''].filter(Boolean).join(' · ');
+    return [natDisplay(e), a !== null ? `${a} J.` : '', v(e, 'Height') ? v(e, 'Height') + ' cm' : ''].filter(Boolean).join(' · ');
+  }
+
+  function ratingBadge(e) {
+    const r = ratingDiff(e);
+    if (r.state === 'same') return `<span class="badge mine" title="Meine Bewertung = Babepedia">♥ ${esc(v(e, 'My Rating'))} ✓</span>`;
+    if (r.state === 'diff') return `<span class="badge diff" title="Meine Bewertung ${r.mine} / Babepedia ${r.site}">♥ ${r.mine} ≠ ${r.site}</span>`;
+    if (r.state === 'mine-only') return `<span class="badge mine" title="Auf Babepedia noch nicht bewertet">♥ ${r.mine}</span>`;
+    if (r.state === 'site-only') return `<span class="badge site" title="Nur auf Babepedia bewertet">BP ${r.site}</span>`;
+    return '';
+  }
+
+  function diffCell(e) {
+    const r = ratingDiff(e);
+    if (r.state === 'same') return '<span class="ok">=</span>';
+    if (r.state === 'diff') return `<span class="warn">${fmtDiff(r.d)}</span>`;
+    return '';
   }
 
   function render() {
@@ -297,18 +394,20 @@
 
     if (ui.view === 'table') {
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th></th><th>Name</th><th>Nationality</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>My Rating</th><th>★</th>
+        <th></th><th>Name</th><th>Nationality</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>★</th>
         </tr></thead><tbody>${list.map(e => `<tr data-id="${esc(e._id)}">
           <td class="thumb">${imgTag(images(e)[0], v(e, 'Name'))}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
-          <td>${esc(v(e, 'Nationality'))}</td>
+          <td>${esc(natDisplay(e))}</td>
           <td class="num">${age(e) ?? ''}</td>
           <td class="num">${esc(v(e, 'Height'))}</td>
           <td>${esc(v(e, 'Hair color'))}</td>
           <td>${esc(v(e, 'Measurements'))}</td>
           <td class="num">${esc(v(e, 'Global Rating'))}</td>
           <td class="num">${esc(v(e, 'Rank'))}</td>
+          <td class="num">${esc(v(e, 'User Rating'))}</td>
           <td class="num">${esc(v(e, 'My Rating'))}</td>
+          <td class="num">${diffCell(e)}</td>
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
         </tr>`).join('')}</tbody></table></div>`;
       return;
@@ -321,7 +420,7 @@
           <div class="badges">
             ${v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
-            ${v(e, 'My Rating') ? `<span class="badge mine">♥ ${esc(v(e, 'My Rating'))}</span>` : ''}
+            ${ratingBadge(e)}
           </div>
         </div>
         <div class="body">
@@ -346,6 +445,7 @@
     if (!val) return '';
     if (f === 'Born') return fmtDate(val, isTrue(e['Exact Birthdate'])) + (age(e) !== null && !v(e, 'Died') ? ` (${age(e)} Jahre)` : '');
     if (f === 'Died') return fmtDate(val, true) + (age(e) !== null ? ` (mit ${age(e)})` : '');
+    if (f === 'Nationality') return natDisplay(e);
     if (TYPES[f] === 'date') return fmtDate(val, true);
     if (TYPES[f] === 'bool') return isTrue(val) ? 'Ja' : 'Nein';
     return val + (UNITS[f] || '');
@@ -355,6 +455,31 @@
     if (f === 'Profile URL') return 'Babepedia';
     if (f === 'Boobpedia Link') return 'Boobpedia';
     return f.replace(/ URL$/, '');
+  }
+
+  function ratingBox(e) {
+    const r = ratingDiff(e);
+    const mine = num(e['My Rating']);
+    const btns = Array.from({ length: 10 }, (_, i) => i + 1).map(n =>
+      `<button class="rate-btn ${mine !== null && n <= mine ? 'on' : ''} ${num(e['User Rating']) === n ? 'site' : ''}" data-rate="${n}" data-id="${esc(e._id)}" title="${n}/10">${n}</button>`).join('');
+    let cmp;
+    if (r.state === 'same') cmp = `<span class="ok">✓ stimmt mit Babepedia überein (${r.site})</span>`;
+    else if (r.state === 'diff') cmp = `<span class="warn">Babepedia: ${r.site} · Abweichung ${fmtDiff(r.d)}</span>`;
+    else if (r.state === 'mine-only') cmp = `<span class="muted">Auf Babepedia noch nicht bewertet</span>`;
+    else if (r.state === 'site-only') cmp = `<span class="muted">Babepedia: ${r.site} – hier noch nicht bewertet</span>`;
+    else cmp = `<span class="muted">Noch nicht bewertet</span>`;
+    const take = r.state === 'site-only' || r.state === 'diff'
+      ? `<button class="btn small" data-rate="${r.site}" data-id="${esc(e._id)}">Babepedia-Wert übernehmen</button>` : '';
+    return `<div class="sec rating-box"><h3>Meine Bewertung</h3>
+      <div class="rate-row">${btns}${mine !== null ? `<button class="rate-clear" data-rate="" data-id="${esc(e._id)}" title="Bewertung entfernen">✕</button>` : ''}</div>
+      <div class="rate-cmp">${cmp} ${take}</div></div>`;
+  }
+
+  function setRating(id, val) {
+    const e = byId(id); if (!e) return;
+    e['My Rating'] = val === '' ? '' : String(val);
+    e._updated = Date.now();
+    save(); render(); showDetail(id);
   }
 
   function showDetail(id) {
@@ -388,12 +513,12 @@
           ${v(e, 'AKA') ? `<div class="d-aka">auch: ${esc(v(e, 'AKA'))}</div>` : ''}
           <div class="chips">
             <button class="chip accent" data-fav="${esc(e._id)}" style="cursor:pointer">${isTrue(e.Favorite) ? '♥ Favorit' : '♡ Als Favorit'}</button>
-            ${v(e, 'My Rating') ? `<span class="chip accent">Meine Bewertung: ${esc(v(e, 'My Rating'))}/10</span>` : ''}
             ${v(e, 'Global Rating') ? `<span class="chip">★ ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Votes)` : ''}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
+          ${ratingBox(e)}
           ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
@@ -421,7 +546,7 @@
     } else if (t === 'date') {
       input = `<input type="date" ${name} value="${esc(ddToIso(val))}">`;
     } else if (t === 'num') {
-      input = `<input type="number" step="any" ${f === 'My Rating' ? 'min="0" max="10" step="0.5"' : ''} ${name} value="${esc(val)}">`;
+      input = `<input type="number" ${f === 'My Rating' ? 'min="1" max="10" step="1"' : 'step="any"'} ${name} value="${esc(val)}">`;
     } else if (t === 'area') {
       input = `<textarea ${name}>${esc(val)}</textarea>`;
     } else {
@@ -439,7 +564,7 @@
     const isNew = !id;
     const e = isNew ? { Tattoos: 'n/a', Piercings: 'n/a', 'Exact Birthdate': 'true', Favorite: 'false' } : byId(id);
     if (!e) return;
-    const order = [GROUPS[0], GROUPS[1], GROUPS[2], GROUPS[4], GROUPS[5], GROUPS[3]];
+    const order = [GROUPS[2], GROUPS[0], GROUPS[1], GROUPS[4], GROUPS[5], GROUPS[3]];
     openModal(`
       <div class="modal-head">
         <h2>${isNew ? 'Neuer Eintrag' : esc(v(e, 'Name')) + ' bearbeiten'}</h2>
@@ -576,6 +701,8 @@
     if (t.closest('#btn-menu')) { menu.hidden = !menu.hidden; return; }
     if (!t.closest('#menu')) menu.hidden = true;
 
+    const rate = t.closest('[data-rate]');
+    if (rate) { setRating(rate.dataset.id, rate.dataset.rate); return; }
     const fav = t.closest('[data-fav]');
     if (fav) { ev.stopPropagation(); toggleFav(fav.dataset.fav); return; }
     const act = t.closest('[data-action]');
@@ -611,12 +738,12 @@
     if (f) handleFile(f);
     ev.target.value = '';
   });
-  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav'].forEach(s => $(s).addEventListener('input', render));
+  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-fav').checked = false; render();
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-fav').checked = false; render();
   });
 
   // Daten per Drag & Drop importieren
