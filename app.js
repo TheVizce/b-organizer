@@ -8,7 +8,7 @@
     'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
     'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
     'Born', 'Exact Birthdate', 'Died', 'Years active', 'Active', 'Active till', 'Birthplace',
-    'Nationality', 'Ethnicity', 'Professions', 'Sexuality', 'Hair color',
+    'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Hair color',
     'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup',
     'Boobs', 'Tattoos', 'Piercings',
     'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch',
@@ -19,7 +19,7 @@
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = [
-    { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Sexuality', 'Years active', 'Active', 'Active till'] },
+    { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Tags', 'Notes'] },
     { title: 'Babepedia', fields: ['Profile URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
@@ -42,50 +42,67 @@
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
-    'Exact Birthdate': 'aus = nur Jahr bekannt'
+    'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
     .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
   const UNITS = { 'Height': ' cm', 'Weight': ' kg' };
 
-  // Nationalität (englisch, wie auf Babepedia) -> Ländercode
+  // Alle Nationality-Werte von Babepedia (Advanced Search) + übliche Schreibvarianten -> Ländercode
   const NATIONALITY_CODES = {
-      'afghan': 'AF', 'albanian': 'AL', 'algerian': 'DZ', 'american': 'US', 'andorran': 'AD', 'angolan': 'AO',
-      'argentine': 'AR', 'argentinian': 'AR', 'armenian': 'AM', 'aruban': 'AW', 'australian': 'AU', 'austrian': 'AT',
-      'azerbaijani': 'AZ', 'azeri': 'AZ', 'bahamian': 'BS', 'bahraini': 'BH', 'bangladeshi': 'BD', 'barbadian': 'BB', 'bajan': 'BB',
-      'belarusian': 'BY', 'belgian': 'BE', 'belizean': 'BZ', 'beninese': 'BJ', 'bermudian': 'BM', 'bhutanese': 'BT',
-      'bolivian': 'BO', 'bosnian': 'BA', 'botswanan': 'BW', 'motswana': 'BW', 'brazilian': 'BR', 'bruneian': 'BN',
-      'bulgarian': 'BG', 'burkinabe': 'BF', 'burmese': 'MM', 'burundian': 'BI', 'cambodian': 'KH', 'cameroonian': 'CM',
-      'canadian': 'CA', 'cape verdean': 'CV', 'chadian': 'TD', 'chilean': 'CL', 'chinese': 'CN', 'colombian': 'CO',
-      'congolese': 'CD', 'costa rican': 'CR', 'croatian': 'HR', 'cuban': 'CU', 'curacaoan': 'CW', 'cypriot': 'CY',
-      'czech': 'CZ', 'danish': 'DK', 'djiboutian': 'DJ', 'dominican': 'DO', 'dutch': 'NL', 'ecuadorian': 'EC',
-      'egyptian': 'EG', 'emirati': 'AE', 'eritrean': 'ER', 'estonian': 'EE', 'ethiopian': 'ET', 'fijian': 'FJ',
-      'filipina': 'PH', 'filipino': 'PH', 'finnish': 'FI', 'french': 'FR', 'gabonese': 'GA', 'gambian': 'GM',
-      'georgian': 'GE', 'german': 'DE', 'ghanaian': 'GH', 'greek': 'GR', 'greenlandic': 'GL', 'grenadian': 'GD',
-      'guatemalan': 'GT', 'guinean': 'GN', 'guyanese': 'GY', 'haitian': 'HT', 'honduran': 'HN', 'hong konger': 'HK',
-      'hongkonger': 'HK', 'hungarian': 'HU', 'icelandic': 'IS', 'indian': 'IN', 'indonesian': 'ID', 'iranian': 'IR',
-      'persian': 'IR', 'iraqi': 'IQ', 'irish': 'IE', 'israeli': 'IL', 'italian': 'IT', 'ivorian': 'CI', 'jamaican': 'JM',
-      'japanese': 'JP', 'jordanian': 'JO', 'kazakh': 'KZ', 'kazakhstani': 'KZ', 'kenyan': 'KE', 'korean': 'KR',
-      'south korean': 'KR', 'north korean': 'KP', 'kosovar': 'XK', 'kuwaiti': 'KW', 'kyrgyz': 'KG', 'lao': 'LA', 'laotian': 'LA',
-      'latvian': 'LV', 'lebanese': 'LB', 'liberian': 'LR', 'libyan': 'LY', 'liechtensteiner': 'LI', 'lithuanian': 'LT',
-      'luxembourgish': 'LU', 'luxembourger': 'LU', 'macanese': 'MO', 'macedonian': 'MK', 'north macedonian': 'MK',
-      'malagasy': 'MG', 'malawian': 'MW', 'malaysian': 'MY', 'maldivian': 'MV', 'malian': 'ML', 'maltese': 'MT',
-      'mauritanian': 'MR', 'mauritian': 'MU', 'mexican': 'MX', 'moldovan': 'MD', 'monegasque': 'MC', 'mongolian': 'MN',
-      'montenegrin': 'ME', 'moroccan': 'MA', 'mozambican': 'MZ', 'namibian': 'NA', 'nepalese': 'NP', 'nepali': 'NP',
-      'new zealander': 'NZ', 'kiwi': 'NZ', 'nicaraguan': 'NI', 'nigerian': 'NG', 'nigerien': 'NE', 'norwegian': 'NO',
-      'omani': 'OM', 'pakistani': 'PK', 'palestinian': 'PS', 'panamanian': 'PA', 'papua new guinean': 'PG',
-      'paraguayan': 'PY', 'peruvian': 'PE', 'polish': 'PL', 'portuguese': 'PT', 'puerto rican': 'PR', 'qatari': 'QA',
-      'romanian': 'RO', 'russian': 'RU', 'rwandan': 'RW', 'salvadoran': 'SV', 'salvadorian': 'SV', 'samoan': 'WS',
-      'saudi': 'SA', 'saudi arabian': 'SA', 'senegalese': 'SN', 'serbian': 'RS', 'seychellois': 'SC',
-      'sierra leonean': 'SL', 'singaporean': 'SG', 'slovak': 'SK', 'slovakian': 'SK', 'slovenian': 'SI', 'slovene': 'SI',
-      'somali': 'SO', 'south african': 'ZA', 'spanish': 'ES', 'sri lankan': 'LK', 'sudanese': 'SD', 'surinamese': 'SR',
-      'swazi': 'SZ', 'swedish': 'SE', 'swiss': 'CH', 'syrian': 'SY', 'taiwanese': 'TW', 'tajik': 'TJ', 'tanzanian': 'TZ',
-      'thai': 'TH', 'togolese': 'TG', 'tongan': 'TO', 'trinidadian': 'TT', 'tobagonian': 'TT', 'tunisian': 'TN',
-      'turkish': 'TR', 'turkmen': 'TM', 'ugandan': 'UG', 'ukrainian': 'UA', 'uruguayan': 'UY', 'uzbek': 'UZ',
-      'venezuelan': 'VE', 'vietnamese': 'VN', 'yemeni': 'YE', 'zambian': 'ZM', 'zimbabwean': 'ZW',
-      'british': 'GB', 'english': 'GB-ENG', 'scottish': 'GB-SCT', 'welsh': 'GB-WLS', 'northern irish': 'GB',
-      'czechoslovak': 'CZ', 'yugoslav': 'RS', 'soviet': 'RU'
+      'afghan': 'AF', 'albanian': 'AL', 'algerian': 'DZ', 'american': 'US', 'american samoan': 'AS',
+      'andorran': 'AD', 'angolan': 'AO', 'anguillian': 'AI', 'antarctic': 'AQ', 'antiguan': 'AG', 'argentine': 'AR',
+      'argentinian': 'AR', 'armenian': 'AM', 'aruban': 'AW', 'australian': 'AU', 'austrian': 'AT',
+      'azerbaijani': 'AZ', 'azeri': 'AZ', 'bahamian': 'BS', 'bahraini': 'BH', 'bajan': 'BB', 'bangladeshi': 'BD',
+      'barbadian': 'BB', 'belarusian': 'BY', 'belgian': 'BE', 'belizean': 'BZ', 'beninese': 'BJ', 'bermudian': 'BM',
+      'bhutanese': 'BT', 'bolivian': 'BO', 'bosnian': 'BA', 'botswanan': 'BW', 'bouvet islander': 'BV',
+      'brazilian': 'BR', 'british': 'GB', 'british virgin islander': 'VG', 'bruneian': 'BN', 'bulgarian': 'BG',
+      'burkinabe': 'BF', 'burmese': 'MM', 'burundian': 'BI', 'cambodian': 'KH', 'cameroonian': 'CM',
+      'canadian': 'CA', 'cape verdean': 'CV', 'caymanian': 'KY', 'central african': 'CF', 'chadian': 'TD',
+      'chilean': 'CL', 'chinese': 'CN', 'christmas islander': 'CX', 'cocos islander': 'CC', 'colombian': 'CO',
+      'comorian': 'KM', 'congolese': 'CD', 'cook islander': 'CK', 'costa rican': 'CR', 'croatian': 'HR',
+      'cuban': 'CU', 'curacaoan': 'CW', 'cypriot': 'CY', 'czech': 'CZ', 'czechoslovak': 'CZ', 'danish': 'DK',
+      'djiboutian': 'DJ', 'dominican': 'DO', 'dominican dominica': 'DM', 'dutch': 'NL', 'dutch antillean': 'CW',
+      'east timorese': 'TL', 'ecuadorian': 'EC', 'egyptian': 'EG', 'emirati': 'AE', 'english': 'GB-ENG',
+      'equatorial guinean': 'GQ', 'eritrean': 'ER', 'estonian': 'EE', 'ethiopian': 'ET', 'falkland islander': 'FK',
+      'faroese': 'FO', 'fijian': 'FJ', 'filipina': 'PH', 'filipino': 'PH', 'finnish': 'FI', 'french': 'FR',
+      'french guianese': 'GF', 'french polynesian': 'PF', 'gabonese': 'GA', 'gambian': 'GM', 'georgian': 'GE',
+      'german': 'DE', 'ghanaian': 'GH', 'gibraltarian': 'GI', 'greek': 'GR', 'greenlandic': 'GL', 'grenadian': 'GD',
+      'guadeloupean': 'GP', 'guamanian': 'GU', 'guatemalan': 'GT', 'guernsey': 'GG', 'guinea-bissauan': 'GW',
+      'guinean': 'GN', 'guyanese': 'GY', 'haitian': 'HT', 'heard islander': 'HM', 'honduran': 'HN',
+      'hong konger': 'HK', 'hongkonger': 'HK', 'hungarian': 'HU', 'i-kiribati': 'KI', 'icelandic': 'IS',
+      'indian': 'IN', 'indonesian': 'ID', 'iranian': 'IR', 'iraqi': 'IQ', 'irish': 'IE', 'israeli': 'IL',
+      'italian': 'IT', 'ivorian': 'CI', 'ivory coast': 'CI', 'jamaican': 'JM', 'japanese': 'JP', 'jersey': 'JE',
+      'jordanian': 'JO', 'kazakh': 'KZ', 'kazakhstani': 'KZ', 'kenyan': 'KE', 'kittitian': 'KN', 'kiwi': 'NZ',
+      'korean': 'KR', 'kosovar': 'XK', 'kuwaiti': 'KW', 'kyrgyz': 'KG', 'kyrgyzstani': 'KG', 'lao': 'LA',
+      'laotian': 'LA', 'latvian': 'LV', 'lebanese': 'LB', 'liberian': 'LR', 'libyan': 'LY', 'liechtensteiner': 'LI',
+      'lithuanian': 'LT', 'luxembourger': 'LU', 'luxembourgish': 'LU', 'macanese': 'MO', 'macedonian': 'MK',
+      'mahoran': 'YT', 'malagasy': 'MG', 'malawian': 'MW', 'malaysian': 'MY', 'maldivian': 'MV', 'malian': 'ML',
+      'maltese': 'MT', 'manx': 'IM', 'marshallese': 'MH', 'martiniquais': 'MQ', 'mauritanian': 'MR',
+      'mauritian': 'MU', 'mexican': 'MX', 'micronesian': 'FM', 'moldovan': 'MD', 'monacan': 'MC',
+      'monegasque': 'MC', 'mongolian': 'MN', 'montenegrin': 'ME', 'montserratian': 'MS', 'moroccan': 'MA',
+      'mosotho': 'LS', 'motswana': 'BW', 'mozambican': 'MZ', 'namibian': 'NA', 'nauruan': 'NR', 'nepalese': 'NP',
+      'nepali': 'NP', 'new caledonian': 'NC', 'new zealand': 'NZ', 'new zealander': 'NZ', 'ni-vanuatu': 'VU',
+      'nicaraguan': 'NI', 'nigerian': 'NG', 'nigerien': 'NE', 'niuean': 'NU', 'norfolk islander': 'NF',
+      'north korean': 'KP', 'north macedonian': 'MK', 'northern irish': 'GB', 'northern mariana islander': 'MP',
+      'norwegian': 'NO', 'omani': 'OM', 'pakistani': 'PK', 'palauan': 'PW', 'palestinian': 'PS', 'panamanian': 'PA',
+      'papua new guinean': 'PG', 'paraguayan': 'PY', 'persian': 'IR', 'peruvian': 'PE', 'pitcairn islander': 'PN',
+      'polish': 'PL', 'portuguese': 'PT', 'puerto rican': 'PR', 'qatari': 'QA', 'reunionese': 'RE',
+      'romanian': 'RO', 'russian': 'RU', 'rwandan': 'RW', 'sahrawi': 'EH', 'saint helenian': 'SH',
+      'saint lucian': 'LC', 'saint vincentian': 'VC', 'saint-pierrais': 'PM', 'salvadoran': 'SV',
+      'salvadorian': 'SV', 'sammarinese': 'SM', 'samoan': 'WS', 'sao tomean': 'ST', 'saudi': 'SA',
+      'saudi arabian': 'SA', 'scottish': 'GB-SCT', 'senegalese': 'SN', 'serbian': 'RS', 'seychellois': 'SC',
+      'sierra leonean': 'SL', 'singaporean': 'SG', 'slovak': 'SK', 'slovakian': 'SK', 'slovene': 'SI',
+      'slovenian': 'SI', 'solomon islander': 'SB', 'somali': 'SO', 'south african': 'ZA', 'south georgian': 'GS',
+      'south korean': 'KR', 'south sudanese': 'SS', 'soviet': 'RU', 'spanish': 'ES', 'sri lankan': 'LK',
+      'sudanese': 'SD', 'surinamese': 'SR', 'svalbard': 'SJ', 'swazi': 'SZ', 'swedish': 'SE', 'swiss': 'CH',
+      'syrian': 'SY', 'taiwanese': 'TW', 'tajik': 'TJ', 'tajikistani': 'TJ', 'tanzanian': 'TZ', 'thai': 'TH',
+      'tobagonian': 'TT', 'togolese': 'TG', 'tokelauan': 'TK', 'tongan': 'TO', 'trinidadian': 'TT',
+      'tunisian': 'TN', 'turkish': 'TR', 'turkmen': 'TM', 'turks and caicos islander': 'TC', 'tuvaluan': 'TV',
+      'u.s. virgin islander': 'VI', 'ugandan': 'UG', 'ukrainian': 'UA', 'uruguayan': 'UY', 'uzbek': 'UZ',
+      'uzbekistani': 'UZ', 'vatican': 'VA', 'venezuelan': 'VE', 'vietnamese': 'VN', 'wallisian': 'WF',
+      'welsh': 'GB-WLS', 'yemeni': 'YE', 'yugoslav': 'RS', 'zambian': 'ZM', 'zimbabwean': 'ZW'
   };
 
   function flagFor(name) {
@@ -105,6 +122,62 @@
     .filter(Boolean);
   const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${n}` : n; };
   const natDisplay = (e) => natNames(e).map(withFlag).join(', ');
+
+  // ---- Profession Category: fasst die Professions zu Bereichen zusammen ----
+  // Reihenfolge = Sortierung der Bereiche. Eine Person kann in mehreren Bereichen landen.
+  const PROFESSION_CATEGORIES = [
+      ['Modeling', ['Adult Model', 'Beauty pageant contestant', 'Centerfold', 'Fetish Model', 'Fitness Model', 'Glamour Model', 'Gravure Idol', 'Model', 'Playboy Model', 'Plus Size Model', 'Race Queen', 'Ring Girl', 'Supermodel']],
+      ['Acting & Performing', ['Actress', 'Ballet Dancer', 'Burlesque Dancer', 'Comedian', 'Cultural / Specialty Dancer', 'Music Video / Commercial Dancer', 'Showgirl', 'Stuntwoman', 'Voice Actress']],
+      ['Digital Content', ['ASMR Star', 'Blogger', 'Camgirl', 'Content Creator (Non-Adult)', 'Cosplayer', 'Digital Creator', 'Gamer', 'Influencer', 'Podcaster', 'TikTok Star', 'YouTuber']],
+      ['Adult Industry', ['AV Idol', 'Dominatrix', 'Escort', 'Exotic Dancer', 'Hotwife', 'MILF Porn Star', 'Porn Star', 'Stripper']],
+      ['TV & Media', ['Celebrity', 'Director', 'Journalist', 'Presenter', 'Producer', 'Radio Host', 'Reality TV Star', 'Sports reporter', 'TV Host', 'Weather Girl']],
+      ['Music', ['Musician', 'Musician: Country Singer', 'Musician: DJ', 'Musician: J-pop Idol', 'Musician: K-pop Idol', 'Musician: Rapper', 'Musician: Singer']],
+      ['Athletics & Sports', ['Bodybuilder', 'Cheerleader', 'Fitness Trainer', 'Golf Instructor', 'Horseriding Instructor', 'Sportswoman']],
+      ['Science / Health / Education', ['Cybersecurity expert', 'Dentist', 'Doctor - Physician', 'Nurse', 'Professor', 'Programmer', 'Science Communicator', 'Sex Therapist', 'Teacher']],
+      ['Business / Law / Politics', ['Activist', 'Barrister', 'Business Woman', 'Lawyer', 'Military Personnel', 'Political Commentator', 'Politician', 'Realtor', 'Royalty']],
+      ['Creative & Design', ['Artist', 'Author', 'Fashion Designer', 'Graphic Designer', 'Photographer', 'Writer']],
+      ['Service & Hospitality', ['Barista', 'Bartender', 'Beautician', 'Flight Attendant', 'Hooters Girl', 'Nail Designer']],
+      ['Sonstige', ['Housewife', 'Paranormal Investigator', 'Student', 'Trucker']]
+  ];
+  // Für Werte, die (noch) nicht in der Liste stehen: Regeln nach Wortbestandteilen
+  const PROFESSION_RULES = [
+      [/sportswoman|athlete|player|boxer|fighter|skater|racer|gymnast|swimmer|surfer|skier|wrestler|cyclist|runner/i, 'Athletics & Sports'],
+      [/musician|singer|rapper|\bdj\b|pop idol|band/i, 'Music'],
+      [/scientist|engineer|doctor|physician|biologist|researcher/i, 'Science / Health / Education'],
+      [/porn|adult (film|actress)|onlyfans/i, 'Adult Industry'],
+      [/model/i, 'Modeling'],
+      [/dancer|actress|performer/i, 'Acting & Performing'],
+      [/host|reporter|presenter|anchor/i, 'TV & Media'],
+      [/creator|streamer|youtuber|instagram|tiktok/i, 'Digital Content'],
+      [/designer|artist|painter/i, 'Creative & Design']
+  ];
+  const PROFESSION_INDEX = new Map();
+  PROFESSION_CATEGORIES.forEach(([cat, list]) => list.forEach(p => PROFESSION_INDEX.set(normProfession(p), cat)));
+
+  function normProfession(p) {
+      return String(p || '').toLowerCase().replace(/\(former\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  function professionCategory(p) {
+      const n = normProfession(p);
+      if (!n) return '';
+      if (PROFESSION_INDEX.has(n)) return PROFESSION_INDEX.get(n);
+      if (/^sportswoman/.test(n)) return 'Athletics & Sports';
+      if (/^musician/.test(n)) return 'Music';
+      if (/^scientist/.test(n)) return 'Science / Health / Education';
+      for (const [re, cat] of PROFESSION_RULES) if (re.test(p)) return cat;
+      return 'Sonstige';
+  }
+  // "Actress, Model, Sportswoman: Surfer" -> "Modeling, Acting & Performing, Athletics & Sports"
+  function professionCategories(professions) {
+      const parts = String(professions || '').split(/,(?![^(]*\))/).map(s => s.trim()).filter(Boolean);
+      const cats = new Set(parts.map(professionCategory).filter(Boolean));
+      const order = PROFESSION_CATEGORIES.map(c => c[0]);
+      return [...cats].sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(', ');
+  }
+
+  const catList = (e) => String(e['Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
+  // Abgeleitete Felder immer aus den Rohdaten neu berechnen
+  function derive(e) { e['Profession Category'] = professionCategories(e.Professions); return e; }
 
   // Bewertungsvergleich: My Rating (Tool) vs. User Rating (Babepedia)
   function ratingDiff(e) {
@@ -130,7 +203,7 @@
   function safeJSON(s, fallback) { try { return s ? JSON.parse(s) : fallback; } catch { return fallback; } }
   function load() {
     const d = safeJSON(localStorage.getItem(STORE_KEY), []);
-    return Array.isArray(d) ? d : [];
+    return Array.isArray(d) ? d.map(derive) : [];
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(entries)); }
@@ -206,11 +279,13 @@
       if (existing) {
         for (const f of ALL_FIELDS) if (item[f]) existing[f] = item[f];
         existing._updated = now;
+        derive(existing);
         updated++;
       } else {
         const e = { _id: raw._id || uid(), _created: raw._created || now, _updated: now };
         for (const f of ALL_FIELDS) e[f] = item[f] || '';
         if (!e.Favorite) e.Favorite = 'false';
+        derive(e);
         entries.push(e);
         index.set(k, e);
         added++;
@@ -290,6 +365,7 @@
   const FILTERS = { 'f-nationality': 'Nationality', 'f-hair': 'Hair color', 'f-eyes': 'Eye color', 'f-body': 'Body type' };
 
   function refreshFilters() {
+    refreshCatFilter();
     for (const [id, field] of Object.entries(FILTERS)) {
       const sel = $('#' + id);
       const cur = sel.value;
@@ -306,6 +382,14 @@
     }
   }
 
+  function refreshCatFilter() {
+    const sel = $('#f-cat'), cur = sel.value;
+    const present = new Set(entries.flatMap(catList));
+    const cats = PROFESSION_CATEGORIES.map(c => c[0]).filter(c => present.has(c));
+    sel.innerHTML = sel.options[0].outerHTML + cats.map(c => `<option>${esc(c)}</option>`).join('');
+    sel.value = present.has(cur) ? cur : '';
+  }
+
   function filtered() {
     const q = $('#q').value.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
@@ -313,9 +397,11 @@
     const act = $('#f-active').value;
     const fav = $('#f-fav').checked;
     const rf = $('#f-rating').value;
+    const cf = $('#f-cat').value;
 
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
+      if (cf && !catList(e).includes(cf)) return false;
       if (rf) {
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
@@ -331,7 +417,7 @@
         if (f === 'Nationality' ? !natNames(e).includes(val) : v(e, f) !== val) return false;
       }
       if (terms.length) {
-        const hay = [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e.Nationality].join(' ').toLowerCase();
+        const hay = [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e['Profession Category'], e.Nationality].join(' ').toLowerCase();
         if (!terms.every(t => hay.includes(t))) return false;
       }
       return true;
@@ -394,11 +480,12 @@
 
     if (ui.view === 'table') {
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th></th><th>Name</th><th>Nationality</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>★</th>
+        <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>★</th>
         </tr></thead><tbody>${list.map(e => `<tr data-id="${esc(e._id)}">
           <td class="thumb">${imgTag(images(e)[0], v(e, 'Name'))}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
           <td>${esc(natDisplay(e))}</td>
+          <td>${esc(v(e, 'Profession Category'))}</td>
           <td class="num">${age(e) ?? ''}</td>
           <td class="num">${esc(v(e, 'Height'))}</td>
           <td>${esc(v(e, 'Hair color'))}</td>
@@ -516,6 +603,7 @@
             ${v(e, 'Global Rating') ? `<span class="chip">★ ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Votes)` : ''}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
+            ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${ratingBox(e)}
@@ -531,6 +619,9 @@
   }
 
   function fieldInput(f, e) {
+    if (f === 'Profession Category') {
+      return `<div class="field"><label>${esc(f)}</label><input type="text" value="${esc(v(e, f))}" readonly tabindex="-1" class="ro" data-derived="cat"><span class="hint">wird automatisch aus Professions gebildet</span></div>`;
+    }
     const t = TYPES[f];
     const id = 'fld-' + ALL_FIELDS.indexOf(f);
     const val = v(e, f);
@@ -580,6 +671,7 @@
     const form = $('#entry-form');
     form.addEventListener('input', (ev) => {
       dirty = true;
+      if (ev.target.name === 'Professions') { const ro = $('[data-derived="cat"]', form); if (ro) ro.value = professionCategories(ev.target.value); }
       const box = $(`[data-prev-for="${CSS.escape(ev.target.name || '')}"]`, form);
       if (box) box.innerHTML = previewHTML(ev.target.value);
     });
@@ -598,6 +690,7 @@
       else if (TYPES[f] === 'date') data[f] = isoToDd(el.value);
       else data[f] = el.value.trim();
     }
+    derive(data);
     if (!data.Name) { toast('Bitte einen Namen eingeben.', 'err'); $('[name="Name"]', form).focus(); return; }
 
     const dupe = entries.find(x => x._id !== id && keyOf(x) === keyOf(data));
@@ -717,6 +810,8 @@
     if (t.closest('.gallery .main img')) { lightbox(t.src); return; }
     const full = t.closest('img[data-full]');
     if (full) { lightbox(full.dataset.full); return; }
+    const catBtn = t.closest('[data-cat]');
+    if (catBtn) { closeModal(true); $('#f-cat').value = catBtn.dataset.cat; render(); return; }
     const tag = t.closest('[data-tag]');
     if (tag) { closeModal(true); $('#q').value = tag.dataset.tag; render(); return; }
     const card = t.closest('[data-id].card, tr[data-id]');
@@ -738,12 +833,12 @@
     if (f) handleFile(f);
     ev.target.value = '';
   });
-  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating'].forEach(s => $(s).addEventListener('input', render));
+  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-fav').checked = false; render();
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-fav').checked = false; render();
   });
 
   // Daten per Drag & Drop importieren

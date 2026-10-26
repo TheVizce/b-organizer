@@ -52,5 +52,10 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - User-Upload-Bilder werden jetzt erfasst (sie werden auf Babepedia erst beim Scrollen geladen und fehlten deshalb).
 - Mehrseitige Listen: Seitenzahl kommt direkt aus der Paginierung, auch Seite 1 wird geholt, wenn du auf einer späteren Seite startest. Fehlgeschlagene Seiten werden ein zweites Mal versucht, und am Ende gibt es einen Abgleich mit „Total number of babes in this list“.
 - Mehr Pausen und Wiederholungen bei „zu vielen Anfragen“ (HTTP 429/503).
-- Flaggen für rund 170 Nationalitäten.
+- Flaggen für alle 241 Nationality-Werte von Babepedia (aus der erweiterten Suche) plus gängige Schreibvarianten.
 - Doppelte Profile werden über die Profil-URL statt über den Namen erkannt.
+
+## Änderungen in 13.4
+- Neues Feld **Profession Category**: fasst die Professions zu 12 Bereichen zusammen (mehrere pro Person möglich). Das Tool berechnet es automatisch, auch für bereits importierte und selbst angelegte Einträge. Das Skript schreibt es zusätzlich in den CSV-Export.
+- Unbekannte Professions werden über Wortregeln zugeordnet (z. B. alles mit „Sportswoman“ → Athletics & Sports, „… Model“ → Modeling), sonst „Sonstige“.
+- Die Zuordnung steht im Code ganz oben in `PROFESSION_CATEGORIES` (in `app.js` und im Userscript) und lässt sich dort leicht anpassen.

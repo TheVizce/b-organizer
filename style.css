@@ -206,6 +206,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .chip.accent { background: var(--accent-bg); border-color: transparent; color: var(--accent-2); }
 .chip.tag { cursor: pointer; }
+.chip.cat { cursor: pointer; border-color: #3b4560; color: #b9c4e6; }
+.chip.cat:hover, .chip.tag:hover { border-color: var(--accent); }
+.field input.ro { background: transparent; border-style: dashed; color: var(--muted); }
 
 .sec { margin-top: 18px; }
 .sec h3 {
