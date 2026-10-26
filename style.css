@@ -124,6 +124,26 @@ main { padding: 20px; }
 }
 .badge.rating { color: var(--warn); }
 .badge.mine { color: var(--accent-2); }
+.badge.diff { color: var(--warn); }
+.badge.site { color: var(--muted); }
+.ok { color: var(--good); }
+.warn { color: var(--warn); font-weight: 600; }
+.muted { color: var(--muted); }
+.rating-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.rate-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.rate-btn {
+  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer;
+  background: var(--surface); color: var(--muted); font-weight: 600; position: relative;
+}
+.rate-btn:hover { border-color: var(--accent); color: var(--text); }
+.rate-btn.on { background: var(--accent); border-color: var(--accent); color: #1a0d12; }
+.rate-btn.site::after {
+  content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+}
+.rate-clear { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; padding: 0 6px; }
+.rate-clear:hover { color: var(--danger); }
+.rate-cmp { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
 .fav-btn {
   position: absolute; top: 8px; right: 8px; z-index: 2;
   width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;

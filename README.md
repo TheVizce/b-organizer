@@ -33,6 +33,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **🗂️ Tool öffnen** öffnet das Tool – alle gesammelten Profile werden automatisch übernommen und der Batch geleert.
 - Vorhandene Einträge werden über die Profil-URL erkannt und aktualisiert; die eigenen Felder **Favorite, My Rating, Tags, Notes** bleiben erhalten.
 - Im Tool: **＋ Neuer Eintrag** legt eigene Einträge an, ein Klick auf eine Karte öffnet die Details mit *Bearbeiten* / *Löschen*.
+- **Meine Bewertung**: in der Detailansicht direkt per Klick (1–10) vergeben. Sie wird mit deinem **User Rating** auf Babepedia verglichen (✓ gleich / Abweichung). Filter „Bewertung“ und Sortierung „Größte Abweichung“ helfen beim Abgleich.
 - **Daten → Importieren** liest CSV-Dateien des alten Skripts oder JSON-Backups (auch per Drag & Drop).
 - **Daten → Backup exportieren** sichert alles als JSON – regelmäßig machen, und für den Umzug auf ein anderes Gerät nutzen.
 - **Daten → Als CSV exportieren** erzeugt eine CSV im bisherigen Notion-Format (plus eigene Felder).
@@ -46,3 +47,10 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
   - **Profilseite** (➕ Add): Profil wird in GELISTET aufgenommen und aus NEU entfernt.
   - **Andere Seite**: Das Skript fragt nach.
 - `LIST_AUCH_GELISTET` entfernt (war nicht definiert und ließ **🔄 Move Lists Only** abbrechen).
+
+## Änderungen in 13.2
+- User-Upload-Bilder werden jetzt erfasst (sie werden auf Babepedia erst beim Scrollen geladen und fehlten deshalb).
+- Mehrseitige Listen: Seitenzahl kommt direkt aus der Paginierung, auch Seite 1 wird geholt, wenn du auf einer späteren Seite startest. Fehlgeschlagene Seiten werden ein zweites Mal versucht, und am Ende gibt es einen Abgleich mit „Total number of babes in this list“.
+- Mehr Pausen und Wiederholungen bei „zu vielen Anfragen“ (HTTP 429/503).
+- Flaggen für rund 170 Nationalitäten.
+- Doppelte Profile werden über die Profil-URL statt über den Namen erkannt.
