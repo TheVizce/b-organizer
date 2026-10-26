@@ -59,3 +59,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Neues Feld **Profession Category**: fasst die Professions zu 12 Bereichen zusammen (mehrere pro Person möglich). Das Tool berechnet es automatisch, auch für bereits importierte und selbst angelegte Einträge. Das Skript schreibt es zusätzlich in den CSV-Export.
 - Unbekannte Professions werden über Wortregeln zugeordnet (z. B. alles mit „Sportswoman“ → Athletics & Sports, „… Model“ → Modeling), sonst „Sonstige“.
 - Die Zuordnung steht im Code ganz oben in `PROFESSION_CATEGORIES` (in `app.js` und im Userscript) und lässt sich dort leicht anpassen.
+
+## Änderungen in 13.5
+- Profile, die beim Auto Fetch nicht geholt werden konnten, werden gespeichert. Der Button **↻ Fehlgeschlagene (n)** holt sie erneut (Shift+Klick zeigt die Liste in der Konsole bzw. leert sie).
+- Seiten ohne Profil (z. B. Bot-Schutz oder abgelaufener Login) zählen jetzt als Fehler statt stillschweigend zu fehlen.
