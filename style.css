@@ -126,6 +126,8 @@ main { padding: 20px; }
 .badge.mine { color: var(--accent-2); }
 .badge.diff { color: var(--warn); }
 .badge.site { color: var(--muted); }
+.badge.ranker { padding: 3px 5px; }
+.chip.ranker { background: rgba(232, 176, 79, 0.14); border-color: transparent; color: var(--warn); }
 .ok { color: var(--good); }
 .warn { color: var(--warn); font-weight: 600; }
 .muted { color: var(--muted); }
