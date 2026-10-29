@@ -20,9 +20,12 @@ Eigenes Verwaltungs-Tool für Profile von babepedia.com – läuft komplett im B
 > Hinweis: Die Seite ist öffentlich aufrufbar, deine **Daten aber nicht** – die liegen nur im localStorage deines Browsers. Die Seite ist per `noindex` von Suchmaschinen ausgeschlossen.
 
 ### 2. Userscript
+**Installieren / aktualisieren:** [babepedia-organizer.user.js](https://raw.githubusercontent.com/TheVizce/b-organizer/main/babepedia-organizer.user.js) öffnen – Tampermonkey bietet die Installation an. Danach prüft Tampermonkey selbst auf neue Versionen.
+
+Manuell:
 1. In Tampermonkey das alte Skript (12.2) deaktivieren.
 2. `babepedia-organizer.user.js` als neues Skript einfügen.
-3. Oben im Skript `TOOL_URL` auf deine Adresse aus Schritt 1.4 setzen.
+3. `TOOL_URL` ist bereits auf `https://thevizce.github.io/b-organizer/` gesetzt.
 4. Beim ersten Öffnen des Tools fragt Tampermonkey evtl. nach Erlaubnis – zulassen.
 
 Ein alter Batch aus Version 12.2 wird automatisch übernommen.
@@ -80,3 +83,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Abgleich: Ranker-Liste öffnen (nach Name sortiert) → **🏆 Ranker-Abgleich** → **🗂️ Tool öffnen**. Das Tool setzt „In Ranker“ für alle Einträge (ja/nein) und zeigt, welche Ranker-Profile im Tool fehlen.
 - Filter „Ranker“, 🏆-Abzeichen auf der Karte, Chip in der Detailansicht, Spalte in der Tabelle.
 - Den Abgleich einfach wiederholen, wenn sich die Ranker-Liste geändert hat.
+
+## Änderungen in 13.8 (Skript)
+- Skript liegt jetzt im Repo; Tampermonkey aktualisiert es automatisch über `@updateURL`.
+- `TOOL_URL` fest auf `https://thevizce.github.io/b-organizer/` gesetzt, Skript läuft auf github.io nur noch auf dieser Seite.
