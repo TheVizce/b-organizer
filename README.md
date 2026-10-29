@@ -74,3 +74,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Die Übernahme vom Userscript wird erst bestätigt, wenn wirklich gespeichert wurde. Schlägt das Speichern fehl, bleiben die Profile im Userscript.
 - Änderungen erscheinen sofort auch in anderen offenen Tabs des Tools.
 - Unter *Daten → Anleitung* steht, wie viel Speicher belegt ist.
+
+## Änderungen in 13.7 (Skript) / Tool
+- Neues Attribut **In Ranker** (Image-Ranker = Babepedia-Liste „Ranker“, ID 172740).
+- Abgleich: Ranker-Liste öffnen (nach Name sortiert) → **🏆 Ranker-Abgleich** → **🗂️ Tool öffnen**. Das Tool setzt „In Ranker“ für alle Einträge (ja/nein) und zeigt, welche Ranker-Profile im Tool fehlen.
+- Filter „Ranker“, 🏆-Abzeichen auf der Karte, Chip in der Detailansicht, Spalte in der Tabelle.
+- Den Abgleich einfach wiederholen, wenn sich die Ranker-Liste geändert hat.

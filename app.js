@@ -15,13 +15,13 @@
     'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
-  const OWN_FIELDS = ['Favorite', 'My Rating', 'Tags', 'Notes'];
+  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'];
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Tags', 'Notes'] },
+    { title: 'Eigene Angaben', fields: ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'] },
     { title: 'Babepedia', fields: ['Profile URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'] }
@@ -30,7 +30,7 @@
 
   const TYPES = {
     'Born': 'date', 'Died': 'date', 'Scraped At': 'date',
-    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool',
+    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool', 'In Ranker': 'bool',
     'Tattoos': ['n/a', 'Ja', 'Nein'], 'Piercings': ['n/a', 'Ja', 'Nein'],
     'Boobs': ['', 'Real/Natural', 'Fake/Enhanced', 'Real (Removed implants)', 'Unknown'],
     'Height': 'num', 'Weight': 'num', 'Global Rating': 'num', 'Votes': 'num', 'User Rating': 'num',
@@ -42,7 +42,7 @@
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
-    'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
+    'Exact Birthdate': 'aus = nur Jahr bekannt', 'In Ranker': 'wird beim Ranker-Abgleich automatisch gesetzt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
@@ -319,6 +319,27 @@
   }, true);
 
   // ---------- Import / Zusammenführen ----------
+  const normUrl = (u) => { try { u = decodeURIComponent(String(u || '')); } catch {} return u.toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '').replace(/[\s_]+/g, '_'); };
+
+  // Setzt "In Ranker" für alle Einträge anhand der kompletten Ranker-Liste von Babepedia
+  async function applyRanker(urls) {
+    const set = new Set(urls.map(normUrl));
+    const matched = new Set();
+    let on = 0, changed = 0;
+    const now = Date.now();
+    for (const e of entries) {
+      const k = normUrl(e['Profile URL']);
+      const inR = !!k && set.has(k);
+      if (inR) { on++; matched.add(k); }
+      const val = inR ? 'true' : 'false';
+      if (e['In Ranker'] !== val) { e['In Ranker'] = val; e._updated = now; changed++; }
+    }
+    const missing = urls.filter(u => !matched.has(normUrl(u)));
+    refreshFilters(); render();
+    await save();
+    return { on, changed, missing };
+  }
+
   function keyOf(e) {
     const url = v(e, 'Profile URL').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
     return url ? 'url:' + url : 'name:' + v(e, 'Name').toLowerCase();
@@ -408,14 +429,22 @@
   }
 
   // ---------- Brücke zum Userscript ----------
+  let bridgeQueue = Promise.resolve();
   window.addEventListener('message', (ev) => {
     if (ev.origin !== location.origin) return;
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
     if (d.type === 'BP_PING' && ready) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+    if (d.type === 'BP_RANKER' && Array.isArray(d.urls) && ready) {
+      // Läuft nach einem evtl. gleichzeitig übertragenen Batch-Import (Kette), damit neue Einträge mitzählen
+      bridgeQueue = bridgeQueue.then(() => applyRanker(d.urls)).then(r => {
+        window.postMessage({ type: 'BP_RANKER_ACK', id: d.id }, location.origin);
+        showRankerResult(r, d.urls.length, d.expected);
+      }).catch(() => toast('Ranker-Abgleich konnte nicht gespeichert werden.', 'err'));
+    }
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
-      importItems(d.items).then(r => {
+      bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
         toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
@@ -459,10 +488,12 @@
     const fav = $('#f-fav').checked;
     const rf = $('#f-rating').value;
     const cf = $('#f-cat').value;
+    const rk = $('#f-ranker').value;
 
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
       if (cf && !catList(e).includes(cf)) return false;
+      if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
       if (rf) {
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
@@ -541,7 +572,7 @@
 
     if (ui.view === 'table') {
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>★</th>
+        <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>🏆</th><th>★</th>
         </tr></thead><tbody>${list.map(e => `<tr data-id="${esc(e._id)}">
           <td class="thumb">${imgTag(images(e)[0], v(e, 'Name'))}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
@@ -556,6 +587,7 @@
           <td class="num">${esc(v(e, 'User Rating'))}</td>
           <td class="num">${esc(v(e, 'My Rating'))}</td>
           <td class="num">${diffCell(e)}</td>
+          <td>${isTrue(e['In Ranker']) ? '🏆' : ''}</td>
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
         </tr>`).join('')}</tbody></table></div>`;
       return;
@@ -569,6 +601,7 @@
             ${v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ratingBadge(e)}
+            ${isTrue(e['In Ranker']) ? '<span class="badge ranker" title="Im Image-Ranker">🏆</span>' : ''}
           </div>
         </div>
         <div class="body">
@@ -664,6 +697,7 @@
             ${v(e, 'Global Rating') ? `<span class="chip">★ ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Votes)` : ''}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
+            ${isTrue(e['In Ranker']) ? '<span class="chip ranker">🏆 im Ranker</span>' : ''}
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
@@ -799,6 +833,19 @@
     }
   }
 
+  function showRankerResult(r, total, expected) {
+    const names = r.missing.map(u => { try { return decodeURIComponent(u.split('/babe/')[1] || u).replace(/_/g, ' '); } catch { return u; } });
+    openModal(`
+      <div class="modal-head"><h2>🏆 Ranker-Abgleich</h2><div class="actions"><button class="x" data-action="close">×</button></div></div>
+      <div class="help">
+        <p><strong>${r.on}</strong> Einträge sind im Ranker (${total} Profile in der Ranker-Liste${expected && expected !== total ? `, laut Babepedia ${expected}` : ''}).
+        ${r.changed} Einträge wurden geändert.</p>
+        ${names.length ? `<h3>${names.length} Profile aus der Ranker-Liste fehlen im Tool</h3>
+          <p class="muted">Diese Profile sind im Ranker, aber (noch) nicht im Tool erfasst – z. B. über die Profilseite mit ➕ Add holen.</p>
+          <ul>${names.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<p class="ok">✓ Alle Profile der Ranker-Liste sind im Tool vorhanden.</p>'}
+      </div>`);
+  }
+
   function lightbox(src) {
     const lb = document.createElement('div');
     lb.className = 'lightbox';
@@ -902,12 +949,12 @@
     if (f) handleFile(f);
     ev.target.value = '';
   });
-  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat'].forEach(s => $(s).addEventListener('input', render));
+  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-fav').checked = false; render();
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-fav').checked = false; render();
   });
 
   // Daten per Drag & Drop importieren
