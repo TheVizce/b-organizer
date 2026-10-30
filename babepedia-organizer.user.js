@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      13.9
+// @version      14.0
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -656,11 +656,15 @@
                     const match = value.match(/(\d+)\s*kg/i);
                     if (match) data['Weight'] = match[1];
                 } else if (label === 'Measurements') {
-                    const match = value.match(/(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)/);
+                    // Immer in cm speichern. Babepedia zeigt je nach Kontoeinstellung "36–24–36 in" oder cm.
+                    const triple = /(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)\s*(cm|in(?:ch(?:es)?)?\b|["″])?/gi;
+                    const all = [...value.matchAll(triple)];
+                    const cmHit = all.find(m => m[4] && m[4].toLowerCase() === 'cm');
+                    const match = cmHit || all[0];
                     if (match) {
-                        const bust = Math.round(parseFloat(match[1]));
-                        const waist = Math.round(parseFloat(match[2]));
-                        const hips = Math.round(parseFloat(match[3]));
+                        const isInch = !cmHit && (/^(in|inch|inches|"|″)$/i.test(match[4] || '') || parseFloat(match[1]) < 60);
+                        const f = isInch ? 2.54 : 1;
+                        const [bust, waist, hips] = [match[1], match[2], match[3]].map(x => Math.round(parseFloat(x) * f));
                         data['Measurements'] = `${bust}-${waist}-${hips}`;
                     } else {
                         data['Measurements'] = value;
