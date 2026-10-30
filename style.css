@@ -334,3 +334,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .img-cell:hover .img-cover-btn, .img-cover-btn.on { opacity: 1; }
 .img-cover-btn.on { color: var(--warn); }
 @media (hover: none) { .img-cover-btn { opacity: 1; } }
+
+/* Nachladen beim Scrollen */
+.more { text-align: center; color: var(--faint); font-size: 12.5px; padding: 18px 0 8px; min-height: 1px; }
+/* Karten außerhalb des Bildschirms nicht rendern lassen */
+.card { content-visibility: auto; contain-intrinsic-size: 190px 330px; }
