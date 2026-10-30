@@ -342,8 +342,17 @@
       throw e;
     }
   }
-  // Für Klick-Aktionen: Fehler wird schon per Toast gemeldet
-  const saveQuiet = () => save().catch(() => {});
+  // Für Klick-Aktionen: bündelt schnelle Änderungen zu einem Schreibvorgang; Fehler wird per Toast gemeldet
+  let saveTimer = null, savePending = null;
+  function saveQuiet() {
+    clearTimeout(saveTimer);
+    if (!savePending) savePending = new Promise(res => { saveQuiet._res = res; });
+    saveTimer = setTimeout(() => { const r = saveQuiet._res; savePending = null; save().catch(() => {}).finally(r); }, 250);
+    return savePending;
+  }
+  // Ausstehendes Speichern sofort ausführen, bevor die Seite verlassen wird
+  addEventListener('pagehide', () => { if (savePending) { clearTimeout(saveTimer); save().catch(() => {}); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && savePending) { clearTimeout(saveTimer); const r = saveQuiet._res; savePending = null; save().catch(() => {}).finally(r); } });
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch {} }
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -392,12 +401,22 @@
     return [...new Set(list)].filter(u => !isPlaceholder(u));
   }
   const initials = (n) => (n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  // Cover: nimmt das erste Bild; lädt es nicht (oder ist es winzig), wird automatisch das nächste probiert
+  // Babepedia liefert zu jedem Bild ein kleines Vorschaubild – für Karten, Tabelle und Raster reicht das
+  function thumbUrl(u) {
+    if (!/babepedia\.com/i.test(u)) return u;
+    if (/\/pics\//i.test(u) && !/_thumb\d*\.(jpe?g)$/i.test(u)) return u.replace(/\.(jpe?g)$/i, '_thumb3.$1');
+    if (/\/user-uploads\//i.test(u)) return u.replace('/user-uploads/', '/user-uploads-thumbs/').replace(/\.(jpe?g)$/i, '_thumb.$1');
+    return u;
+  }
+  // Cover: nimmt das erste Bild (als Vorschaubild); lädt es nicht (oder ist es winzig),
+  // wird erst das große Bild und dann das nächste probiert
   const coverTag = (e, cls = '') => {
     const list = images(e);
     const alt = v(e, 'Name');
     if (!list.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
-    return `<img src="${esc(R(list[0]))}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(list.slice(1, 8).map(R).join('\n'))}">`;
+    const tries = [];
+    list.slice(0, 6).forEach(u => { const full = R(u), th = thumbUrl(full); tries.push(th); if (th !== full) tries.push(full); });
+    return `<img src="${esc(tries[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(tries.slice(1).join('\n'))}">`;
   };
   const imgTag = (src, alt, cls = '') => src
     ? `<img src="${esc(src)}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}">`
@@ -605,6 +624,7 @@
     sel.value = present.has(cur) ? cur : '';
   }
 
+  const collator = new Intl.Collator('de');
   function filtered() {
     const q = $('#q').value.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
@@ -640,20 +660,23 @@
       return true;
     });
 
-    const by = {
-      name: (a, b) => v(a, 'Name').localeCompare(v(b, 'Name'), 'de'),
-      created: (a, b) => (b._created || 0) - (a._created || 0),
-      updated: (a, b) => (b._updated || 0) - (a._updated || 0),
-      global: (a, b) => (num(b['Global Rating']) ?? -1) - (num(a['Global Rating']) ?? -1),
-      mine: (a, b) => (num(b['My Rating']) ?? -1) - (num(a['My Rating']) ?? -1),
-      rank: (a, b) => (num(a.Rank) ?? 1e9) - (num(b.Rank) ?? 1e9),
-      young: (a, b) => (age(a) ?? 999) - (age(b) ?? 999),
-      old: (a, b) => (age(b) ?? -1) - (age(a) ?? -1),
-      height: (a, b) => (num(b.Height) ?? -1) - (num(a.Height) ?? -1),
-      site: (a, b) => (num(b['User Rating']) ?? -1) - (num(a['User Rating']) ?? -1),
-      diff: (a, b) => { const ad = (x) => { const d = ratingDiff(x).d; return d === undefined ? -1 : Math.abs(d); }; return ad(b) - ad(a); }
-    }[ui.sort] || ((a, b) => 0);
-    return list.sort((a, b) => by(a, b) || v(a, 'Name').localeCompare(v(b, 'Name'), 'de'));
+    // Sortierschlüssel einmal pro Eintrag berechnen (statt bei jedem Vergleich)
+    const key = {
+      name: () => 0,
+      created: (e) => -(e._created || 0),
+      updated: (e) => -(e._updated || 0),
+      global: (e) => -(num(e['Global Rating']) ?? -1),
+      mine: (e) => -(num(e['My Rating']) ?? -1),
+      rank: (e) => num(e.Rank) ?? 1e9,
+      young: (e) => age(e) ?? 999,
+      old: (e) => -(age(e) ?? -1),
+      height: (e) => -(num(e.Height) ?? -1),
+      site: (e) => -(num(e['User Rating']) ?? -1),
+      diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); }
+    }[ui.sort] || (() => 0);
+    return list.map(e => ({ e, k: key(e), n: v(e, 'Name') }))
+      .sort((a, b) => (a.k - b.k) || collator.compare(a.n, b.n))
+      .map(x => x.e);
   }
 
   // ---------- Darstellung ----------
@@ -695,10 +718,20 @@
     }
     if (!list.length) { main.innerHTML = `<div class="empty"><h2>Keine Treffer</h2><p>Passe Suche oder Filter an.</p></div>`; return; }
 
+    shown = list; shownCount = 0;
     if (ui.view === 'table') {
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
         <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>🏆</th><th>★</th>
-        </tr></thead><tbody>${list.map(e => `<tr data-id="${esc(e._id)}">
+        </tr></thead><tbody></tbody></table></div><div class="more" id="more"></div>`;
+    } else {
+      main.innerHTML = `<div class="grid"></div><div class="more" id="more"></div>`;
+    }
+    renderMore();
+    moreObserver.observe($('#more'));
+  }
+
+  function rowHTML(e) {
+    return `<tr data-id="${esc(e._id)}">
           <td class="thumb">${coverTag(e)}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
           <td>${esc(natDisplay(e))}</td>
@@ -714,11 +747,10 @@
           <td class="num">${diffCell(e)}</td>
           <td>${isTrue(e['In Ranker']) ? '🏆' : ''}</td>
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
-        </tr>`).join('')}</tbody></table></div>`;
-      return;
-    }
-
-    main.innerHTML = `<div class="grid">${list.map(e => `
+        </tr>`;
+  }
+  function cardHTML(e) {
+    return `
       <article class="card" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
         <div class="img">${coverTag(e)}
@@ -733,7 +765,34 @@
           <div class="name">${esc(v(e, 'Name'))}</div>
           <div class="meta">${esc(metaLine(e)) || '&nbsp;'}</div>
         </div>
-      </article>`).join('')}</div>`;
+      </article>`;
+  }
+  // Nur so viele Karten erzeugen, wie sichtbar sind; weitere beim Scrollen nachladen
+  let shown = [], shownCount = 0;
+  const STEP = 60;
+  function renderMore() {
+    const box = ui.view === 'table' ? $('#main tbody') : $('#main .grid');
+    if (!box || shownCount >= shown.length) return;
+    const next = shown.slice(shownCount, shownCount + STEP);
+    box.insertAdjacentHTML('beforeend', next.map(ui.view === 'table' ? rowHTML : cardHTML).join(''));
+    shownCount += next.length;
+    const more = $('#more');
+    if (more) more.textContent = shownCount < shown.length ? `${shownCount} von ${shown.length} angezeigt – weiter scrollen` : '';
+  }
+  const moreObserver = new IntersectionObserver((items) => {
+    if (items.some(i => i.isIntersecting)) {
+      renderMore();
+      // Falls der Bildschirm noch nicht voll ist: direkt weiter auffüllen
+      const more = $('#more');
+      if (more && shownCount < shown.length && more.getBoundingClientRect().top < innerHeight + 1500) requestAnimationFrame(renderMore);
+    }
+  }, { rootMargin: '1500px 0px' });
+
+  // Einzelnen Eintrag in der Liste aktualisieren, ohne alles neu aufzubauen (Scrollposition bleibt)
+  function refreshItem(id) {
+    const e = byId(id); if (!e) return;
+    const el = $(`#main [data-id="${CSS.escape(id)}"]`);
+    if (el) el.outerHTML = ui.view === 'table' ? rowHTML(e) : cardHTML(e);
   }
 
   // ---------- Modal ----------
@@ -746,7 +805,7 @@
     discardFormUploads();
     overlay.hidden = true; modal.innerHTML = ''; document.body.style.overflow = ''; dirty = false;
   }
-  const byId = (id) => entries.find(e => e._id === id);
+  const byId = (id) => entries.find(e => e._id === id); // bei ~4000 Einträgen schnell genug
 
   function fmtValue(e, f) {
     const val = v(e, f);
@@ -787,7 +846,7 @@
     const e = byId(id); if (!e) return;
     e['My Rating'] = val === '' ? '' : String(val);
     e._updated = Date.now();
-    saveQuiet(); render(); showDetail(id);
+    saveQuiet(); refreshItem(id); showDetail(id);
   }
 
   function showDetail(id) {
@@ -833,7 +892,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell"><img src="${esc(R(u))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -1075,7 +1134,8 @@
     const e = byId(id); if (!e) return;
     e.Favorite = isTrue(e.Favorite) ? 'false' : 'true';
     e._updated = Date.now();
-    saveQuiet(); render();
+    saveQuiet();
+    if ($('#f-fav').checked) render(); else refreshItem(id);
     if (!overlay.hidden && $('.detail', modal)) showDetail(id);
   }
 
@@ -1176,7 +1236,9 @@
     if (f) handleFile(f);
     ev.target.value = '';
   });
-  ['#q', '#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker'].forEach(s => $(s).addEventListener('input', render));
+  let searchTimer = null;
+  $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); });
+  ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-reset').addEventListener('click', () => {

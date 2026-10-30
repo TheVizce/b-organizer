@@ -103,3 +103,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Mit ★ ein Bild als **Cover** festlegen – im Formular für eigene Bilder, in der Detailansicht für jedes Bild. Ohne Festlegung gilt das erste verfügbare Bild.
 - Das JSON-Backup enthält die eigenen Bilder (Version 2) und stellt sie beim Import wieder her. Der CSV-Export enthält sie nicht.
 - Ungespeicherte Uploads werden beim Abbrechen verworfen, entfernte Bilder und Bilder gelöschter Einträge werden mitgelöscht.
+
+## Änderungen in 14.2 (Tool) – Performance
+- Karten/Tabellenzeilen werden in Etappen erzeugt (60 Stück) und beim Scrollen nachgeladen, statt alle ~3700 auf einmal.
+- Karten, Tabelle und Bilder-Raster laden Babepedias kleine Vorschaubilder (`_thumb3` bzw. `user-uploads-thumbs`) statt der großen Originale; groß nur in der Detail-Ansicht/Lightbox. Fehlt ein Vorschaubild, wird automatisch das große genommen.
+- Sortierung berechnet die Schlüssel nur einmal pro Eintrag; Suche wartet kurz, bis man zu tippen aufhört.
+- Favorit/Bewertung aktualisieren nur die betroffene Karte (Scrollposition bleibt), schnelle Änderungen werden zu einem Speichervorgang gebündelt.
