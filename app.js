@@ -39,7 +39,7 @@
     'User Upload Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area'
   };
   const HINTS = {
-    'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
+    'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'In Ranker': 'wird beim Ranker-Abgleich automatisch gesetzt', 'Professions': 'kommagetrennt, wie auf Babepedia'
@@ -47,7 +47,7 @@
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
     .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
-  const UNITS = { 'Height': ' cm', 'Weight': ' kg' };
+  const UNITS = { 'Height': ' cm', 'Weight': ' kg', 'Measurements': ' cm' };
 
   // Alle Nationality-Werte von Babepedia (Advanced Search) + übliche Schreibvarianten -> Ländercode
   const NATIONALITY_CODES = {
@@ -176,10 +176,28 @@
   }
 
   const catList = (e) => String(e['Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
+  // ---- Measurements: werden immer in cm gespeichert (Format Brust-Taille-Hüfte) ----
+  const INCH = 2.54;
+  function parseMeas(str) {
+    const m = String(str || '').replace(',', '.').match(/(\d+(?:\.\d+)?)\s*[-–—\/x]\s*(\d+(?:\.\d+)?)\s*[-–—\/x]\s*(\d+(?:\.\d+)?)/i);
+    return m ? [m[1], m[2], m[3]].map(Number) : null;
+  }
+  // Wandelt eine Eingabe in "xx-xx-xx" (cm, gerundet) um; unit = 'cm' | 'in'
+  function measToCm(str, unit) {
+    const p = parseMeas(str);
+    if (!p) return String(str || '').trim();
+    const f = unit === 'in' ? INCH : 1;
+    return p.map(x => Math.round(x * f)).join('-');
+  }
+  const measInches = (cmStr) => { const p = parseMeas(cmStr); return p ? p.map(x => Math.round(x / INCH)).join('-') : ''; };
+  // Alte Werte in Inch erkennen: eine Brustweite unter 60 gibt es in cm praktisch nicht
+  const looksLikeInches = (str) => { const p = parseMeas(str); return !!p && p[0] < 60 && p[2] < 70; };
+
   // Abgeleitete Felder immer aus den Rohdaten neu berechnen
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     e['Profession Category'] = professionCategories(e.Professions);
+    if (looksLikeInches(e.Measurements)) e.Measurements = measToCm(e.Measurements, 'in');
     return e;
   }
 
@@ -748,6 +766,13 @@
     if (f === 'Profession Category') {
       return `<div class="field"><label>${esc(f)}</label><input type="text" value="${esc(v(e, f))}" readonly tabindex="-1" class="ro" data-derived="cat"><span class="hint">wird automatisch aus Professions gebildet</span></div>`;
     }
+    if (f === 'Measurements') {
+      const id = 'fld-' + ALL_FIELDS.indexOf(f), val = v(e, f), inch = measInches(val);
+      return `<div class="field"><label for="${id}">Measurements</label>
+        <div class="unit-row"><input type="text" name="Measurements" id="${id}" value="${esc(val)}" placeholder="xx-xx-xx" inputmode="decimal" autocomplete="off">
+        <select name="Measurements-unit" aria-label="Einheit"><option value="cm">cm</option><option value="in">inch</option></select></div>
+        <span class="hint" data-meas-hint>${esc(HINTS[f])}${inch ? ` · ≈ ${inch} in` : ''}</span></div>`;
+    }
     const t = TYPES[f];
     const id = 'fld-' + ALL_FIELDS.indexOf(f);
     const val = v(e, f);
@@ -795,8 +820,17 @@
         <button class="btn primary" data-action="save">${isNew ? 'Anlegen' : 'Speichern'}</button>
       </div>`);
     const form = $('#entry-form');
+    form.addEventListener('change', (ev) => { if (ev.target.name === 'Measurements-unit') form.dispatchEvent(new Event('input', { bubbles: true })); });
     form.addEventListener('input', (ev) => {
       dirty = true;
+      if (ev.target === form || ev.target.name === 'Measurements') {
+        const inp = form.elements.namedItem('Measurements'), unit = form.elements.namedItem('Measurements-unit').value;
+        const hintEl = $('[data-meas-hint]', form), p = parseMeas(inp.value);
+        if (!inp.value.trim()) hintEl.textContent = HINTS.Measurements;
+        else if (!p) hintEl.textContent = 'Format: xx-xx-xx';
+        else if (unit === 'in') hintEl.textContent = `wird gespeichert als ${measToCm(inp.value, 'in')} cm`;
+        else hintEl.textContent = `≈ ${measInches(measToCm(inp.value, 'cm'))} in`;
+      }
       if (ev.target.name === 'Professions') { const ro = $('[data-derived="cat"]', form); if (ro) ro.value = professionCategories(ev.target.value); }
       const box = $(`[data-prev-for="${CSS.escape(ev.target.name || '')}"]`, form);
       if (box) box.innerHTML = previewHTML(ev.target.value);
@@ -816,6 +850,7 @@
       else if (TYPES[f] === 'date') data[f] = isoToDd(el.value);
       else data[f] = el.value.trim();
     }
+    if (data.Measurements) data.Measurements = measToCm(data.Measurements, form.elements.namedItem('Measurements-unit').value);
     data['Profession Category'] = professionCategories(data.Professions);
     if (!data.Name) { toast('Bitte einen Namen eingeben.', 'err'); $('[name="Name"]', form).focus(); return; }
 

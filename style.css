@@ -250,6 +250,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 14px; }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field.wide { grid-column: 1 / -1; }
+.unit-row { display: flex; gap: 6px; }
+.field .unit-row input { flex: 1 1 auto; width: auto; min-width: 0; }
+.field .unit-row select { flex: 0 0 auto; width: 78px; }
 .field label { font-size: 12px; color: var(--muted); }
 .field input, .field select, .field textarea { width: 100%; }
 .field textarea { min-height: 70px; resize: vertical; }
