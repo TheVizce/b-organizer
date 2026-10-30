@@ -296,19 +296,50 @@
     }
     return a;
   }
+  // Babepedia-Platzhalter (kein echtes Foto) erkennen: Babepedia-Bilder liegen sonst unter /pics/ bzw. /user-uploads/
+  function isPlaceholder(u) {
+    u = String(u || '').trim();
+    if (!/^https?:\/\//i.test(u)) return true;
+    if (/no[_-]?(pic|image|photo)|placeholder|silhouette|default[_-]?(pic|image)/i.test(u)) return true;
+    if (/babepedia\.com/i.test(u) && !/\/(pics|user-uploads|user-uploads-thumbs|galleries|galleries-thumbs)\//i.test(u)) return true;
+    return false;
+  }
+  // Reihenfolge: Hauptbild, Bild 2–4, dann User Uploads. Das erste ladbare Bild wird zum Cover.
   function images(e) {
     const list = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'].map(f => v(e, f)).filter(Boolean);
     splitList(e['User Upload Image URLs']).forEach(u => list.push(u));
-    return [...new Set(list)];
+    return [...new Set(list)].filter(u => !isPlaceholder(u));
   }
   const initials = (n) => (n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  // Cover: nimmt das erste Bild; lädt es nicht (oder ist es winzig), wird automatisch das nächste probiert
+  const coverTag = (e, cls = '') => {
+    const list = images(e);
+    const alt = v(e, 'Name');
+    if (!list.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
+    return `<img src="${esc(list[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(list.slice(1, 8).join('\n'))}">`;
+  };
   const imgTag = (src, alt, cls = '') => src
     ? `<img src="${esc(src)}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}">`
     : `<div class="placeholder">${esc(initials(alt))}</div>`;
 
-  // Kaputte Bilder durch Initialen ersetzen
+  // Kaputte Bilder: nächstes Ersatzbild probieren, sonst Initialen
+  function nextAlt(img) {
+    const alts = (img.dataset.alts || '').split('\n').filter(Boolean);
+    if (!alts.length) return false;
+    img.dataset.alts = alts.slice(1).join('\n');
+    img.src = alts[0];
+    return true;
+  }
+  // Sehr kleine Bilder (Platzhalter-Grafiken) wie Fehler behandeln
+  document.addEventListener('load', (ev) => {
+    const img = ev.target;
+    if (img.tagName === 'IMG' && img.dataset.alts !== undefined && img.naturalWidth > 0 && img.naturalWidth < 40) {
+      if (!nextAlt(img)) img.dispatchEvent(new Event('error'));
+    }
+  }, true);
   document.addEventListener('error', (ev) => {
     const img = ev.target;
+    if (img.tagName === 'IMG' && nextAlt(img)) return;
     if (img.tagName === 'IMG' && img.dataset.fallback !== undefined && !img.dataset.failed) {
       img.dataset.failed = '1';
       const ph = document.createElement('div');
@@ -574,7 +605,7 @@
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
         <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>🏆</th><th>★</th>
         </tr></thead><tbody>${list.map(e => `<tr data-id="${esc(e._id)}">
-          <td class="thumb">${imgTag(images(e)[0], v(e, 'Name'))}</td>
+          <td class="thumb">${coverTag(e)}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
           <td>${esc(natDisplay(e))}</td>
           <td>${esc(v(e, 'Profession Category'))}</td>
@@ -596,7 +627,7 @@
     main.innerHTML = `<div class="grid">${list.map(e => `
       <article class="card" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
-        <div class="img">${imgTag(images(e)[0], v(e, 'Name'))}
+        <div class="img">${coverTag(e)}
           <div class="badges">
             ${v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
@@ -687,7 +718,7 @@
       </div>
       <div class="detail">
         <div class="gallery">
-          <div class="main">${imgTag(imgs[0], v(e, 'Name'))}</div>
+          <div class="main">${coverTag(e)}</div>
         </div>
         <div>
           <h1 class="d-title">${esc(v(e, 'Name'))}</h1>

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      13.8
+// @version      13.9
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -475,13 +475,21 @@
 
         let babeId = extractBabeId(doc);
 
-        const mainImgEl = doc.querySelector('#profimg img, .profile-pic img, #bio-img img');
-        data['Main Image URL'] = (mainImgEl && mainImgEl.src) ? cleanImageUrl(mainImgEl.src) : '';
+        // Nur echte Bilddateien übernehmen. Ohne Foto zeigt Babepedia hier "noimg"-Links auf /uploadphotos/...
+        const isImgUrl = (u) => /\.(jpe?g|png|webp|gif)(\?|$)/i.test(String(u || ''));
+        const absImg = (u) => { try { return new URL(u, 'https://www.babepedia.com').href; } catch (e) { return ''; } };
 
-        const profSelectLinks = doc.querySelectorAll('#profselect a.img');
-        data['Image 2 URL'] = (profSelectLinks[0] && profSelectLinks[0].href) ? cleanImageUrl(profSelectLinks[0].href) : '';
-        data['Image 3 URL'] = (profSelectLinks[1] && profSelectLinks[1].href) ? cleanImageUrl(profSelectLinks[1].href) : '';
-        data['Image 4 URL'] = (profSelectLinks[2] && profSelectLinks[2].href) ? cleanImageUrl(profSelectLinks[2].href) : '';
+        const mainImgEl = doc.querySelector('#profimg img, .profile-pic img, #bio-img img');
+        const mainSrc = mainImgEl ? absImg(mainImgEl.getAttribute('src') || mainImgEl.getAttribute('data-src') || '') : '';
+        data['Main Image URL'] = isImgUrl(mainSrc) ? cleanImageUrl(mainSrc) : '';
+
+        const profSelect = [...doc.querySelectorAll('#profselect a.img:not(.noimg)')]
+            .map(a => absImg(a.getAttribute('href') || ''))
+            .filter(isImgUrl)
+            .map(cleanImageUrl);
+        data['Image 2 URL'] = profSelect[0] || '';
+        data['Image 3 URL'] = profSelect[1] || '';
+        data['Image 4 URL'] = profSelect[2] || '';
 
         const galleryUrls = new Set();
         const absUrl = (u) => { try { return new URL(u, 'https://www.babepedia.com').href; } catch (e) { return ''; } };
