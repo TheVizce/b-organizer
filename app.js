@@ -15,7 +15,8 @@
     'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
-  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'];
+  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover'];
+  const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = [
@@ -23,7 +24,7 @@
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'] },
     { title: 'Babepedia', fields: ['Profile URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
-    { title: 'Bilder', fields: ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
+    { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'] }
   ];
   const LINK_FIELDS = GROUPS[5].fields;
@@ -254,6 +255,64 @@
     });
   }
 
+  async function idbDel(key) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(key);
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // ---------- Eigene Bilder (lokal in IndexedDB, Schlüssel "img:<id>", Verweis im Eintrag "local:<id>") ----------
+  const localUrls = new Map(); // id -> Object-URL
+  const LOCAL = 'local:';
+  const isLocal = (u) => String(u || '').startsWith(LOCAL);
+  const localId = (u) => String(u).slice(LOCAL.length);
+  // Liefert eine anzeigbare Adresse ('' wenn ein lokales Bild fehlt)
+  const R = (u) => isLocal(u) ? (localUrls.get(localId(u)) || '') : u;
+
+  async function loadLocalImages() {
+    const d = await db();
+    const range = IDBKeyRange.bound('img:', 'img:\uffff');
+    const [keys, vals] = await Promise.all(['getAllKeys', 'getAll'].map(m => new Promise((res, rej) => {
+      const r = d.transaction(DB_STORE, 'readonly').objectStore(DB_STORE)[m](range);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    })));
+    keys.forEach((k, i) => {
+      const id = String(k).slice(4);
+      if (!localUrls.has(id) && vals[i] instanceof Blob) localUrls.set(id, URL.createObjectURL(vals[i]));
+    });
+  }
+  // Verkleinert ein Bild auf max. 1600 px und speichert es als JPEG
+  async function processImage(file) {
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch { throw new Error(`„${file.name}“: Bildformat wird nicht unterstützt`); }
+    const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Umwandlung fehlgeschlagen')), 'image/jpeg', 0.85));
+  }
+  async function storeLocalImage(file) {
+    const blob = await processImage(file);
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await idbSet('img:' + id, blob);
+    localUrls.set(id, URL.createObjectURL(blob));
+    return LOCAL + id;
+  }
+  async function deleteLocalImages(refs) {
+    for (const r of refs) {
+      if (!isLocal(r)) continue;
+      const id = localId(r);
+      try { await idbDel('img:' + id); } catch {}
+      const u = localUrls.get(id); if (u) URL.revokeObjectURL(u);
+      localUrls.delete(id);
+    }
+  }
+  const blobToDataUrl = (b) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(b); });
+
   async function load() {
     let d = await idbGet('entries');
     if (!Array.isArray(d)) {
@@ -317,6 +376,7 @@
   // Babepedia-Platzhalter (kein echtes Foto) erkennen: Babepedia-Bilder liegen sonst unter /pics/ bzw. /user-uploads/
   function isPlaceholder(u) {
     u = String(u || '').trim();
+    if (isLocal(u)) return !R(u);
     if (!/^https?:\/\//i.test(u)) return true;
     if (/no[_-]?(pic|image|photo)|placeholder|silhouette|default[_-]?(pic|image)/i.test(u)) return true;
     if (/babepedia\.com/i.test(u) && !/\/(pics|user-uploads|user-uploads-thumbs|galleries|galleries-thumbs)\//i.test(u)) return true;
@@ -326,6 +386,9 @@
   function images(e) {
     const list = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'].map(f => v(e, f)).filter(Boolean);
     splitList(e['User Upload Image URLs']).forEach(u => list.push(u));
+    splitList(e['Own Images']).forEach(u => list.push(u));
+    const cover = v(e, 'Cover');
+    if (cover && list.includes(cover)) list.unshift(cover);
     return [...new Set(list)].filter(u => !isPlaceholder(u));
   }
   const initials = (n) => (n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -334,7 +397,7 @@
     const list = images(e);
     const alt = v(e, 'Name');
     if (!list.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
-    return `<img src="${esc(list[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(list.slice(1, 8).join('\n'))}">`;
+    return `<img src="${esc(R(list[0]))}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(list.slice(1, 8).map(R).join('\n'))}">`;
   };
   const imgTag = (src, alt, cls = '') => src
     ? `<img src="${esc(src)}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}">`
@@ -446,7 +509,8 @@
   }
   function toCSV(list) {
     const q = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-    return [ALL_FIELDS.map(q).join(','), ...list.map(e => ALL_FIELDS.map(f => q(e[f])).join(','))].join('\n');
+    const cols = ALL_FIELDS.filter(f => !NO_CSV.has(f));
+    return [cols.map(q).join(','), ...list.map(e => cols.map(f => q(e[f])).join(','))].join('\n');
   }
   function download(name, content, type) {
     const blob = new Blob([content], { type });
@@ -464,6 +528,18 @@
       if (/\.json$/i.test(file.name) || /^\s*[\[{]/.test(text)) {
         const data = JSON.parse(text);
         items = Array.isArray(data) ? data : (data.entries || []);
+        if (data && data.images && typeof data.images === 'object') {
+          let n = 0;
+          for (const [id, dataUrl] of Object.entries(data.images)) {
+            try {
+              const blob = await (await fetch(dataUrl)).blob();
+              await idbSet('img:' + id, blob);
+              if (!localUrls.has(id)) localUrls.set(id, URL.createObjectURL(blob));
+              n++;
+            } catch {}
+          }
+          if (n) toast(`${n} eigene Bilder aus dem Backup übernommen.`, 'ok');
+        }
       } else {
         items = parseCSV(text);
       }
@@ -663,9 +739,11 @@
   // ---------- Modal ----------
   const overlay = $('#overlay'), modal = $('#modal');
   let dirty = false;
-  function openModal(html) { modal.innerHTML = html; overlay.hidden = false; document.body.style.overflow = 'hidden'; overlay.scrollTop = 0; dirty = false; }
+  function openModal(html) {
+    discardFormUploads(); modal.innerHTML = html; overlay.hidden = false; document.body.style.overflow = 'hidden'; overlay.scrollTop = 0; dirty = false; }
   function closeModal(force) {
     if (!force && dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+    discardFormUploads();
     overlay.hidden = true; modal.innerHTML = ''; document.body.style.overflow = ''; dirty = false;
   }
   const byId = (id) => entries.find(e => e._id === id);
@@ -755,14 +833,32 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell"><img src="${esc(R(u))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
       </div>`);
   }
 
+  function ownItemsHTML(refs, cover) {
+    return refs.map(r => `<div class="own-item ${r === cover ? 'is-cover' : ''}" data-ref="${esc(r)}">
+      <img src="${esc(R(r))}" alt="" data-full="${esc(r)}">
+      <button type="button" class="own-btn" data-own-cover title="${r === cover ? 'Ist Cover' : 'Als Cover'}">★</button>
+      <button type="button" class="own-btn del" data-own-del title="Entfernen">✕</button></div>`).join('');
+  }
+
   function fieldInput(f, e) {
+    if (f === 'Cover') return '';
+    if (f === 'Own Images') {
+      const refs = splitList(v(e, 'Own Images'));
+      return `<div class="field wide own-field"><label>Eigene Bilder</label>
+        <div class="own-drop" data-own-drop>Bilder hierher ziehen oder <button type="button" class="btn small" data-own-pick>Dateien auswählen…</button></div>
+        <input type="file" accept="image/*" multiple hidden data-own-file>
+        <input type="hidden" name="Own Images" value="${esc(refs.join(', '))}">
+        <input type="hidden" name="Cover" value="${esc(v(e, 'Cover'))}">
+        <div class="own-list" data-own-list>${ownItemsHTML(refs, v(e, 'Cover'))}</div>
+        <span class="hint">Werden verkleinert nur in diesem Browser gespeichert (nicht im Repo). Im JSON-Backup sind sie enthalten.</span></div>`;
+    }
     if (f === 'Profession Category') {
       return `<div class="field"><label>${esc(f)}</label><input type="text" value="${esc(v(e, f))}" readonly tabindex="-1" class="ro" data-derived="cat"><span class="hint">wird automatisch aus Professions gebildet</span></div>`;
     }
@@ -836,7 +932,49 @@
       if (box) box.innerHTML = previewHTML(ev.target.value);
     });
     form.addEventListener('submit', (ev) => { ev.preventDefault(); saveForm(); });
+    bindOwnImages(form);
     $('[name="Name"]', form).focus();
+  }
+
+  // Im Formular neu hochgeladene Bilder; werden verworfen, wenn nicht gespeichert wird
+  let formUploads = new Set();
+  function discardFormUploads() {
+    if (!formUploads.size) return;
+    const refs = [...formUploads]; formUploads = new Set();
+    deleteLocalImages(refs);
+  }
+  function bindOwnImages(form) {
+    const list = $('[data-own-list]', form), hidden = form.elements.namedItem('Own Images'), coverIn = form.elements.namedItem('Cover');
+    const fileIn = $('[data-own-file]', form), drop = $('[data-own-drop]', form);
+    const refs = () => splitList(hidden.value);
+    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownItemsHTML(arr, coverIn.value); dirty = true; };
+    async function add(files) {
+      const imgsIn = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(f.name));
+      if (!imgsIn.length) { toast('Keine Bilddateien gefunden.', 'err'); return; }
+      drop.classList.add('busy'); drop.dataset.label = `Speichere ${imgsIn.length} Bild(er)…`;
+      const arr = refs();
+      for (const f of imgsIn) {
+        try { const r = await storeLocalImage(f); formUploads.add(r); arr.push(r); redraw(arr); }
+        catch (err) { toast(err.message || String(err), 'err'); }
+      }
+      drop.classList.remove('busy');
+    }
+    $('[data-own-pick]', form).addEventListener('click', () => fileIn.click());
+    fileIn.addEventListener('change', () => { add(fileIn.files); fileIn.value = ''; });
+    ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, (ev) => { ev.preventDefault(); ev.stopPropagation(); drop.classList.add('over'); }));
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (ev) => { ev.preventDefault(); ev.stopPropagation(); drop.classList.remove('over'); add(ev.dataTransfer.files); });
+    list.addEventListener('click', (ev) => {
+      const item = ev.target.closest('.own-item'); if (!item) return;
+      const r = item.dataset.ref;
+      if (ev.target.closest('[data-own-del]')) {
+        if (coverIn.value === r) coverIn.value = '';
+        redraw(refs().filter(x => x !== r));
+      } else if (ev.target.closest('[data-own-cover]')) {
+        coverIn.value = coverIn.value === r ? '' : r;
+        redraw(refs());
+      }
+    });
   }
 
   function saveForm() {
@@ -858,6 +996,11 @@
     if (dupe && !confirm(`Es gibt bereits einen Eintrag „${dupe.Name}“ mit derselben Profil-URL bzw. demselben Namen. Trotzdem speichern?`)) return;
 
     const now = Date.now();
+    const kept = new Set(splitList(data['Own Images']));
+    const before = id ? splitList(v(byId(id), 'Own Images')) : [];
+    const removed = [...before, ...formUploads].filter(r => !kept.has(r));
+    formUploads = new Set();
+    if (removed.length) deleteLocalImages(removed);
     if (id) {
       const e = byId(id);
       Object.assign(e, data, { _updated: now });
@@ -948,6 +1091,7 @@
         const e = byId(el.dataset.id);
         if (e && confirm(`„${e.Name}“ wirklich löschen?`)) {
           entries = entries.filter(x => x._id !== e._id);
+          deleteLocalImages(splitList(e['Own Images']));
           saveQuiet(); refreshFilters(); closeModal(true); render();
           toast('Eintrag gelöscht.');
         }
@@ -955,7 +1099,17 @@
       }
       case 'import-file': $('#file-input').click(); break;
       case 'export-json':
-        download(`babe-organizer-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', version: 1, exported: new Date().toISOString(), entries }, null, 1), 'application/json');
+        (async () => {
+          const images = {};
+          for (const r of entries.flatMap(e => splitList(e['Own Images']))) {
+            const id = localId(r);
+            const blob = await idbGet('img:' + id).catch(() => null);
+            if (blob instanceof Blob) images[id] = await blobToDataUrl(blob);
+          }
+          download(`babe-organizer-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', version: 2, exported: new Date().toISOString(), entries, images }, null, 1), 'application/json');
+          const n = Object.keys(images).length;
+          if (n) toast(`Backup mit ${n} eigenen Bildern erstellt.`, 'ok');
+        })().catch(err => toast('Backup fehlgeschlagen: ' + (err.message || err), 'err'));
         break;
       case 'export-csv':
         if (!entries.length) { toast('Keine Einträge zum Exportieren.', 'err'); break; }
@@ -990,8 +1144,15 @@
       return;
     }
     if (t.closest('.gallery .main img')) { lightbox(t.src); return; }
+    const setCover = t.closest('[data-set-cover]');
+    if (setCover) {
+      const e = byId(setCover.dataset.id);
+      if (e) { e.Cover = setCover.dataset.setCover; e._updated = Date.now(); saveQuiet(); render(); showDetail(e._id); }
+      return;
+    }
     const full = t.closest('img[data-full]');
-    if (full) { lightbox(full.dataset.full); return; }
+    if (full && !t.closest('.own-list')) { lightbox(R(full.dataset.full) || full.src); return; }
+    if (full) { lightbox(full.src); return; }
     const catBtn = t.closest('[data-cat]');
     if (catBtn) { closeModal(true); $('#f-cat').value = catBtn.dataset.cat; render(); return; }
     const tag = t.closest('[data-tag]');
@@ -1028,16 +1189,18 @@
   document.addEventListener('drop', (ev) => {
     ev.preventDefault();
     const f = ev.dataTransfer.files[0];
+    if (f && /^image\//.test(f.type)) { toast('Bilder bitte im Bearbeiten-Formular bei „Eigene Bilder“ ablegen.'); return; }
     if (f) handleFile(f);
   });
 
   // Änderungen aus anderen Tabs übernehmen
-  if (channel) channel.onmessage = async () => { entries = await load(); refreshFilters(); render(); };
+  if (channel) channel.onmessage = async () => { entries = await load(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
   (async () => {
     $('#main').innerHTML = '<div class="empty"><p>Lade Daten…</p></div>';
     try {
       entries = await load();
+      await loadLocalImages().catch(() => {});
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;
