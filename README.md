@@ -87,3 +87,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 13.8 (Skript)
 - Skript liegt jetzt im Repo; Tampermonkey aktualisiert es automatisch über `@updateURL`.
 - `TOOL_URL` fest auf `https://thevizce.github.io/b-organizer/` gesetzt, Skript läuft auf github.io nur noch auf dieser Seite.
+
+## Änderungen in 13.9
+- Fehlt das Hauptbild, wird automatisch ein anderes Bild (Bild 2–4 oder das erste User-Upload-Bild) als Cover genutzt. Lädt ein Bild nicht oder ist es nur eine Platzhalter-Grafik, probiert das Tool das nächste.
+- Skript: Bei Profilen ohne Foto speichert Babepedia statt Bildern „Foto hochladen“-Links (`/uploadphotos/…`). Diese werden nicht mehr als Image 2–4 übernommen. Bereits gespeicherte Einträge mit solchen Links zeigt das Tool trotzdem korrekt an.
