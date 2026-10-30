@@ -97,3 +97,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Im Bearbeiten-Formular gibt es neben dem Feld eine Auswahl **cm / inch**. Bei „inch“ wird beim Speichern in cm umgerechnet und gerundet; der Hinweis darunter zeigt das Ergebnis schon beim Tippen.
 - Bereits gespeicherte Werte in Inch (Brustweite unter 60) rechnet das Tool beim Laden automatisch in cm um.
 - Skript: erkennt die Einheit auf Babepedia (in/cm) und speichert immer cm.
+
+## Änderungen in 14.1 (Tool)
+- **Eigene Bilder**: Im Bearbeiten-Formular unter „Bilder“ lassen sich Bilddateien hochladen (Auswahl oder Drag & Drop), z. B. für gelöschte Profile. Sie werden auf max. 1600 px verkleinert und nur in diesem Browser (IndexedDB) gespeichert – nicht im Repo.
+- Mit ★ ein Bild als **Cover** festlegen – im Formular für eigene Bilder, in der Detailansicht für jedes Bild. Ohne Festlegung gilt das erste verfügbare Bild.
+- Das JSON-Backup enthält die eigenen Bilder (Version 2) und stellt sie beim Import wieder her. Der CSV-Export enthält sie nicht.
+- Ungespeicherte Uploads werden beim Abbrechen verworfen, entfernte Bilder und Bilder gelöschter Einträge werden mitgelöscht.
