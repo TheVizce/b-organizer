@@ -4,7 +4,7 @@
 
   // ---------- Schema (identisch zum Userscript) ----------
   const FIELDS = [
-    'Name', 'AKA', 'Profile URL', 'Main Image URL',
+    'Name', 'AKA', 'Profile URL', 'Archive URL', 'Main Image URL',
     'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
     'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
     'Born', 'Exact Birthdate', 'Died', 'Years active', 'Active', 'Active till', 'Birthplace',
@@ -23,7 +23,7 @@
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'] },
-    { title: 'Babepedia', fields: ['Profile URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
+    { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'] }
   ];
@@ -820,6 +820,7 @@
 
   function linkLabel(f, url) {
     if (f === 'Profile URL') return 'Babepedia';
+    if (f === 'Archive URL') return '🏛️ Internet Archive';
     if (f === 'Boobpedia Link') return 'Boobpedia';
     return f.replace(/ URL$/, '');
   }
@@ -852,13 +853,13 @@
   function showDetail(id) {
     const e = byId(id); if (!e) return;
     const imgs = images(e);
-    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL']);
+    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL']);
     const sec = (title, fields) => {
       const rows = fields.filter(f => !skip.has(f)).map(f => [f, fmtValue(e, f)]).filter(([, x]) => x !== '');
       if (!rows.length) return '';
       return `<div class="sec"><h3>${title}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(f)}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
     };
-    const links = ['Profile URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
+    const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
     const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
     const tags = splitList(e.Tags);
 
@@ -884,6 +885,7 @@
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${isTrue(e['In Ranker']) ? '<span class="chip ranker">🏆 im Ranker</span>' : ''}
+            ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>

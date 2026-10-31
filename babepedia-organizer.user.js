@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.0
+// @version      14.1
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
 // @match        https://thevizce.github.io/b-organizer/*
+// @match        https://web.archive.org/web/*
 // @updateURL    https://raw.githubusercontent.com/TheVizce/b-organizer/main/babepedia-organizer.user.js
 // @downloadURL  https://raw.githubusercontent.com/TheVizce/b-organizer/main/babepedia-organizer.user.js
 // @grant        GM_addStyle
@@ -73,12 +74,22 @@
     }
 
     // ===================================================================
-    // Teil 2: Läuft auf babepedia.com
+    // Teil 2: Läuft auf babepedia.com (bzw. auf archivierten Babepedia-Profilen im Internet Archive)
     // ===================================================================
+
+    // Internet Archive: https://web.archive.org/web/<Zeitstempel>/https://www.babepedia.com/babe/<Name>
+    const ARCHIVE = (() => {
+        if (location.hostname !== 'web.archive.org') return null;
+        const m = location.href.match(/\/web\/(\d{8,14})[a-z_]*\/(?:https?:\/\/)?(?:www\.)?babepedia\.com(\/babe\/[^?#]+)/i);
+        return m ? { ts: m[1], url: 'https://www.babepedia.com' + m[2].replace(/\/$/, '') } : false;
+    })();
+    if (ARCHIVE === false) return; // andere Archiv-Seite -> nichts tun
+    const unwrapArchive = (u) => String(u || '').replace(/^https?:\/\/web\.archive\.org\/web\/\d+[a-z_]*\//i, '');
+    const toArchiveImg = (u) => u ? `https://web.archive.org/web/${ARCHIVE.ts}im_/${unwrapArchive(u)}` : '';
 
     // Aktualisiertes Schema (ohne redundante Status-Felder bei Tattoos/Piercings)
     const FIELDS = [
-        'Name', 'AKA', 'Profile URL', 'Main Image URL', 
+        'Name', 'AKA', 'Profile URL', 'Archive URL', 'Main Image URL', 
         'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
         'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
         'Born', 'Exact Birthdate', 'Died', 'Years active', 'Active', 'Active till', 'Birthplace',
@@ -581,7 +592,7 @@
             }
         }
 
-        if (!data['Highest Rank']) {
+        if (!data['Highest Rank'] && !ARCHIVE) {
             const rankingGraphAnchor = doc.querySelector('.rating-rank a[href*="/rankinggraph/"]');
             if (rankingGraphAnchor) {
                 let rankGraphHref = rankingGraphAnchor.getAttribute('href') || rankingGraphAnchor.href || '';
@@ -733,6 +744,20 @@
             }
         });
 
+        if (ARCHIVE) {
+            // Archiv-Kopie: Original-Adressen wiederherstellen, Bilder über das Archiv laden
+            // (bei gelöschten Profilen gibt es die Originale auf Babepedia nicht mehr)
+            for (const k of Object.keys(data)) {
+                if (/URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly/.test(k) && typeof data[k] === 'string') {
+                    data[k] = data[k].split(', ').map(unwrapArchive).join(', ');
+                }
+            }
+            data['Profile URL'] = ARCHIVE.url;
+            data['Archive URL'] = `https://web.archive.org/web/${ARCHIVE.ts}/${ARCHIVE.url}`;
+            for (const k of ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL']) data[k] = toArchiveImg(data[k]);
+            data['User Upload Image URLs'] = String(data['User Upload Image URLs'] || '').split(', ').filter(Boolean).map(toArchiveImg).join(', ');
+            data['User Rating'] = ''; // eigene Bewertung ist in der Archiv-Kopie nicht enthalten
+        }
         return { profileData: data, babeId: babeId };
     }
 
@@ -1025,7 +1050,52 @@
         console.log("============================================================");
     }
 
+    function initArchiveUI() {
+        const container = document.createElement('div');
+        container.className = 'bp-btn-container';
+        const t = ARCHIVE.ts;
+        const status = document.createElement('div');
+        status.textContent = `🏛️ Archiv-Kopie vom ${t.slice(6, 8)}.${t.slice(4, 6)}.${t.slice(0, 4)}`;
+        status.style.cssText = 'width:170px;font-size:11px;line-height:1.3;color:#fff;background:rgba(0,0,0,.75);padding:6px 8px;border-radius:6px;';
+
+        const addBtn = document.createElement('button');
+        addBtn.id = 'bp-add-btn';
+        addBtn.className = 'bp-btn';
+        const label = () => { addBtn.innerHTML = `➕ Aus Archiv übernehmen (${getStoredData().length})`; };
+        label();
+        window.addEventListener('focus', label);
+        addBtn.addEventListener('click', async () => {
+            addBtn.disabled = true;
+            try {
+                const { profileData } = await parseProfileFromDoc(document, ARCHIVE.url);
+                if (!profileData.Name) throw new Error('Auf dieser Archiv-Seite wurde kein Profil gefunden (evtl. älteres Seitenlayout).');
+                const list = getStoredData();
+                const i = list.findIndex(x => x['Profile URL'] === profileData['Profile URL']);
+                if (i >= 0) list[i] = profileData; else list.push(profileData);
+                saveStoredData(list);
+                addBtn.style.backgroundColor = '#2e7d32';
+            } catch (err) {
+                console.error('[Archiv Fehler]', err);
+                addBtn.style.backgroundColor = '#c62828';
+                alert(err.message);
+            }
+            label();
+            addBtn.disabled = false;
+            setTimeout(() => { addBtn.style.backgroundColor = ''; }, 1500);
+        });
+
+        const toolBtn = document.createElement('button');
+        toolBtn.id = 'bp-tool-btn';
+        toolBtn.className = 'bp-btn';
+        toolBtn.innerHTML = '🗂️ Tool öffnen';
+        toolBtn.addEventListener('click', () => GM_openInTab(TOOL_URL, { active: true }));
+
+        container.append(status, addBtn, toolBtn);
+        document.body.appendChild(container);
+    }
+
     function initUI() {
+        if (ARCHIVE) return initArchiveUI();
         const container = document.createElement('div');
         container.className = 'bp-btn-container';
 
