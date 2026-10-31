@@ -109,3 +109,10 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Karten, Tabelle und Bilder-Raster laden Babepedias kleine Vorschaubilder (`_thumb3` bzw. `user-uploads-thumbs`) statt der großen Originale; groß nur in der Detail-Ansicht/Lightbox. Fehlt ein Vorschaubild, wird automatisch das große genommen.
 - Sortierung berechnet die Schlüssel nur einmal pro Eintrag; Suche wartet kurz, bis man zu tippen aufhört.
 - Favorit/Bewertung aktualisieren nur die betroffene Karte (Scrollposition bleibt), schnelle Änderungen werden zu einem Speichervorgang gebündelt.
+
+## Änderungen in 14.3 – Internet Archive
+- Archivierte Babepedia-Profile (`https://web.archive.org/web/<Zeitstempel>/https://www.babepedia.com/babe/<Name>`) lassen sich übernehmen: Seite öffnen → **➕ Aus Archiv übernehmen** → **🗂️ Tool öffnen**.
+- Bilder werden als Archiv-Adressen gespeichert (bei gelöschten Profilen gibt es die Originale nicht mehr); Profil-URL bleibt die Babepedia-Adresse, damit vorhandene Einträge erkannt werden.
+- Neues Feld **Archive URL**; im Tool als Link „🏛️ Internet Archive“ und Chip „aus dem Archiv“.
+- Im Archiv-Modus werden keine Babepedia-Listen verändert; „User Rating“ wird nicht übernommen.
+- Sehr alte Archiv-Kopien mit anderem Seitenaufbau werden evtl. nicht erkannt – dann erscheint eine Meldung.
