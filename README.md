@@ -49,6 +49,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
   - *Bitte prüfen* – nur der Name passt oder mehrere Bilder haben denselben Link → **keine Vorauswahl**, du tippst das richtige Bild an (sonst übersprungen).
   - *Kein Treffer* – von Hand suchen (Name, mit Vorschaubildern), überspringen oder neu anlegen.
   - *Bereits verknüpft* – wird nur aktualisiert.
+- **Geburtsjahr:** eigene Eigenschaft, die nur die Jahreszahl aus „Born“ übernimmt (als Zahl).
+- **Direktlink:** `/b-organizer/#e=<id>` öffnet einen Eintrag; der Image Ranker setzt diesen Link (Symbol „BO“) an jedes verknüpfte Bild.
 - **Nur verknüpfen:** Häkchen in Schritt 1 – es werden keine neuen Bilder angelegt.
 - Zusätzliche Sicherung im Ranker: Ein Bild mit demselben Profil-Link wird nie doppelt angelegt; ist der Link dort mehrdeutig, wird der Eintrag übersprungen.
 - Übergabe über die gemeinsame IndexedDB `tool-transfer`; der Image Ranker übernimmt die Einträge beim nächsten Öffnen (oder sofort, wenn er offen ist). Ist ein Eintrag im Reiter schon vorhanden (Verknüpfung, gleiches Bild oder gleicher Link), werden nur Eigenschaften und Link aktualisiert – Bild, Elo und Duelle bleiben.

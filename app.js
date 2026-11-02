@@ -1316,10 +1316,13 @@
   // Felder, die als Ranker-Eigenschaften in Frage kommen, mit vorgeschlagenem Typ
   const RK_MULTI = new Set(['Professions', 'Profession Category', 'Tags', 'AKA']);
   const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Favorite', 'Tags', 'Global Rating', 'User Rating', 'Alter']
-    .filter((f, i, a) => a.indexOf(f) === i && !['Name', 'Exact Birthdate'].includes(f));
-  const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (f === 'Alter' || TYPES[f] === 'num') ? 'number' : 'exact';
+    .filter((f, i, a) => a.indexOf(f) === i && !['Name', 'Exact Birthdate'].includes(f))
+    .flatMap(f => f === 'Born' ? ['Born', 'Geburtsjahr'] : [f]);      // „Geburtsjahr“ = nur die Jahreszahl aus Born
+  const RK_NUMBERS = new Set(['Alter', 'Geburtsjahr']);
+  const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (RK_NUMBERS.has(f) || TYPES[f] === 'num') ? 'number' : 'exact';
   function rkValues(e, f, type) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
+    if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
     const raw = v(e, f);
     if (!raw) return [];
     if (type === 'multi') return splitList(raw);
@@ -1657,6 +1660,16 @@
   if (transferChannel) transferChannel.onmessage = (ev) => { if (ev.data && ev.data.type === 'done' && ready) readRankerStatus().catch(() => {}); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ready) readRankerStatus().catch(() => {}); });
 
+  // Direktlink /b-organizer/#e=<id> (z. B. aus dem Image Ranker) öffnet den Eintrag
+  function openFromHash() {
+    const m = location.hash.match(/^#e=(.+)$/);
+    if (!m || !ready) return;
+    const id = decodeURIComponent(m[1]);
+    history.replaceState(null, '', location.pathname + location.search);
+    if (byId(id)) showDetail(id); else toast('Dieser Eintrag ist im Babe Organizer nicht (mehr) vorhanden.', 'err');
+  }
+  window.addEventListener('hashchange', openFromHash);
+
   // Änderungen aus anderen Tabs übernehmen
   if (channel) channel.onmessage = async () => { entries = await load(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
@@ -1676,6 +1689,7 @@
     render();
     initSync();
     readRankerStatus().catch(() => {});
+    openFromHash();
     // Userscript informieren, dass das Tool bereit ist
     window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
   })();
