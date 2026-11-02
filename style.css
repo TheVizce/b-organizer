@@ -365,3 +365,21 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .rk-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
 .toast.rk-open a { color: inherit; text-decoration: underline; }
 @media (max-width: 560px) { .rk-f { grid-template-columns: minmax(0, 1fr) 84px 100px; } .rk-fields { grid-template-columns: 1fr; } }
+.rk-linkonly { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.rk-sec { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin: 10px 0; background: var(--surface); }
+.rk-sec summary { cursor: pointer; padding: 4px 0; }
+.rk-rev { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.rk-ent { display: flex; gap: 8px; align-items: center; width: 190px; flex: none; font-weight: 600; }
+.rk-ent img, .rk-ent .placeholder { width: 44px; height: 58px; object-fit: cover; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--surface-2); }
+.rk-arrow { color: var(--muted); padding-top: 18px; }
+.rk-cands { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; min-width: 200px; }
+.rk-cand { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 74px; padding: 3px; border: 2px solid var(--border); border-radius: 8px; background: var(--surface-2); color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
+.rk-cand img, .rk-cand .placeholder { width: 64px; height: 84px; object-fit: cover; border-radius: 5px; display: grid; place-items: center; }
+.rk-cand span { max-width: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-cand.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.btn.small.on { border-color: var(--accent); color: var(--accent-2); }
+.rk-search { width: 100%; padding-left: 200px; }
+.rk-search input { width: 100%; max-width: 320px; margin-bottom: 6px; }
+.rk-hits { display: flex; flex-wrap: wrap; gap: 6px; }
+.small { font-size: 12px; }
+@media (max-width: 560px) { .rk-ent { width: 100%; } .rk-arrow { display: none; } .rk-search { padding-left: 0; } }

@@ -1363,7 +1363,67 @@
     return { url: ref };   // als Link anlegen
   }
 
-  // ---------- Dialog „An Image Ranker senden“ ----------
+  // ---------- Dialog „An Image Ranker senden“ (Schritt 1: Auswahl, Schritt 2: Abgleich prüfen) ----------
+  const rkNormUrl = (u) => { let s = String(u || '').trim(); try { s = decodeURIComponent(s); } catch {} return s.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/[\s_]+/g, '_'); };
+  const rkNormName = (n) => String(n || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+  // Bilder eines Ranker-Reiters lesen (nur lesend; ohne Bilddateien)
+  function rankerOpenRO() {
+    return new Promise(async res => {
+      if (typeof indexedDB.databases === 'function') { const l = await indexedDB.databases().catch(() => []); if (!l.some(x => x.name === 'ImageRankerDB')) return res(null); }
+      const r = indexedDB.open('ImageRankerDB');
+      r.onupgradeneeded = () => { try { r.transaction.abort(); } catch {} };
+      r.onerror = r.onblocked = () => res(null);
+      r.onsuccess = () => { const d = r.result; d.onversionchange = () => d.close(); res(d.objectStoreNames.contains('images') ? d : (d.close(), null)); };
+    });
+  }
+  async function rankerTabImages(tab) {
+    const d = await rankerOpenRO(); if (!d) return [];
+    return new Promise(res => {
+      const out = [], c = d.transaction('images').objectStore('images').openCursor();
+      c.onsuccess = () => { const k = c.result; if (!k) { d.close(); return res(out); } const i = k.value; if (i.tab === tab) out.push({ id: i.id, name: i.name || '', boId: i.boId || null, links: (i.links || []).map(l => l && l.url).filter(Boolean), elo: i.elo }); k.continue(); };
+      c.onerror = () => { d.close(); res(out); };
+    });
+  }
+  const thumbCache = new Map();
+  async function rankerThumbs(ids) {
+    const need = ids.filter(id => !thumbCache.has(id));
+    if (need.length) {
+      const d = await rankerOpenRO();
+      if (d && d.objectStoreNames.contains('thumbs')) await new Promise(res => {
+        const t = d.transaction('thumbs'), s = t.objectStore('thumbs');
+        need.forEach(id => { const g = s.get(id); g.onsuccess = () => { const b = g.result && g.result.blob; thumbCache.set(id, b instanceof Blob ? URL.createObjectURL(b) : ''); }; });
+        t.oncomplete = t.onerror = () => res();
+      });
+      if (d) d.close();
+      need.forEach(id => { if (!thumbCache.has(id)) thumbCache.set(id, ''); });
+    }
+    return ids.map(id => thumbCache.get(id));
+  }
+
+  // Abgleich: pro Eintrag ein Vorschlag
+  function matchEntries(list, rImgs) {
+    const byLink = new Map(), byName = new Map(), byBo = new Map();
+    for (const i of rImgs) {
+      if (i.boId) byBo.set(i.boId, i);
+      for (const l of i.links) { const k = rkNormUrl(l); if (!/babepedia\.com\/babe\//.test(k)) continue; if (!byLink.has(k)) byLink.set(k, []); byLink.get(k).push(i); }
+      const n = rkNormName(i.name); if (n) { if (!byName.has(n)) byName.set(n, []); byName.get(n).push(i); }
+    }
+    const free = (arr, e) => (arr || []).filter(i => !i.boId || i.boId === e._id);
+    return list.map(e => {
+      const linked = byBo.get(e._id);
+      if (linked) return { e, kind: 'linked', target: linked.id, cands: [linked] };
+      const l = free(byLink.get(rkNormUrl(v(e, 'Profile URL'))), e);
+      if (l.length === 1) return { e, kind: 'auto', target: l[0].id, cands: l };
+      const names = [v(e, 'Name'), ...splitList(v(e, 'AKA'))].map(rkNormName).filter(Boolean);
+      const n = [...new Set(names.flatMap(x => free(byName.get(x), e)))];
+      const cands = l.length > 1 ? l : n;
+      if (cands.length) return { e, kind: 'check', target: null, cands,   // unklar: nie ohne Klick verknüpfen
+        why: l.length > 1 ? `${l.length} Bilder mit diesem Profil-Link` : 'gleicher Name' };
+      return { e, kind: 'none', target: null, cands: [] };
+    });
+  }
+
   function openRankerSend(list) {
     list = list.filter(Boolean);
     if (!list.length) { toast('Keine Einträge ausgewählt.'); return; }
@@ -1382,24 +1442,26 @@
     };
     const imgsHTML = () => single
       ? `<div class="rk-imgs">${images(list[0]).map((u, i) => `<button type="button" class="rk-img ${pick.get(list[0]._id) === i ? 'on' : ''}" data-rk-pick="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('') || '<p class="muted">Dieser Eintrag hat keine Bilder.</p>'}</div>`
-      : `<p class="muted">Pro Eintrag wird das Titelbild gesendet. Antippen wechselt zum nächsten Bild.</p><div class="rk-list">${list.slice(0, 300).map(e => {
+      : `<p class="muted">Pro Eintrag wird das Titelbild gesendet (nur bei neu angelegten Bildern). Antippen wechselt zum nächsten Bild.</p><div class="rk-list">${list.slice(0, 300).map(e => {
           const im = images(e), i = pick.get(e._id), u = im[i];
           return `<button type="button" class="rk-row" data-rk-cycle="${esc(e._id)}" title="${im.length > 1 ? 'Nächstes Bild' : ''}">${u ? `<img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="placeholder">–</span>'}<span>${esc(v(e, 'Name'))}${im.length > 1 ? ` <small class="muted">${i + 1}/${im.length}</small>` : ''}</span></button>`; }).join('')}${list.length > 300 ? `<p class="muted">… und ${list.length - 300} weitere</p>` : ''}</div>`;
 
     openModal(`
       <div class="modal-head"><h2>🏆 An Image Ranker senden</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
-      <div class="rk-dialog">
-        <p class="muted">${single ? esc(v(list[0], 'Name')) : `${list.length} Einträge`} · Ist ein Eintrag im gewählten Reiter schon im Ranker, werden nur Eigenschaften und Link aktualisiert – Bild, Elo und Duelle bleiben.</p>
+      <div class="rk-dialog" id="rk-step1">
+        <p class="muted">${single ? esc(v(list[0], 'Name')) : `${list.length} Einträge`} · Im nächsten Schritt siehst du, welche Einträge schon im Ranker sind, bevor etwas passiert.</p>
         <h3>Reiter im Ranker</h3>
         <div class="rk-tabrow"><select id="rk-tab">${tabs.map(t => `<option ${t === tab ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="__new">＋ Neuer Reiter…</option></select>
           <input type="text" id="rk-newtab" placeholder="Name des neuen Reiters" hidden></div>
-        <h3>Bild</h3>
+        <label class="chk rk-linkonly"><input type="checkbox" id="rk-linkonly" ${prefs._linkOnly ? 'checked' : ''}> <b>Nur verknüpfen</b> – keine neuen Bilder anlegen</label>
+        <h3>Bild <span class="muted" style="text-transform:none;letter-spacing:0">(für neu angelegte Bilder)</span></h3>
         <div id="rk-imgbox">${imgsHTML()}</div>
         <h3>Eigenschaften übernehmen</h3>
-        <p class="muted">Werden im Ranker als Eigenschaften dieses Reiters angelegt. Die Auswahl wird pro Reiter gemerkt.</p>
+        <p class="muted">Werden im Ranker als Eigenschaften dieses Reiters angelegt bzw. aktualisiert. Die Auswahl wird pro Reiter gemerkt.</p>
         <div class="rk-fields" id="rk-fields">${fieldsHTML(tab)}</div>
-        <div class="rk-foot"><span class="muted" id="rk-msg"></span><button class="btn primary" id="rk-send">${single ? 'Senden' : `${list.length} senden`}</button></div>
-      </div>`);
+        <div class="rk-foot"><span class="muted" id="rk-msg"></span><button class="btn primary" id="rk-next">Weiter: Abgleich prüfen</button></div>
+      </div>
+      <div class="rk-dialog" id="rk-step2" hidden></div>`);
 
     const readFields = () => {
       const out = {};
@@ -1421,35 +1483,120 @@
       else return;
       $('#rk-imgbox').innerHTML = imgsHTML();
     });
-    $('#rk-send').addEventListener('click', async () => {
+
+    $('#rk-next').addEventListener('click', async () => {
       const t = curTab();
       if (!t) { $('#rk-msg').textContent = 'Bitte einen Reiter wählen oder benennen.'; return; }
-      const fields = readFields();
-      prefs[t] = Object.assign({}, prefs[t], { fields }); prefs._lastTab = t; rkSavePrefs(prefs);
-      if (list.length > 200 && !confirm(`${list.length} Einträge senden? Die Bilder werden einzeln geholt, das kann einige Minuten dauern.`)) return;
+      const fields = readFields(), linkOnly = $('#rk-linkonly').checked;
+      prefs[t] = Object.assign({}, prefs[t], { fields }); prefs._lastTab = t; prefs._linkOnly = linkOnly; rkSavePrefs(prefs);
+      $('#rk-next').disabled = true; $('#rk-msg').textContent = 'Lese den Ranker…';
+      const rImgs = await rankerTabImages(t);
+      const rows = matchEntries(list, rImgs);
+      // Entscheidung je Eintrag: 'link' (target), 'new', 'skip'
+      rows.forEach(r => { r.dec = r.target ? 'link' : (r.kind === 'none' && !linkOnly ? 'new' : 'skip'); });
+      $('#rk-step1').hidden = true;
+      renderStep2(t, fields, linkOnly, rows, rImgs);
+    });
+
+    async function renderStep2(t, fields, linkOnly, rows, rImgs) {
+      const box = $('#rk-step2'); box.hidden = false;
+      const g = (k) => rows.filter(r => r.kind === k);
+      const thumbsFor = async (ids) => { const urls = await rankerThumbs(ids); return new Map(ids.map((id, i) => [id, urls[i]])); };
+      const candIds = [...new Set(rows.flatMap(r => r.cands.map(c => c.id)))];
+      const th = await thumbsFor(candIds);
+      const imgOf = (id) => th.get(id) ? `<img src="${th.get(id)}" alt="">` : '<span class="placeholder">?</span>';
+      const nameOf = (id) => (rImgs.find(i => i.id === id) || {}).name || ('#' + id);
+      const entryCell = (e) => { const u = images(e)[pick.get(e._id)]; return `<div class="rk-ent">${u ? `<img src="${esc(thumbUrl(R(u)))}" alt="" referrerpolicy="no-referrer" loading="lazy">` : '<span class="placeholder">–</span>'}<span>${esc(v(e, 'Name'))}</span></div>`; };
+      const rowHTML = (r) => {
+        const opts = r.cands.map(c => `<button type="button" class="rk-cand ${r.dec === 'link' && r.target === c.id ? 'on' : ''}" data-rk-row="${esc(r.e._id)}" data-rk-target="${c.id}" title="${esc(c.name)}">${imgOf(c.id)}<span>${esc(c.name)}</span></button>`).join('');
+        return `<div class="rk-rev" data-rk-rowbox="${esc(r.e._id)}">${entryCell(r.e)}<span class="rk-arrow">→</span>
+          <div class="rk-cands">${opts}
+            ${r.dec === 'link' && !r.cands.some(c => c.id === r.target) ? `<button type="button" class="rk-cand on" data-rk-row="${esc(r.e._id)}" data-rk-target="${r.target}">${imgOf(r.target)}<span>${esc(nameOf(r.target))}</span></button>` : ''}
+            <button type="button" class="btn small" data-rk-search="${esc(r.e._id)}">🔍 Bild suchen…</button>
+            ${linkOnly ? '' : `<button type="button" class="btn small ${r.dec === 'new' ? 'on' : ''}" data-rk-new="${esc(r.e._id)}">＋ Neu anlegen</button>`}
+            <button type="button" class="btn small ${r.dec === 'skip' ? 'on' : ''}" data-rk-skip="${esc(r.e._id)}">Überspringen</button>
+            ${r.why ? `<span class="muted small">${esc(r.why)}</span>` : ''}
+          </div></div>`;
+      };
+      const sec = (title, arr, open, desc) => arr.length ? `<details class="rk-sec" ${open ? 'open' : ''}><summary><b>${title}</b> (${arr.length})</summary>${desc ? `<p class="muted">${desc}</p>` : ''}${arr.map(rowHTML).join('')}</details>` : '';
+      const counts = () => { const c = { link: 0, new: 0, skip: 0 }; rows.forEach(r => c[r.dec]++); return c; };
+      const draw = () => {
+        const c = counts();
+        box.innerHTML = `
+          <p class="muted">Reiter „${esc(t)}“ · ${rImgs.length} Bilder im Ranker${linkOnly ? ' · <b>Nur verknüpfen</b>' : ''}. Verknüpfte Einträge behalten Bild, Elo und Duelle im Ranker; nur Eigenschaften und Link werden aktualisiert.</p>
+          ${sec('⚠ Bitte prüfen', g('check'), true, 'Nur der Name passt oder mehrere Bilder haben denselben Profil-Link. Ohne Klick werden sie übersprungen – richtiges Bild antippen, um zu verknüpfen.')}
+          ${sec('Kein Treffer', g('none'), true, linkOnly ? 'Kein passendes Bild gefunden. Von Hand suchen oder überspringen.' : 'Kein passendes Bild gefunden. Werden neu angelegt, außer du wählst ein Bild oder überspringst.')}
+          ${sec('✓ Automatisch über den Profil-Link', g('auto'), false)}
+          ${sec('✓ Bereits verknüpft', g('linked'), false)}
+          <div class="rk-foot"><button class="btn ghost" id="rk-back">← Zurück</button><span class="muted" id="rk-msg2">${c.link} verknüpfen · ${c.new} neu · ${c.skip} überspringen</span>
+            <button class="btn primary" id="rk-send" ${c.link + c.new ? '' : 'disabled'}>Ausführen</button></div>`;
+      };
+      draw();
+      box.onclick = async (ev) => {
+        const el = ev.target.closest('[data-rk-target],[data-rk-new],[data-rk-skip],[data-rk-search],#rk-back,#rk-send,[data-rk-hit]');
+        if (!el) return;
+        const rowOf = (id) => rows.find(r => r.e._id === id);
+        if (el.id === 'rk-back') { box.hidden = true; $('#rk-step1').hidden = false; $('#rk-next').disabled = false; $('#rk-msg').textContent = ''; return; }
+        if (el.id === 'rk-send') return execute(t, fields, linkOnly, rows);
+        if (el.dataset.rkTarget) { const r = rowOf(el.dataset.rkRow); r.dec = 'link'; r.target = Number(el.dataset.rkTarget); }
+        else if (el.dataset.rkNew) { const r = rowOf(el.dataset.rkNew); r.dec = 'new'; r.target = null; }
+        else if (el.dataset.rkSkip) { const r = rowOf(el.dataset.rkSkip); r.dec = 'skip'; r.target = null; }
+        else if (el.dataset.rkSearch) { return openSearch(rowOf(el.dataset.rkSearch)); }
+        const open = [...box.querySelectorAll('details')].map(d => d.open);
+        draw(); [...box.querySelectorAll('details')].forEach((d, i) => { if (open[i] !== undefined) d.open = open[i]; });
+      };
+      // Von Hand ein Ranker-Bild suchen (nach Name), mit Vorschaubildern
+      async function openSearch(r) {
+        const used = new Set(rows.filter(x => x !== r && x.dec === 'link').map(x => x.target));
+        const pool = rImgs.filter(i => (!i.boId || i.boId === r.e._id) && !used.has(i.id));
+        const holder = box.querySelector(`[data-rk-rowbox="${CSS.escape(r.e._id)}"]`);
+        let q = v(r.e, 'Name').split(/\s+/)[0] || '';
+        const paint = async () => {
+          const nq = rkNormName(q);
+          const hits = pool.filter(i => !nq || rkNormName(i.name).includes(nq)).slice(0, 24);
+          const tm = await thumbsFor(hits.map(i => i.id));
+          const res = holder.querySelector('.rk-hits');
+          if (res) res.innerHTML = hits.map(i => `<button type="button" class="rk-cand" data-rk-row="${esc(r.e._id)}" data-rk-target="${i.id}">${tm.get(i.id) ? `<img src="${tm.get(i.id)}" alt="">` : '<span class="placeholder">?</span>'}<span>${esc(i.name)}</span></button>`).join('') || '<span class="muted">Nichts gefunden.</span>';
+        };
+        holder.insertAdjacentHTML('beforeend', `<div class="rk-search"><input type="search" placeholder="Name im Ranker suchen…" value="${esc(q)}"><div class="rk-hits"></div></div>`);
+        const inp = holder.querySelector('.rk-search input');
+        inp.addEventListener('input', () => { q = inp.value; paint(); });
+        inp.focus(); paint();
+      }
+    }
+
+    async function execute(t, fields, linkOnly, rows) {
+      const send = rows.filter(r => r.dec === 'link' || (r.dec === 'new' && !linkOnly));
+      const dupTargets = send.filter(r => r.dec === 'link').map(r => r.target).filter((x, i, a) => a.indexOf(x) !== i);
+      if (dupTargets.length) { $('#rk-msg2').textContent = 'Ein Ranker-Bild ist mehreren Einträgen zugeordnet – bitte korrigieren.'; return; }
+      const nNew = send.filter(r => r.dec === 'new').length;
+      if (nNew > 200 && !confirm(`${nNew} neue Bilder anlegen? Die Bilder werden einzeln geholt, das kann einige Minuten dauern.`)) return;
       $('#rk-send').disabled = true;
-      const canFetch = await userscriptCanFetch();
+      const canFetch = nNew ? await userscriptCanFetch() : false;
       const items = []; let links = 0, noImg = 0;
-      for (let k = 0; k < list.length; k++) {
-        const e = list[k];
-        $('#rk-msg').textContent = `Bereite vor… ${k + 1} / ${list.length}`;
+      for (let k = 0; k < send.length; k++) {
+        const r = send[k], e = r.e;
+        $('#rk-msg2').textContent = `Bereite vor… ${k + 1} / ${send.length}`;
+        const props = Object.entries(fields).map(([f, s]) => ({ name: s.name || f, type: s.type, values: rkValues(e, f, s.type) }));
+        const base = { boId: e._id, name: v(e, 'Name'), profileUrl: v(e, 'Profile URL'), props };
+        if (r.dec === 'link') { items.push(Object.assign(base, { linkTo: r.target, create: false })); continue; }
         const ref = images(e)[pick.get(e._id)];
         const img = ref ? await imageForTransfer(ref, canFetch) : null;
         if (!img) noImg++; else if (!img.blob) links++;
-        const props = Object.entries(fields).map(([f, s]) => ({ name: s.name || f, type: s.type, values: rkValues(e, f, s.type) }));
-        items.push({ boId: e._id, name: v(e, 'Name'), profileUrl: v(e, 'Profile URL'), blob: img && img.blob || null, url: img && img.url || '', props });
+        items.push(Object.assign(base, { create: true, blob: img && img.blob || null, url: img && img.url || '' }));
       }
       try {
         const d = await transferDb();
         await new Promise((res, rej) => { const tx = d.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put({ id: 'bo-' + Date.now(), from: 'b-organizer', createdAt: Date.now(), tab: t, items }); tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error); });
         d.close();
-      } catch (err) { $('#rk-send').disabled = false; $('#rk-msg').textContent = 'Übergabe fehlgeschlagen: ' + (err && err.message || err); return; }
+      } catch (err) { $('#rk-send').disabled = false; $('#rk-msg2').textContent = 'Übergabe fehlgeschlagen: ' + (err && err.message || err); return; }
       if (transferChannel) transferChannel.postMessage({ type: 'job' });
       closeModal(true);
+      const nl = send.length - nNew;
       const hints = [links ? `${links} nur als Link${canFetch ? '' : ' (Userscript nicht aktiv)'}` : '', noImg ? `${noImg} ohne Bild` : ''].filter(Boolean).join(', ');
-      toast(`${items.length} an „${t}“ übergeben${hints ? ' – ' + hints : ''}. Der Image Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
+      toast(`An „${t}“ übergeben: ${nl} verknüpfen, ${nNew} neu${hints ? ' – ' + hints : ''}. Der Image Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
       rkOfferOpen();
-    });
+    }
   }
   function rkOfferOpen() {
     const box = document.createElement('div');
