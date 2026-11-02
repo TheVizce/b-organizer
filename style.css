@@ -339,3 +339,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .more { text-align: center; color: var(--faint); font-size: 12.5px; padding: 18px 0 8px; min-height: 1px; }
 /* Karten außerhalb des Bildschirms nicht rendern lassen */
 .card { content-visibility: auto; contain-intrinsic-size: 190px 330px; }
+
+/* Home-Bildschirm-App am iPhone: nicht unter Statusleiste/Notch zeichnen */
+.topbar { padding-top: calc(12px + env(safe-area-inset-top)); }
+@media (max-width: 760px) { .topbar { padding-top: calc(10px + env(safe-area-inset-top)); } }
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
