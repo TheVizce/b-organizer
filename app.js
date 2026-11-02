@@ -221,6 +221,7 @@
   // eines Kontos teilen). Der localStorage wird nur noch für kleine UI-Einstellungen genutzt.
   let entries = [];
   let ready = false;
+  let SYNC = null;   // GitHub-Sync, siehe initSync()
   const ui = Object.assign({ view: 'grid', sort: 'name' }, safeJSON(localStorage.getItem(UI_KEY), {}));
 
   const $ = (s, el = document) => el.querySelector(s);
@@ -337,6 +338,7 @@
     try {
       await idbSet('entries', entries);
       if (channel) channel.postMessage('changed');
+      if (SYNC) SYNC.changed();
     } catch (e) {
       toast('Speichern fehlgeschlagen: ' + (e && e.message || e) + ' – bitte Backup exportieren!', 'err');
       throw e;
@@ -1257,6 +1259,26 @@
     if (f) handleFile(f);
   });
 
+  // GitHub-Sync: gleicht mit tool-daten/b-organizer/ ab (32 Teildateien), sobald auf der Startseite eingerichtet.
+  // Eigene hochgeladene Bilder bleiben lokal, nur die Einträge werden abgeglichen.
+  function initSync() {
+    if (!window.ToolSync) return;
+    SYNC = ToolSync.create({
+      tool: 'b-organizer',
+      collections: { entries: { type: 'array', id: '_id' } },
+      shards: 32,
+      stampDelay: 1500,
+      get: () => ({ entries }),
+      apply: async (d) => {
+        entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive);
+        try { await save(); } catch { return false; }
+        refreshFilters(); render();
+        return true;
+      }
+    });
+    SYNC.start();
+  }
+
   // Änderungen aus anderen Tabs übernehmen
   if (channel) channel.onmessage = async () => { entries = await load(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
@@ -1274,6 +1296,7 @@
     ready = true;
     refreshFilters();
     render();
+    initSync();
     // Userscript informieren, dass das Tool bereit ist
     window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
   })();
