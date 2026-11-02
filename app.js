@@ -640,7 +640,8 @@
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
       if (cf && !catList(e).includes(cf)) return false;
-      if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
+      if (rk === 'tool' || rk === 'notool') { if (!!e._ranker !== (rk === 'tool')) return false; }
+      else if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
       if (rf) {
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
@@ -673,6 +674,7 @@
       young: (e) => age(e) ?? 999,
       old: (e) => -(age(e) ?? -1),
       height: (e) => -(num(e.Height) ?? -1),
+      ranker: (e) => e._ranker ? -(e._ranker.score + 1) : 1,
       site: (e) => -(num(e['User Rating']) ?? -1),
       diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); }
     }[ui.sort] || (() => 0);
@@ -760,7 +762,7 @@
             ${v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ratingBadge(e)}
-            ${isTrue(e['In Ranker']) ? '<span class="badge ranker" title="Im Image-Ranker">🏆</span>' : ''}
+            ${e._ranker ? rankerBadge(e) : (isTrue(e['In Ranker']) ? '<span class="badge ranker" title="In der Babepedia-Liste „Ranker“">🏆</span>' : '')}
           </div>
         </div>
         <div class="body">
@@ -869,6 +871,7 @@
       <div class="modal-head">
         <h2>${esc(v(e, 'Name'))}</h2>
         <div class="actions">
+          <button class="btn small" data-action="to-ranker" data-id="${esc(e._id)}" title="An Image Ranker senden">🏆 An Ranker</button>
           <button class="btn small" data-action="edit" data-id="${esc(e._id)}">Bearbeiten</button>
           <button class="btn small danger" data-action="delete" data-id="${esc(e._id)}">Löschen</button>
           <button class="x" data-action="close" aria-label="Schließen">×</button>
@@ -886,7 +889,8 @@
             ${v(e, 'Global Rating') ? `<span class="chip">★ ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Votes)` : ''}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
-            ${isTrue(e['In Ranker']) ? '<span class="chip ranker">🏆 im Ranker</span>' : ''}
+            ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
+            ${isTrue(e['In Ranker']) ? '<span class="chip ranker" title="In der Babepedia-Liste „Ranker“">🏆 Babepedia-Liste</span>' : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
@@ -1148,6 +1152,7 @@
     switch (name) {
       case 'new': showForm(); break;
       case 'edit': showForm(el.dataset.id); break;
+      case 'to-ranker': openRankerSend([byId(el.dataset.id)]); break;
       case 'cancel-edit': if (!dirty || confirm('Ungespeicherte Änderungen verwerfen?')) { dirty = false; showDetail(el.dataset.id); } break;
       case 'save': saveForm(); break;
       case 'close': closeModal(); break;
@@ -1245,6 +1250,7 @@
   ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
+  $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-fav').checked = false; render();
@@ -1279,6 +1285,231 @@
     SYNC.start();
   }
 
+  // ===================== IMAGE RANKER: Einträge senden + Ranker-Stand anzeigen =====================
+  // Übergabe über die gemeinsame IndexedDB "tool-transfer" (Store "jobs"): der Babe Organizer legt einen Auftrag ab,
+  // der Image Ranker arbeitet ihn mit seiner eigenen Logik ab (ranker-inbox.js). Kein Tool schreibt in die Datenbank des anderen.
+  // Rückweg: der Babe Organizer liest den Ranker read-only und merkt sich Tier/Score im eigenen Feld "_ranker" (wird mit synchronisiert).
+  const RK_UI_KEY = 'bp-organizer-ranker';            // gemerkte Auswahl pro Ranker-Reiter (klein)
+  const RK_TIERS = [[97, 'S+'], [93, 'S'], [90, 'S-'], [87, 'A+'], [83, 'A'], [80, 'A-'], [75, 'B+'], [70, 'B'], [65, 'B-'], [55, 'C+'], [45, 'C'], [35, 'C-'], [25, 'D+'], [15, 'D'], [5, 'D-'], [0, 'F']];
+  const RK_COLORS = { S: '#ff4d4d', A: '#ffa500', B: '#e6c800', C: '#00cc00', D: '#3399ff', F: '#9933ff' };
+  const transferChannel = 'BroadcastChannel' in window ? new BroadcastChannel('tool-transfer') : null;
+  const isMobileDevice = () => /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+
+  function transferDb() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('tool-transfer', 1);
+      r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('jobs')) r.result.createObjectStore('jobs', { keyPath: 'id' }); };
+      r.onsuccess = () => { const d = r.result; d.onversionchange = () => d.close(); res(d); };
+      r.onerror = () => rej(r.error || new Error('Übergabe-Speicher nicht verfügbar'));
+    });
+  }
+  function rkPrefs() { try { return JSON.parse(localStorage.getItem(RK_UI_KEY) || '{}') || {}; } catch { return {}; } }
+  function rkSavePrefs(p) { try { localStorage.setItem(RK_UI_KEY, JSON.stringify(p)); } catch (e) { toast('Auswahl konnte nicht gemerkt werden (Speicher voll?)', 'err'); } }
+  function rankerTabs() {
+    let t = null; try { t = JSON.parse(localStorage.getItem('ranker.tabs') || 'null'); } catch {}
+    return Array.isArray(t) && t.length ? t : ['Standard'];
+  }
+  const rkTier = (score) => (RK_TIERS.find(([m]) => score >= m) || RK_TIERS[RK_TIERS.length - 1])[1];
+  const rkColor = (tier) => RK_COLORS[tier[0]] || '#888';
+  const rankerBadge = (e, cls = 'badge') => e._ranker ? `<span class="${cls} rk-tier" style="--rk:${rkColor(e._ranker.tier)}" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank} von ${e._ranker.total} · Score ${e._ranker.score}">${esc(e._ranker.tier)} · ${e._ranker.score}</span>` : '';
+
+  // Felder, die als Ranker-Eigenschaften in Frage kommen, mit vorgeschlagenem Typ
+  const RK_MULTI = new Set(['Professions', 'Profession Category', 'Tags', 'AKA']);
+  const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Favorite', 'Tags', 'Global Rating', 'User Rating', 'Alter']
+    .filter((f, i, a) => a.indexOf(f) === i && !['Name', 'Exact Birthdate'].includes(f));
+  const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (f === 'Alter' || TYPES[f] === 'num') ? 'number' : 'exact';
+  function rkValues(e, f, type) {
+    if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
+    const raw = v(e, f);
+    if (!raw) return [];
+    if (type === 'multi') return splitList(raw);
+    if (type === 'number') { const n = num(raw); return n == null ? [] : [String(n)]; }
+    if (TYPES[f] === 'bool') return [isTrue(raw) ? 'Ja' : 'Nein'];
+    return [raw];
+  }
+
+  // Babepedia-Bilder über das Userscript holen (der Browser selbst darf sie nicht herunterladen)
+  let fetchReady = null;
+  function userscriptCanFetch() {
+    if (fetchReady) return fetchReady;
+    fetchReady = new Promise(res => {
+      const t = setTimeout(() => { window.removeEventListener('message', on); res(false); }, 1500);
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_FETCH_ACK') { clearTimeout(t); window.removeEventListener('message', on); res(true); } }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_FETCH_PING' }, location.origin);
+    }).then(ok => { if (!ok) fetchReady = null; return ok; });
+    return fetchReady;
+  }
+  let fetchSeq = 0;
+  function fetchViaUserscript(url) {
+    return new Promise(res => {
+      const id = 'f' + (++fetchSeq) + '-' + Date.now();
+      const t = setTimeout(() => { window.removeEventListener('message', on); res(null); }, 30000);
+      function on(ev) {
+        const d = ev.data;
+        if (ev.origin !== location.origin || !d || d.type !== 'BP_FETCH_RESULT' || d.id !== id) return;
+        clearTimeout(t); window.removeEventListener('message', on);
+        res(d.buf && d.buf.byteLength > 500 ? new Blob([d.buf], { type: d.mime || 'image/jpeg' }) : null);
+      }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_FETCH_IMAGE', id, url }, location.origin);
+    });
+  }
+  async function imageForTransfer(ref, canFetch) {
+    if (isLocal(ref)) { const b = await idbGet('img:' + localId(ref)).catch(() => null); return b instanceof Blob ? { blob: b } : null; }
+    if (!/^https?:\/\//i.test(ref)) return null;
+    if (canFetch && /babepedia\.com|archive\.org/i.test(ref)) { const b = await fetchViaUserscript(ref); if (b) return { blob: b, url: ref }; }
+    try { const r = await fetch(ref, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' }); if (r.ok) { const b = await r.blob(); if (/^image\//.test(b.type)) return { blob: b, url: ref }; } } catch {}
+    return { url: ref };   // als Link anlegen
+  }
+
+  // ---------- Dialog „An Image Ranker senden“ ----------
+  function openRankerSend(list) {
+    list = list.filter(Boolean);
+    if (!list.length) { toast('Keine Einträge ausgewählt.'); return; }
+    const tabs = rankerTabs(), prefs = rkPrefs();
+    let tab = prefs._lastTab && tabs.includes(prefs._lastTab) ? prefs._lastTab : tabs[0];
+    const pick = new Map(list.map(e => [e._id, 0]));   // gewähltes Bild je Eintrag (Index in images(e))
+    const single = list.length === 1;
+    const fieldsHTML = (t) => {
+      const sel = (prefs[t] && prefs[t].fields) || {};
+      return RK_FIELDS.map(f => {
+        const s = sel[f], type = (s && s.type) || rkType(f);
+        return `<div class="rk-f"><label class="chk"><input type="checkbox" data-rk-f="${esc(f)}" ${s ? 'checked' : ''}> ${esc(f)}</label>
+          <input type="text" data-rk-name="${esc(f)}" value="${esc((s && s.name) || f)}" title="Name der Eigenschaft im Ranker">
+          <select data-rk-type="${esc(f)}">${['exact', 'multi', 'number'].map(x => `<option value="${x}" ${x === type ? 'selected' : ''}>${{ exact: 'exakt', multi: 'mehrfach', number: 'Zahl' }[x]}</option>`).join('')}</select></div>`;
+      }).join('');
+    };
+    const imgsHTML = () => single
+      ? `<div class="rk-imgs">${images(list[0]).map((u, i) => `<button type="button" class="rk-img ${pick.get(list[0]._id) === i ? 'on' : ''}" data-rk-pick="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('') || '<p class="muted">Dieser Eintrag hat keine Bilder.</p>'}</div>`
+      : `<p class="muted">Pro Eintrag wird das Titelbild gesendet. Antippen wechselt zum nächsten Bild.</p><div class="rk-list">${list.slice(0, 300).map(e => {
+          const im = images(e), i = pick.get(e._id), u = im[i];
+          return `<button type="button" class="rk-row" data-rk-cycle="${esc(e._id)}" title="${im.length > 1 ? 'Nächstes Bild' : ''}">${u ? `<img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="placeholder">–</span>'}<span>${esc(v(e, 'Name'))}${im.length > 1 ? ` <small class="muted">${i + 1}/${im.length}</small>` : ''}</span></button>`; }).join('')}${list.length > 300 ? `<p class="muted">… und ${list.length - 300} weitere</p>` : ''}</div>`;
+
+    openModal(`
+      <div class="modal-head"><h2>🏆 An Image Ranker senden</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="rk-dialog">
+        <p class="muted">${single ? esc(v(list[0], 'Name')) : `${list.length} Einträge`} · Ist ein Eintrag im gewählten Reiter schon im Ranker, werden nur Eigenschaften und Link aktualisiert – Bild, Elo und Duelle bleiben.</p>
+        <h3>Reiter im Ranker</h3>
+        <div class="rk-tabrow"><select id="rk-tab">${tabs.map(t => `<option ${t === tab ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="__new">＋ Neuer Reiter…</option></select>
+          <input type="text" id="rk-newtab" placeholder="Name des neuen Reiters" hidden></div>
+        <h3>Bild</h3>
+        <div id="rk-imgbox">${imgsHTML()}</div>
+        <h3>Eigenschaften übernehmen</h3>
+        <p class="muted">Werden im Ranker als Eigenschaften dieses Reiters angelegt. Die Auswahl wird pro Reiter gemerkt.</p>
+        <div class="rk-fields" id="rk-fields">${fieldsHTML(tab)}</div>
+        <div class="rk-foot"><span class="muted" id="rk-msg"></span><button class="btn primary" id="rk-send">${single ? 'Senden' : `${list.length} senden`}</button></div>
+      </div>`);
+
+    const readFields = () => {
+      const out = {};
+      $$('#rk-fields [data-rk-f]').forEach(c => { if (c.checked) { const f = c.dataset.rkF; out[f] = { name: ($(`[data-rk-name="${CSS.escape(f)}"]`).value || f).trim(), type: $(`[data-rk-type="${CSS.escape(f)}"]`).value }; } });
+      return out;
+    };
+    const curTab = () => $('#rk-tab').value === '__new' ? $('#rk-newtab').value.trim() : $('#rk-tab').value;
+    $('#rk-tab').addEventListener('change', () => {
+      const nw = $('#rk-tab').value === '__new';
+      $('#rk-newtab').hidden = !nw; if (nw) $('#rk-newtab').focus();
+      prefs[tab] = Object.assign({}, prefs[tab], { fields: readFields() });
+      tab = nw ? '' : $('#rk-tab').value;
+      if (!nw) $('#rk-fields').innerHTML = fieldsHTML(tab);
+    });
+    $('#rk-imgbox').addEventListener('click', (ev) => {
+      const p = ev.target.closest('[data-rk-pick]'), c = ev.target.closest('[data-rk-cycle]');
+      if (p) pick.set(list[0]._id, Number(p.dataset.rkPick));
+      else if (c) { const e = byId(c.dataset.rkCycle), n = images(e).length; if (n > 1) pick.set(e._id, (pick.get(e._id) + 1) % n); }
+      else return;
+      $('#rk-imgbox').innerHTML = imgsHTML();
+    });
+    $('#rk-send').addEventListener('click', async () => {
+      const t = curTab();
+      if (!t) { $('#rk-msg').textContent = 'Bitte einen Reiter wählen oder benennen.'; return; }
+      const fields = readFields();
+      prefs[t] = Object.assign({}, prefs[t], { fields }); prefs._lastTab = t; rkSavePrefs(prefs);
+      if (list.length > 200 && !confirm(`${list.length} Einträge senden? Die Bilder werden einzeln geholt, das kann einige Minuten dauern.`)) return;
+      $('#rk-send').disabled = true;
+      const canFetch = await userscriptCanFetch();
+      const items = []; let links = 0, noImg = 0;
+      for (let k = 0; k < list.length; k++) {
+        const e = list[k];
+        $('#rk-msg').textContent = `Bereite vor… ${k + 1} / ${list.length}`;
+        const ref = images(e)[pick.get(e._id)];
+        const img = ref ? await imageForTransfer(ref, canFetch) : null;
+        if (!img) noImg++; else if (!img.blob) links++;
+        const props = Object.entries(fields).map(([f, s]) => ({ name: s.name || f, type: s.type, values: rkValues(e, f, s.type) }));
+        items.push({ boId: e._id, name: v(e, 'Name'), profileUrl: v(e, 'Profile URL'), blob: img && img.blob || null, url: img && img.url || '', props });
+      }
+      try {
+        const d = await transferDb();
+        await new Promise((res, rej) => { const tx = d.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put({ id: 'bo-' + Date.now(), from: 'b-organizer', createdAt: Date.now(), tab: t, items }); tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error); });
+        d.close();
+      } catch (err) { $('#rk-send').disabled = false; $('#rk-msg').textContent = 'Übergabe fehlgeschlagen: ' + (err && err.message || err); return; }
+      if (transferChannel) transferChannel.postMessage({ type: 'job' });
+      closeModal(true);
+      const hints = [links ? `${links} nur als Link${canFetch ? '' : ' (Userscript nicht aktiv)'}` : '', noImg ? `${noImg} ohne Bild` : ''].filter(Boolean).join(', ');
+      toast(`${items.length} an „${t}“ übergeben${hints ? ' – ' + hints : ''}. Der Image Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
+      rkOfferOpen();
+    });
+  }
+  function rkOfferOpen() {
+    const box = document.createElement('div');
+    box.className = 'toast ok rk-open';
+    box.innerHTML = '🏆 <a href="/Image-Ranker/" target="_blank" rel="noopener">Image Ranker öffnen</a>';
+    $('#toasts').appendChild(box);
+    setTimeout(() => box.remove(), 9000);
+  }
+
+  // ---------- Ranker-Stand lesen (read-only) und im Eintrag merken ----------
+  async function readRankerStatus() {
+    // Nur auf Geräten, auf denen der Image Ranker synchronisiert wird (nicht am Handy) – sonst würde ein
+    // veralteter Ranker-Stand die Angaben aller Geräte überschreiben.
+    let mobOk = false; try { mobOk = localStorage.getItem('ranker.syncOnMobile') === '1'; } catch {}
+    if (isMobileDevice() && !mobOk) return;
+    if (typeof indexedDB.databases !== 'function') return;
+    const list = await indexedDB.databases().catch(() => []);
+    if (!list.some(x => x.name === 'ImageRankerDB')) return;
+    const imgs = await new Promise(res => {
+      const r = indexedDB.open('ImageRankerDB');
+      r.onupgradeneeded = () => { try { r.transaction.abort(); } catch {} };
+      r.onerror = r.onblocked = () => res(null);
+      r.onsuccess = () => {
+        const d = r.result; d.onversionchange = () => d.close();
+        if (!d.objectStoreNames.contains('images')) { d.close(); return res(null); }
+        const out = [];
+        const c = d.transaction('images').objectStore('images').openCursor();
+        c.onsuccess = () => { const k = c.result; if (!k) { d.close(); return res(out); } const im = k.value; out.push({ id: im.id, tab: im.tab, elo: im.elo, boId: im.boId }); k.continue(); };
+        c.onerror = () => { d.close(); res(null); };
+      };
+    });
+    if (!imgs || !imgs.length) return;
+    const byTab = new Map();
+    imgs.forEach(i => { if (!byTab.has(i.tab)) byTab.set(i.tab, []); byTab.get(i.tab).push(i); });
+    const status = new Map();
+    for (const [t, arr] of byTab) {
+      arr.sort((a, b) => b.elo - a.elo);
+      const max = arr[0].elo, min = arr[arr.length - 1].elo;
+      arr.forEach((i, k) => {
+        if (!i.boId) return;
+        const score = max === min ? 100 : Math.max(0, Math.min(100, Math.round((i.elo - min) / (max - min) * 100)));
+        const s = { tab: t, imageId: i.id, rank: k + 1, total: arr.length, score, tier: max === min ? 'S' : rkTier(score) };
+        const prev = status.get(i.boId);
+        if (!prev || s.score > prev.score) status.set(i.boId, s);   // in mehreren Reitern: den besten zeigen
+      });
+    }
+    let changed = 0;
+    for (const e of entries) {
+      const s = status.get(e._id) || null;
+      const old = e._ranker || null;
+      const same = (!s && !old) || (s && old && s.tab === old.tab && s.tier === old.tier && s.score === old.score && s.imageId === old.imageId);
+      if (same) continue;
+      if (s) e._ranker = s; else delete e._ranker;
+      changed++;
+    }
+    if (changed) { saveQuiet(); refreshFilters(); render(); }
+  }
+  if (transferChannel) transferChannel.onmessage = (ev) => { if (ev.data && ev.data.type === 'done' && ready) readRankerStatus().catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ready) readRankerStatus().catch(() => {}); });
+
   // Änderungen aus anderen Tabs übernehmen
   if (channel) channel.onmessage = async () => { entries = await load(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
@@ -1297,6 +1528,7 @@
     refreshFilters();
     render();
     initSync();
+    readRankerStatus().catch(() => {});
     // Userscript informieren, dass das Tool bereit ist
     window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
   })();

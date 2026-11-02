@@ -41,6 +41,16 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **Daten → Backup exportieren** sichert alles als JSON – regelmäßig machen, und für den Umzug auf ein anderes Gerät nutzen.
 - **Daten → Als CSV exportieren** erzeugt eine CSV im bisherigen Notion-Format (plus eigene Felder).
 
+## An Image Ranker senden
+- **🏆 An Ranker** in der Detailansicht (ein Eintrag) oder in der Werkzeugleiste (alle gerade angezeigten Einträge).
+- Im Dialog: **Reiter** im Ranker wählen (oder neu anlegen), **Bild** wählen (bei mehreren Einträgen: Titelbild, Antippen wechselt zum nächsten), **Eigenschaften** ankreuzen, die im Ranker angelegt werden (exakt / mehrfach / Zahl, Name änderbar). Reiter und Auswahl werden gemerkt.
+- Übergabe über die gemeinsame IndexedDB `tool-transfer`; der Image Ranker übernimmt die Einträge beim nächsten Öffnen (oder sofort, wenn er offen ist). Ist ein Eintrag im Reiter schon vorhanden (Verknüpfung, gleiches Bild oder gleicher Link), werden nur Eigenschaften und Link aktualisiert – Bild, Elo und Duelle bleiben.
+- Babepedia-Bilder holt das **Userscript (ab 14.2)** als Datei; ohne Userscript werden sie als Link angelegt. Eigene Bilder werden direkt übernommen.
+- **Rückweg:** Auf PC/Laptop liest der Babe Organizer den Ranker (nur lesend) und zeigt **Tier · Score** auf der Karte und **Platz** in der Detailansicht (Klick öffnet das Bild im Ranker). Filter „im Image Ranker (Tool)“ und Sortierung „Image-Ranker-Score“. Der Stand wird im Eintrag (`_ranker`) gemerkt und synchronisiert, so ist er auch am Handy sichtbar.
+
+## Änderungen in 14.2 (Userscript)
+- Holt auf Anfrage des Tools Bilder von Babepedia bzw. dem Internet Archive für „An Image Ranker senden“.
+
 ## Änderungen am Userscript gegenüber 12.2
 - Batch liegt jetzt im Tampermonkey-Speicher statt im localStorage von babepedia (nötig, damit das Tool ihn lesen kann).
 - Neuer Button **🗂️ Tool öffnen** und automatische Übertragung auf der Tool-Seite.
