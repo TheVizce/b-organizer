@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.1
+// @version      14.2
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -16,6 +16,8 @@
 // @grant        GM_setValue
 // @grant        GM_openInTab
 // @connect      www.babepedia.com
+// @connect      babepedia.com
+// @connect      web.archive.org
 // ==/UserScript==
 
 (function() {
@@ -66,6 +68,28 @@
                 const rest = GM_getValue('bp_batch_data', []).filter(i => !sentUrls.has(i['Profile URL']));
                 GM_setValue('bp_batch_data', rest);
             }
+        });
+
+        // Bilder für „An Image Ranker senden“ holen (der Browser selbst darf Babepedia-Bilder nicht herunterladen)
+        window.addEventListener('message', (ev) => {
+            if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
+            const d = ev.data;
+            if (d.type === 'BP_FETCH_PING') { window.postMessage({ type: 'BP_FETCH_ACK' }, location.origin); return; }
+            if (d.type !== 'BP_FETCH_IMAGE' || typeof d.url !== 'string') return;
+            let host = '';
+            try { host = new URL(d.url).hostname; } catch (e) {}
+            const reply = (buf, mime) => window.postMessage({ type: 'BP_FETCH_RESULT', id: d.id, buf: buf || null, mime: mime || '' }, location.origin);
+            if (!/(^|\.)babepedia\.com$|(^|\.)archive\.org$/.test(host)) { reply(null); return; }   // nur Babepedia und Internet Archive
+            GM_xmlhttpRequest({
+                method: 'GET', url: d.url, responseType: 'arraybuffer', timeout: 25000,
+                headers: { Referer: 'https://www.babepedia.com/' },
+                onload: (r) => {
+                    const mime = ((r.responseHeaders || '').match(/content-type:\s*([^\r\n;]+)/i) || [])[1] || '';
+                    if (r.status >= 200 && r.status < 300 && r.response && /^image\//i.test(mime || 'image/jpeg')) reply(r.response, mime || 'image/jpeg');
+                    else reply(null);
+                },
+                onerror: () => reply(null), ontimeout: () => reply(null)
+            });
         });
 
         // Falls das Tool schon geladen ist: anpingen

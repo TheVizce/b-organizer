@@ -63,6 +63,8 @@
       <option value="">Ranker: egal</option>
       <option value="true">🏆 im Ranker</option>
       <option value="false">nicht im Ranker</option>
+      <option value="tool">🏆 im Image Ranker (Tool)</option>
+      <option value="notool">nicht im Image Ranker (Tool)</option>
     </select>
     <label class="chk"><input type="checkbox" id="f-fav"> nur Favoriten</label>
     <select id="sort">
@@ -77,11 +79,13 @@
       <option value="young">Alter ↑ (jüngste zuerst)</option>
       <option value="old">Alter ↓ (älteste zuerst)</option>
       <option value="height">Größe ↓</option>
+      <option value="ranker">Image-Ranker-Score ↓</option>
     </select>
     <div class="seg" role="group" aria-label="Ansicht">
       <button data-view="grid" class="on" title="Karten">▦</button>
       <button data-view="table" title="Tabelle">☰</button>
     </div>
+    <button class="btn" id="btn-to-ranker" title="Alle angezeigten Einträge an den Image Ranker senden">🏆 An Ranker</button>
     <button class="btn ghost" id="btn-reset" title="Filter zurücksetzen">✕ Filter</button>
   </section>
 
