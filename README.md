@@ -44,6 +44,13 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## An Image Ranker senden
 - **🏆 An Ranker** in der Detailansicht (ein Eintrag) oder in der Werkzeugleiste (alle gerade angezeigten Einträge).
 - Im Dialog: **Reiter** im Ranker wählen (oder neu anlegen), **Bild** wählen (bei mehreren Einträgen: Titelbild, Antippen wechselt zum nächsten), **Eigenschaften** ankreuzen, die im Ranker angelegt werden (exakt / mehrfach / Zahl, Name änderbar). Reiter und Auswahl werden gemerkt.
+- **Abgleich prüfen (Schritt 2):** Vor dem Senden vergleicht der Babe Organizer die Einträge mit den Bildern des Reiters (nur lesend):
+  - *Automatisch* – genau ein Ranker-Bild hat denselben Babepedia-Profil-Link → wird verknüpft.
+  - *Bitte prüfen* – nur der Name passt oder mehrere Bilder haben denselben Link → **keine Vorauswahl**, du tippst das richtige Bild an (sonst übersprungen).
+  - *Kein Treffer* – von Hand suchen (Name, mit Vorschaubildern), überspringen oder neu anlegen.
+  - *Bereits verknüpft* – wird nur aktualisiert.
+- **Nur verknüpfen:** Häkchen in Schritt 1 – es werden keine neuen Bilder angelegt.
+- Zusätzliche Sicherung im Ranker: Ein Bild mit demselben Profil-Link wird nie doppelt angelegt; ist der Link dort mehrdeutig, wird der Eintrag übersprungen.
 - Übergabe über die gemeinsame IndexedDB `tool-transfer`; der Image Ranker übernimmt die Einträge beim nächsten Öffnen (oder sofort, wenn er offen ist). Ist ein Eintrag im Reiter schon vorhanden (Verknüpfung, gleiches Bild oder gleicher Link), werden nur Eigenschaften und Link aktualisiert – Bild, Elo und Duelle bleiben.
 - Babepedia-Bilder holt das **Userscript (ab 14.2)** als Datei; ohne Userscript werden sie als Link angelegt. Eigene Bilder werden direkt übernommen.
 - **Rückweg:** Auf PC/Laptop liest der Babe Organizer den Ranker (nur lesend) und zeigt **Tier · Score** auf der Karte und **Platz** in der Detailansicht (Klick öffnet das Bild im Ranker). Filter „im Image Ranker (Tool)“ und Sortierung „Image-Ranker-Score“. Der Stand wird im Eintrag (`_ranker`) gemerkt und synchronisiert, so ist er auch am Handy sichtbar.
