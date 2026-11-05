@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.3
+// @version      14.4
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -113,7 +113,7 @@
 
     // Aktualisiertes Schema (ohne redundante Status-Felder bei Tattoos/Piercings)
     const FIELDS = [
-        'Name', 'AKA', 'Profile URL', 'Archive URL', 'Main Image URL', 
+        'Name', 'AKA', 'Profile URL', 'Archive URL', 'Babe ID', 'Main Image URL', 
         'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
         'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
         'Born', 'Exact Birthdate', 'Died', 'Years active', 'Active', 'Active till', 'Birthplace',
@@ -783,6 +783,7 @@
             data['User Upload Image URLs'] = String(data['User Upload Image URLs'] || '').split(', ').filter(Boolean).map(toArchiveImg).join(', ');
             data['User Rating'] = ''; // eigene Bewertung ist in der Archiv-Kopie nicht enthalten
         }
+        data['Babe ID'] = babeId || '';
         return { profileData: data, babeId: babeId };
     }
 

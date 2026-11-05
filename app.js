@@ -4,7 +4,7 @@
 
   // ---------- Schema (identisch zum Userscript) ----------
   const FIELDS = [
-    'Name', 'AKA', 'Profile URL', 'Archive URL', 'Main Image URL',
+    'Name', 'AKA', 'Profile URL', 'Archive URL', 'Babe ID', 'Main Image URL',
     'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
     'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
     'Born', 'Exact Birthdate', 'Died', 'Years active', 'Active', 'Active till', 'Birthplace',
@@ -23,7 +23,7 @@
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'] },
-    { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
+    { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
   ];
@@ -477,9 +477,50 @@
     const url = v(e, 'Profile URL').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
     return url ? 'url:' + url : 'name:' + v(e, 'Name').toLowerCase();
   }
+  // ---- Umbenannte Babepedia-Profile erkennen ----
+  // Babepedia vergibt eine feste Babe ID; beim Umbenennen ändert sich nur die URL, der alte Name landet im AKA.
+  const plain = (x) => String(x || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const slugOf = (u) => { const m = normUrl(u).match(/\/babe\/([^/]+)/); return m ? plain(m[1]) : ''; };
+  function buildRenameIndex() {
+    const bySlug = new Map(), byBabeId = new Map();
+    for (const e of entries) {
+      const sl = slugOf(e['Profile URL']); if (sl) (bySlug.get(sl) || bySlug.set(sl, []).get(sl)).push(e);
+      const id = v(e, 'Babe ID'); if (id) (byBabeId.get(id) || byBabeId.set(id, []).get(id)).push(e);
+    }
+    return { bySlug, byBabeId };
+  }
+  function renameCandidates(item, exclude, ix) {
+    const id = v(item, 'Babe ID');
+    const ownUrl = normUrl(item['Profile URL']);
+    const found = new Set(id ? (ix.byBabeId.get(id) || []) : []);
+    // alter Name kann im AKA stehen oder sich nur in der Schreibweise unterscheiden (Buttercupcosplays -> Buttercup_Cosplays)
+    const names = new Set([slugOf(item['Profile URL']), v(item, 'Name'), ...String(item.AKA || '').split(/\s+-\s+|,/)].map(plain).filter(x => x.length >= 4));
+    for (const n of names) {
+      for (const e of ix.bySlug.get(n) || []) {
+        if (normUrl(e['Profile URL']) === ownUrl) continue; // dieselbe Adresse = normaler Treffer
+        if (id && v(e, 'Babe ID') && v(e, 'Babe ID') !== id) continue; // beide haben IDs, aber verschiedene
+        found.add(e);
+      }
+    }
+    found.delete(exclude);
+    return [...found];
+  }
+  // Übernimmt eigene Angaben aus dem Duplikat, wo der behaltene Eintrag noch nichts hat
+  function mergeOwn(keep, dup) {
+    for (const f of OWN_FIELDS) {
+      const a = v(keep, f), b = v(dup, f);
+      if (!b || b === 'false') continue;
+      if (f === 'Own Images') keep[f] = [...new Set([...splitList(a), ...splitList(b)])].join(', ');
+      else if (f === 'Notes' && a && a !== b) keep[f] = a + '\n\n' + b;
+      else if (!a || a === 'false') keep[f] = b;
+    }
+  }
+
   async function importItems(items) {
-    let added = 0, updated = 0, skipped = 0;
+    let added = 0, updated = 0, skipped = 0, merged = 0;
     const index = new Map(entries.map(e => [keyOf(e), e]));
+    const byId = new Map(entries.map(e => [e._id, e]));
+    let ix = null;
     const now = Date.now();
     for (const raw of items) {
       if (!raw || typeof raw !== 'object') { skipped++; continue; }
@@ -487,11 +528,36 @@
       for (const f of ALL_FIELDS) if (raw[f] !== undefined && raw[f] !== null) item[f] = String(raw[f]).trim();
       if (!item.Name) { skipped++; continue; }
       const k = keyOf(item);
-      const existing = index.get(k);
+      let existing = (raw._id && byId.get(raw._id)) || index.get(k);
+      // Umbenanntes Profil? Nur für frisch geholte Babepedia-Profile (Backups bringen ihre _id mit);
+      // gleiche Babe ID gilt als sicher, sonst wird immer nachgefragt.
+      if (!raw._id && /\/babe\//.test(normUrl(item['Profile URL']))) {
+        if (!ix) ix = buildRenameIndex();
+        const cands = renameCandidates(item, existing, ix);
+        if (cands.length === 1) {
+          const old = cands[0];
+          const sameId = v(item, 'Babe ID') && v(old, 'Babe ID') === v(item, 'Babe ID');
+          const msg = existing
+            ? `„${old.Name}“ und „${existing.Name}“ sind offenbar dasselbe Babepedia-Profil (umbenannt).\n\nZusammenführen? Der ältere Eintrag „${old.Name}“ bleibt erhalten (mit Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die neuen Daten; „${existing.Name}“ wird entfernt.`
+            : `Babepedia-Profil umbenannt?\n\nAlt: ${old.Name}  (${old['Profile URL']})\nNeu: ${item.Name}  (${item['Profile URL']})\n\n[OK] = vorhandenen Eintrag aktualisieren\n[Abbrechen] = als neuen Eintrag anlegen`;
+          if (sameId || confirm(msg)) {
+            if (existing && existing !== old) {
+              mergeOwn(old, existing);
+              entries = entries.filter(x => x !== existing);
+              index.delete(keyOf(existing)); byId.delete(existing._id);
+              merged++;
+            }
+            index.delete(keyOf(old));
+            existing = old;
+            ix = null; // Index neu aufbauen, falls im selben Import noch mehr kommt
+          }
+        }
+      }
       if (existing) {
         for (const f of ALL_FIELDS) if (item[f]) existing[f] = item[f];
         existing._updated = now;
         derive(existing);
+        index.set(keyOf(existing), existing);
         updated++;
       } else {
         const e = { _id: raw._id || uid(), _created: raw._created || now, _updated: now };
@@ -499,14 +565,14 @@
         if (!e.Favorite) e.Favorite = 'false';
         derive(e);
         entries.push(e);
-        index.set(k, e);
+        index.set(k, e); byId.set(e._id, e);
         added++;
       }
     }
     refreshFilters();
     render();
     await save();
-    return { added, updated, skipped };
+    return { added, updated, skipped, merged };
   }
 
   function parseCSV(text) {
@@ -571,7 +637,7 @@
     if (!items.length) { toast('Keine Einträge in der Datei gefunden.', 'err'); return; }
     let r;
     try { r = await importItems(items); } catch { return; }
-    toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
+    toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.merged ? `, ${r.merged} zusammengeführt` : ''}${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
   }
 
   // ---------- Brücke zum Userscript ----------
@@ -592,7 +658,7 @@
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
       bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
-        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert.`, 'ok');
+        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
   });
