@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.2
+// @version      14.3
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -122,7 +122,7 @@
         'Boobs', 'Tattoos', 'Piercings',
         // External & Social Links
         'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch',
-        'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Boobpedia Link'
+        'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'
     ];
 
     // Alle Nationality-Werte von Babepedia (Advanced Search) + übliche Schreibvarianten -> Ländercode
@@ -750,6 +750,7 @@
                 else if (href.includes('twitch.tv/')) data['Twitch'] = href;
                 else if (href.includes('imdb.com/')) data['IMDb'] = href;
                 else if (href.includes('fansly.com/')) data['Fansly'] = href;
+                else if (href.includes('thronly.com/')) data['Thronly'] = href;
                 else if (href.includes('onlyfans.com/') || href.includes('babepedia.com/onlyfans/')) {
                     if (!ofLinks.includes(href)) ofLinks.push(href);
                 }
@@ -772,7 +773,7 @@
             // Archiv-Kopie: Original-Adressen wiederherstellen, Bilder über das Archiv laden
             // (bei gelöschten Profilen gibt es die Originale auf Babepedia nicht mehr)
             for (const k of Object.keys(data)) {
-                if (/URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly/.test(k) && typeof data[k] === 'string') {
+                if (/URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly|Thronly/.test(k) && typeof data[k] === 'string') {
                     data[k] = data[k].split(', ').map(unwrapArchive).join(', ');
                 }
             }
