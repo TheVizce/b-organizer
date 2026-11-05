@@ -135,3 +135,6 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Neues Feld **Archive URL**; im Tool als Link „🏛️ Internet Archive“ und Chip „aus dem Archiv“.
 - Im Archiv-Modus werden keine Babepedia-Listen verändert; „User Rating“ wird nicht übernommen.
 - Sehr alte Archiv-Kopien mit anderem Seitenaufbau werden evtl. nicht erkannt – dann erscheint eine Meldung.
+
+## Änderungen in 14.4 (Tool) / 14.3 (Skript)
+- Neues Feld **Thronly** (Link) bei den Links; im Formular als URL-Feld. Das Skript übernimmt Thronly-Links, falls Babepedia sie im Profil anzeigt.
