@@ -138,3 +138,4 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 
 ## Änderungen in 14.4 (Tool) / 14.3 (Skript)
 - Neues Feld **Thronly** (Link) bei den Links; im Formular als URL-Feld. Das Skript übernimmt Thronly-Links, falls Babepedia sie im Profil anzeigt.
+- Filter **Fehlende Werte**: Einträge, denen Profession, Nationality, Hair Color, Born oder Bra/Cup fehlt (einzeln oder „irgendeiner“) – die Felder, die auch der Image Ranker nutzt. In der Detailansicht zeigt ein Chip „⚠ fehlt: …“, was fehlt.

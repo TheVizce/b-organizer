@@ -383,3 +383,5 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .rk-hits { display: flex; flex-wrap: wrap; gap: 6px; }
 .small { font-size: 12px; }
 @media (max-width: 560px) { .rk-ent { width: 100%; } .rk-arrow { display: none; } .rk-search { padding-left: 0; } }
+
+.chip.missing { background: rgba(225, 92, 92, 0.12); border-color: transparent; color: #f08a8a; }

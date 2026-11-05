@@ -627,6 +627,11 @@
   }
 
   const collator = new Intl.Collator('de');
+  // Felder, die auch der Image Ranker nutzt – Filter „Fehlende Werte“
+  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup']];
+  const isMissing = (e, f) => { const x = v(e, f).toLowerCase(); return !x || x === 'n/a' || x === '-' || x === 'unknown'; };
+  const missingCore = (e) => CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([, label]) => label);
+
   function filtered() {
     const q = $('#q').value.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
@@ -636,10 +641,14 @@
     const rf = $('#f-rating').value;
     const cf = $('#f-cat').value;
     const rk = $('#f-ranker').value;
+    const mf = $('#f-missing').value;
 
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
       if (cf && !catList(e).includes(cf)) return false;
+      if (mf === 'any' && !CORE_FIELDS.some(([f]) => isMissing(e, f))) return false;
+      if (mf === 'none' && CORE_FIELDS.some(([f]) => isMissing(e, f))) return false;
+      if (mf && mf !== 'any' && mf !== 'none' && !isMissing(e, mf)) return false;
       if (rk === 'tool' || rk === 'notool') { if (!!e._ranker !== (rk === 'tool')) return false; }
       else if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
       if (rf) {
@@ -891,6 +900,7 @@
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
             ${isTrue(e['In Ranker']) ? '<span class="chip ranker" title="In der Babepedia-Liste „Ranker“">🏆 Babepedia-Liste</span>' : ''}
+            ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
@@ -1247,13 +1257,13 @@
   });
   let searchTimer = null;
   $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); });
-  ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker'].forEach(s => $(s).addEventListener('input', render));
+  ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing'].forEach(s => $(s).addEventListener('input', render));
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-fav').checked = false; render();
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false; render();
   });
 
   // Daten per Drag & Drop importieren
