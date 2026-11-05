@@ -385,3 +385,20 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 @media (max-width: 560px) { .rk-ent { width: 100%; } .rk-arrow { display: none; } .rk-search { padding-left: 0; } }
 
 .chip.missing { background: rgba(225, 92, 92, 0.12); border-color: transparent; color: #f08a8a; }
+
+/* iPhone/Handy: Detailfenster im Vollbild – Kopfzeile unter Statusleiste/Notch freihalten und beim Scrollen oben halten */
+@media (max-width: 760px) {
+  .modal { overflow: clip; }                 /* "hidden" würde position: sticky verhindern */
+  .modal-head {
+    position: sticky; top: 0; z-index: 5;
+    padding: calc(12px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 12px calc(14px + env(safe-area-inset-left));
+    align-items: flex-start;
+  }
+  .modal-head h2 { padding-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .modal-head .actions { flex-wrap: nowrap; flex-shrink: 0; }
+  /* Detailansicht: Name steht groß darunter – in der Kopfzeile Platz für die Knöpfe lassen */
+  .modal-head:has(.actions .btn) h2 { display: none; }
+  .modal-head:has(.actions .btn) { justify-content: flex-end; }
+  .form-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .detail { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
