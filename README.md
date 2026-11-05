@@ -139,3 +139,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.4 (Tool) / 14.3 (Skript)
 - Neues Feld **Thronly** (Link) bei den Links; im Formular als URL-Feld. Das Skript übernimmt Thronly-Links, falls Babepedia sie im Profil anzeigt.
 - Filter **Fehlende Werte**: Einträge, denen Profession, Nationality, Hair Color, Born oder Bra/Cup fehlt (einzeln oder „irgendeiner“) – die Felder, die auch der Image Ranker nutzt. In der Detailansicht zeigt ein Chip „⚠ fehlt: …“, was fehlt.
+
+## Änderungen in 14.5 (Tool) / 14.4 (Skript) – umbenannte Profile
+- Neues Feld **Babe ID** (feste Babepedia-Nummer, ändert sich beim Umbenennen nicht). Das Skript speichert sie mit; das Tool ordnet zuerst darüber zu.
+- Bei Einträgen ohne Babe ID erkennt das Tool umbenannte Profile über den alten Namen im AKA bzw. eine andere Schreibweise der URL und **fragt nach**, ob der vorhandene Eintrag aktualisiert werden soll.
+- Gibt es schon beide Einträge, bietet es an, sie **zusammenzuführen**: Der ältere Eintrag bleibt (ID, Notizen, Bewertungen, Ranker-Verknüpfung), bekommt die neuen Daten; das Duplikat wird entfernt.
+- Beim Einlesen von Backups gibt es keine Rückfragen (Einträge werden über ihre ID zugeordnet).
