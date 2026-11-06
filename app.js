@@ -516,10 +516,14 @@
   // Babepedia vergibt eine feste Babe ID; beim Umbenennen ändert sich nur die URL, der alte Name landet im AKA.
   const plain = (x) => String(x || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const slugOf = (u) => { const m = normUrl(u).match(/\/babe\/([^/]+)/); return m ? plain(m[1]) : ''; };
+  // Grundform einer Profiladresse: Klammerzusatz weg ("Ariadna_Majewska_(Ari_Maj)" -> "ariadnamajewska")
+  const baseSlugOf = (u) => { const m = normUrl(u).match(/\/babe\/([^/]+)/); return m ? plain(m[1].replace(/\([^)]*\)/g, '')) : ''; };
   function buildRenameIndex() {
     const bySlug = new Map(), byBabeId = new Map();
+    const add = (k, e) => { if (k) { const l = bySlug.get(k) || bySlug.set(k, []).get(k); if (!l.includes(e)) l.push(e); } };
     for (const e of entries) {
-      const sl = slugOf(e['Profile URL']); if (sl) (bySlug.get(sl) || bySlug.set(sl, []).get(sl)).push(e);
+      add(slugOf(e['Profile URL']), e);
+      add(baseSlugOf(e['Profile URL']), e);
       const id = v(e, 'Babe ID'); if (id) (byBabeId.get(id) || byBabeId.set(id, []).get(id)).push(e);
     }
     return { bySlug, byBabeId };
@@ -529,7 +533,7 @@
     const ownUrl = normUrl(item['Profile URL']);
     const found = new Set(id ? (ix.byBabeId.get(id) || []) : []);
     // alter Name kann im AKA stehen oder sich nur in der Schreibweise unterscheiden (Buttercupcosplays -> Buttercup_Cosplays)
-    const names = new Set([slugOf(item['Profile URL']), v(item, 'Name'), ...String(item.AKA || '').split(/\s+-\s+|,/)].map(plain).filter(x => x.length >= 4));
+    const names = new Set([slugOf(item['Profile URL']), baseSlugOf(item['Profile URL']), v(item, 'Name'), ...String(item.AKA || '').split(/\s+-\s+|,/)].map(plain).filter(x => x.length >= 4));
     for (const n of names) {
       for (const e of ix.bySlug.get(n) || []) {
         if (normUrl(e['Profile URL']) === ownUrl) continue; // dieselbe Adresse = normaler Treffer
@@ -538,7 +542,7 @@
       }
     }
     found.delete(exclude);
-    return [...found];
+    return [...found].slice(0, 6);   // jeder Kandidat wird bei Babepedia geprüft – nicht zu viele
   }
   // Übernimmt eigene Angaben aus dem Duplikat, wo der behaltene Eintrag noch nichts hat
   function mergeOwn(keep, dup) {
@@ -582,6 +586,61 @@
     if (!r || !r.ok) return false;
     if (b && r.babeId) return r.babeId === b;
     return normUrl(r.finalUrl) === normUrl(item['Profile URL']);
+  }
+
+  // ---- Vorhandene Doppel-Einträge finden (umbenannte Profile, die zweimal im Tool stehen) ----
+  async function findDuplicates() {
+    if (!(await scriptPing())) { toast('Dafür muss das Tampermonkey-Skript aktiv sein (es prüft die Weiterleitungen bei Babepedia).', 'err'); return; }
+    const ix = buildRenameIndex();
+    const pairs = [], seen = new Set();
+    for (const e of entries) {
+      if (!/\/babe\//.test(normUrl(e['Profile URL']))) continue;
+      for (const c of renameCandidates(e, e, ix)) {
+        const key = [e._id, c._id].sort().join('|');
+        if (seen.has(key)) continue;
+        seen.add(key); pairs.push([e, c]);
+      }
+    }
+    if (!pairs.length) { toast('Keine verdächtigen Doppel-Einträge gefunden.', 'ok'); return; }
+    openModal(`<div class="modal-head"><h2>Doppel-Einträge suchen</h2><div class="actions"><button class="x" data-action="close">×</button></div></div>
+      <div class="help"><p id="dup-status">Prüfe ${pairs.length} verdächtige Paare bei Babepedia…</p><div id="dup-list"></div></div>`);
+    const list = $('#dup-list'), found = [];
+    for (let i = 0; i < pairs.length; i++) {
+      const [a, b] = pairs[i];
+      const st = $('#dup-status'); if (!st) return;   // Fenster geschlossen
+      st.textContent = `Prüfe bei Babepedia… ${i + 1} / ${pairs.length}`;
+      const [ra, rb] = [await resolveProfile(a['Profile URL']), await resolveProfile(b['Profile URL'])];
+      const same = (ra && rb && ra.ok && rb.ok) && (normUrl(ra.finalUrl) === normUrl(rb.finalUrl) || (ra.babeId && ra.babeId === rb.babeId));
+      if (!same) continue;
+      // Behalten: der Eintrag mit Ranker-Verknüpfung, sonst der ältere. Daten kommen vom Eintrag mit der aktuellen Adresse.
+      const cur = normUrl(a['Profile URL']) === normUrl(ra.finalUrl) ? a : b;
+      const keep = (a._ranker && !b._ranker) ? a : (b._ranker && !a._ranker) ? b : ((a._created || 0) <= (b._created || 0) ? a : b);
+      const drop = keep === a ? b : a;
+      found.push({ keep, drop, cur, babeId: ra.babeId || rb.babeId || '' });
+      const idx = found.length - 1;
+      list.insertAdjacentHTML('beforeend', `<div class="dup-row" data-dup="${idx}">
+        <div><b>${esc(keep.Name)}</b> <span class="muted">${esc(keep['Profile URL'].split('/babe/')[1] || '')}</span><br>
+        <b>${esc(drop.Name)}</b> <span class="muted">${esc(drop['Profile URL'].split('/babe/')[1] || '')}</span>
+        ${a._ranker && b._ranker ? '<br><span class="warn">Beide sind im Image Ranker verknüpft – bitte dort prüfen.</span>' : ''}</div>
+        <button class="btn small" data-dup-merge="${idx}">Zusammenführen</button></div>`);
+    }
+    const st = $('#dup-status'); if (!st) return;
+    st.innerHTML = found.length
+      ? `${found.length} Doppel-Eintr${found.length === 1 ? 'ag' : 'äge'} von Babepedia bestätigt. Beim Zusammenführen bleibt der obere Eintrag (ID, Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die aktuellen Babepedia-Daten; der untere wird entfernt.`
+      : 'Keine bestätigten Doppel-Einträge (die verdächtigen Paare sind laut Babepedia verschiedene Profile).';
+    list.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-dup-merge]'); if (!btn) return;
+      const f = found[+btn.dataset.dupMerge]; if (!f || f.done) return;
+      const { keep, drop, cur } = f;
+      if (cur !== keep) for (const k of FIELDS) if (v(cur, k)) keep[k] = cur[k];   // aktuelle Babepedia-Daten übernehmen
+      if (f.babeId && !v(keep, 'Babe ID')) keep['Babe ID'] = f.babeId;
+      mergeOwn(keep, drop);
+      keep._updated = Date.now(); derive(keep);
+      entries = entries.filter(x => x !== drop);
+      f.done = true;
+      btn.closest('.dup-row').classList.add('done'); btn.replaceWith(Object.assign(document.createElement('span'), { className: 'ok', textContent: '✓ zusammengeführt' }));
+      refreshFilters(); render(); await save().catch(() => {});
+    });
   }
 
   async function importItems(items) {
@@ -736,6 +795,7 @@
 
   function refreshFilters() {
     refreshCatFilter();
+    renderExtraFilters();
     for (const [id, field] of Object.entries(FILTERS)) {
       const sel = $('#' + id);
       const cur = sel.value;
@@ -820,8 +880,13 @@
     const rk = $('#f-ranker').value;
     const mf = $('#f-missing').value;
 
+    const xf = Object.entries(xfVals).filter(([, x]) => x);
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
+      for (const [f, want] of xf) {
+        const vals = fieldValues(e, f);
+        if (want === '__empty' ? vals.length : !vals.includes(want)) return false;
+      }
       if (cf && !catList(e).includes(cf)) return false;
       if (mf) {
         const miss = CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([f]) => f);
@@ -874,9 +939,123 @@
   }
 
   // ---------- Darstellung ----------
+  // ---------- Ansicht anpassen: Kachel-Inhalte und Filter ----------
+  // Einstellungen liegen in ui (localStorage 'bp-organizer-ui', klein, pro Gerät)
+  const DERIVED = ['Alter', 'Geburtsjahr'];
+  const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
+    'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
+    'Global Rating', 'Votes', 'User Rating', 'My Rating', 'Rank', 'Highest Rank', 'Babe ID'];
+  const CARD_BADGES = [['global', '★ Global Rating'], ['rank', '# Rank'], ['rating', '♥ Meine Bewertung'], ['ranker', '🏆 Ranker']];
+  const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
+    ['f-active', 'Aktiv'], ['f-rating', 'Bewertung'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
+  const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
+    'Measurements', 'Weight', 'Years active', 'Tags', 'My Rating', 'User Rating', 'Exact Birthdate', 'Favorite'];
+  const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
+  if (!Array.isArray(ui.cardFields)) ui.cardFields = ['Nationality', 'Alter', 'Height'];
+  if (!Array.isArray(ui.cardBadges)) ui.cardBadges = CARD_BADGES.map(b => b[0]);
+  if (!ui.hiddenFilters || typeof ui.hiddenFilters !== 'object') ui.hiddenFilters = {};
+  if (!Array.isArray(ui.extraFilters)) ui.extraFilters = [];
+  const xfVals = {};   // aktuelle Auswahl der Zusatzfilter (nicht gespeichert)
+
+  function fieldValues(e, f) {
+    if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
+    if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
+    if (f === 'Nationality') return natNames(e);
+    const raw = v(e, f);
+    if (!raw || raw.toLowerCase() === 'n/a') return [];
+    if (MULTI_FIELDS.has(f)) return splitList(raw);
+    if (f === 'Profession Category') return catList(e);
+    if (TYPES[f] === 'bool') return [isTrue(raw) ? 'Ja' : 'Nein'];
+    return [raw];
+  }
+  function cardValue(e, f) {
+    if (f === 'Alter') { const a = age(e); return a == null ? '' : `${a} J.`; }
+    if (f === 'Geburtsjahr') return fieldValues(e, f)[0] || '';
+    if (f === 'Born') return fmtDate(v(e, 'Born'), isTrue(e['Exact Birthdate']));
+    if (f === 'Nationality') return natDisplay(e);
+    if (f === 'Global Rating' || f === 'User Rating' || f === 'My Rating') return v(e, f) ? `${f.replace(' Rating', '')} ${v(e, f)}` : '';
+    if (f === 'Rank' || f === 'Highest Rank') return v(e, f) ? `${f === 'Rank' ? '#' : 'max #'}${v(e, f)}` : '';
+    if (f === 'Tattoos' || f === 'Piercings') { const x = v(e, f); return x && x !== 'n/a' ? `${f}: ${x}` : ''; }
+    const val = v(e, f);
+    if (!val || val === 'n/a') return '';
+    if (TYPES[f] === 'bool') return isTrue(val) ? f : '';
+    if (f === 'Bra/Cup') return 'Cup ' + val;
+    if (f === 'Babe ID') return 'ID ' + val;
+    return val + (UNITS[f] || '');
+  }
   function metaLine(e) {
-    const a = age(e);
-    return [natDisplay(e), a !== null ? `${a} J.` : '', v(e, 'Height') ? v(e, 'Height') + ' cm' : ''].filter(Boolean).join(' · ');
+    return ui.cardFields.map(f => cardValue(e, f)).filter(Boolean).join(' · ');
+  }
+
+  function applyFilterVisibility() {
+    for (const [id] of BUILTIN_FILTERS) {
+      const el = $('#' + id); if (!el) continue;
+      const box = id === 'f-fav' ? el.closest('label') : el;
+      const hide = !!ui.hiddenFilters[id];
+      box.hidden = hide;
+      if (hide) { if (el.type === 'checkbox') el.checked = false; else el.value = ''; }
+    }
+  }
+  function renderExtraFilters() {
+    const box = $('#xf'); if (!box) return;
+    for (const k of Object.keys(xfVals)) if (!ui.extraFilters.includes(k)) delete xfVals[k];
+    box.innerHTML = ui.extraFilters.map(f => {
+      const counts = new Map(); let empty = 0;
+      for (const e of entries) { const vals = fieldValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
+      const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating'].includes(f);
+      const keys = [...counts.keys()].sort((a, b) => isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
+      const cur = xfVals[f] || '';
+      return `<select data-xf="${esc(f)}" title="${esc(f)}"><option value="">${esc(f)}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(f)}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
+    }).join('');
+  }
+
+  function showViewSettings() {
+    const chk = (name, val, on, label) => `<label class="chk"><input type="checkbox" name="${name}" value="${esc(val)}" ${on ? 'checked' : ''}> ${esc(label)}</label>`;
+    openModal(`
+      <div class="modal-head"><h2>Ansicht anpassen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="help view-cfg" id="view-cfg">
+        <h3>Angaben auf den Kacheln</h3>
+        <p class="muted">Erscheinen unter dem Namen in der gewählten Reihenfolge (Reihenfolge = Klick-Reihenfolge; zuerst gewählt steht vorne).</p>
+        <div class="cfg-grid" id="cfg-card">${CARD_FIELD_CHOICES.map(f => chk('card', f, ui.cardFields.includes(f), f)).join('')}</div>
+        <p class="muted" id="cfg-order"></p>
+        <h3>Abzeichen auf dem Bild</h3>
+        <div class="cfg-grid">${CARD_BADGES.map(([k, l]) => chk('badge', k, ui.cardBadges.includes(k), l)).join('')}</div>
+        <h3>Filter in der Leiste</h3>
+        <div class="cfg-grid">${BUILTIN_FILTERS.map(([id, l]) => chk('filter', id, !ui.hiddenFilters[id], l)).join('')}</div>
+        <h3>Zusätzliche Filter</h3>
+        <p class="muted">Auswahl mit allen vorkommenden Werten (und „leer“).</p>
+        <div class="cfg-grid">${EXTRA_FILTER_CHOICES.map(f => chk('extra', f, ui.extraFilters.includes(f), f)).join('')}</div>
+      </form>
+      <div class="form-foot">
+        <button class="btn ghost" id="cfg-default">Standard</button>
+        <button class="btn" data-action="close">Abbrechen</button>
+        <button class="btn primary" id="cfg-save">Übernehmen</button>
+      </div>`);
+    const form = $('#view-cfg');
+    let order = ui.cardFields.slice();
+    const showOrder = () => { $('#cfg-order').textContent = order.length ? 'Reihenfolge: ' + order.join(' · ') : 'Keine Angaben ausgewählt.'; };
+    showOrder();
+    form.addEventListener('change', (ev) => {
+      if (ev.target.name === 'card') {
+        const f = ev.target.value;
+        order = ev.target.checked ? [...order.filter(x => x !== f), f] : order.filter(x => x !== f);
+        showOrder();
+      }
+    });
+    $('#cfg-default').addEventListener('click', () => {
+      ui.cardFields = ['Nationality', 'Alter', 'Height']; ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
+      saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
+    });
+    $('#cfg-save').addEventListener('click', () => {
+      const vals = (n) => [...form.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value);
+      ui.cardFields = order;
+      ui.cardBadges = vals('badge');
+      const shown = new Set(vals('filter'));
+      ui.hiddenFilters = Object.fromEntries(BUILTIN_FILTERS.filter(([id]) => !shown.has(id)).map(([id]) => [id, true]));
+      ui.extraFilters = vals('extra');
+      saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
+      toast('Ansicht gespeichert (gilt für dieses Gerät).', 'ok');
+    });
   }
 
   function ratingBadge(e) {
@@ -949,10 +1128,10 @@
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
         <div class="img">${coverTag(e)}
           <div class="badges">
-            ${v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
-            ${v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
-            ${ratingBadge(e)}
-            ${e._ranker ? rankerBadge(e) : (isTrue(e['In Ranker']) ? '<span class="badge ranker" title="In der Babepedia-Liste „Ranker“">🏆</span>' : '')}
+            ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
+            ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
+            ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
+            ${!ui.cardBadges.includes('ranker') ? '' : e._ranker ? rankerBadge(e) : (isTrue(e['In Ranker']) ? '<span class="badge ranker" title="In der Babepedia-Liste „Ranker“">🏆</span>' : '')}
           </div>
         </div>
         <div class="body">
@@ -1372,6 +1551,7 @@
         })().catch(err => toast('Backup fehlgeschlagen: ' + (err.message || err), 'err'));
         break;
       case 'scan-images': scanImages(true); break;
+      case 'find-dups': findDuplicates(); break;
       case 'export-csv':
         if (!entries.length) { toast('Keine Einträge zum Exportieren.', 'err'); break; }
         download(`babe-organizer-${entries.length}-profile.csv`, '﻿' + toCSV(entries), 'text/csv;charset=utf-8');
@@ -1445,9 +1625,14 @@
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
+  $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
+  $('#btn-view-cfg').addEventListener('click', showViewSettings);
+  applyFilterVisibility();
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false; render();
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false;
+    for (const k of Object.keys(xfVals)) delete xfVals[k];
+    renderExtraFilters(); render();
   });
 
   // Daten per Drag & Drop importieren

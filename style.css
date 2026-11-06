@@ -409,3 +409,15 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   display: flex; gap: 12px; align-items: center; padding: 8px 10px 8px 14px; border-radius: 10px;
   background: var(--surface-3); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 13px; white-space: nowrap;
 }
+
+.dup-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.dup-row.done { opacity: .55; }
+
+/* Ansicht anpassen */
+.xf { display: contents; }
+.xf select { max-width: 200px; }
+.view-cfg h3 { margin-top: 18px; }
+.cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 14px; }
+.cfg-grid .chk { color: var(--text); }
+/* Kachel-Angaben dürfen über bis zu 3 Zeilen laufen */
+.card .meta { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
