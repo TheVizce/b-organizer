@@ -145,3 +145,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Bei Einträgen ohne Babe ID erkennt das Tool umbenannte Profile über den alten Namen im AKA bzw. eine andere Schreibweise der URL und **fragt nach**, ob der vorhandene Eintrag aktualisiert werden soll.
 - Gibt es schon beide Einträge, bietet es an, sie **zusammenzuführen**: Der ältere Eintrag bleibt (ID, Notizen, Bewertungen, Ranker-Verknüpfung), bekommt die neuen Daten; das Duplikat wird entfernt.
 - Beim Einlesen von Backups gibt es keine Rückfragen (Einträge werden über ihre ID zugeordnet).
+
+## Änderungen in 14.6 (Tool) / 14.5 (Skript) – Umbenennungen nur noch mit Beleg
+- Umbenannte Profile werden nicht mehr über die weiteren Namen (AKA) geraten. Das Tool lässt das Skript prüfen, wohin die alte Babepedia-Adresse heute führt: nur bei Weiterleitung auf die neue Adresse oder gleicher Babe ID gilt es als dasselbe Profil.
+- Bestätigte Umbenennung: vorhandener Eintrag wird ohne Rückfrage aktualisiert. Gibt es schon ein Duplikat, wird vor dem Zusammenführen gefragt.
+- Ohne Skript (z. B. Datei-Import) wird nichts zusammengeführt.
