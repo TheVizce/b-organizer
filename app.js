@@ -1560,6 +1560,31 @@
     return { url: ref };   // als Link anlegen
   }
 
+  // Holt für den Ranker ein Bild, das wirklich lädt: zuerst das gewählte, dann die übrigen Bilder des Eintrags
+  // (jeweils groß), zuletzt die Vorschaubilder. Ohne Userscript bleibt nur ein Link auf das gewählte Bild.
+  async function bestImageForTransfer(e, startIdx, canFetch) {
+    const list = images(e);
+    if (!list.length) return null;
+    const order = [startIdx, ...list.keys()].filter((x, i, a) => x != null && x < list.length && a.indexOf(x) === i);
+    let first = null;
+    for (const i of order) {
+      const img = await imageForTransfer(list[i], canFetch);
+      if (img && img.blob) { recordImg(e._id, 'ok'); return img; }
+      if (!first) first = img;
+    }
+    if (canFetch) {
+      for (const i of order) {
+        const full = R(list[i]), th = thumbUrl(full);
+        if (th === full) continue;
+        const img = await imageForTransfer(th, canFetch);
+        if (img && img.blob) { recordImg(e._id, 'ok'); return img; }
+      }
+      recordImg(e._id, 'none');
+      return { url: (first && first.url) || '', dead: true };   // nichts lädt
+    }
+    return first;   // Userscript nicht aktiv: nur als Link
+  }
+
   // ---------- Dialog „An Image Ranker senden“ (Schritt 1: Auswahl, Schritt 2: Abgleich prüfen) ----------
   const rkNormUrl = (u) => { let s = String(u || '').trim(); try { s = decodeURIComponent(s); } catch {} return s.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/[\s_]+/g, '_'); };
   const rkNormName = (n) => String(n || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -1770,17 +1795,27 @@
       if (nNew > 200 && !confirm(`${nNew} neue Bilder anlegen? Die Bilder werden einzeln geholt, das kann einige Minuten dauern.`)) return;
       $('#rk-send').disabled = true;
       const canFetch = nNew ? await userscriptCanFetch() : false;
-      const items = []; let links = 0, noImg = 0;
+      const items = []; let links = 0, noImg = 0; const dead = [];
       for (let k = 0; k < send.length; k++) {
         const r = send[k], e = r.e;
         $('#rk-msg2').textContent = `Bereite vor… ${k + 1} / ${send.length}`;
         const props = Object.entries(fields).map(([f, s]) => ({ name: s.name || f, type: s.type, values: rkValues(e, f, s.type) }));
         const base = { boId: e._id, name: v(e, 'Name'), profileUrl: v(e, 'Profile URL'), props };
         if (r.dec === 'link') { items.push(Object.assign(base, { linkTo: r.target, create: false })); continue; }
-        const ref = images(e)[pick.get(e._id)];
-        const img = ref ? await imageForTransfer(ref, canFetch) : null;
-        if (!img) noImg++; else if (!img.blob) links++;
-        items.push(Object.assign(base, { create: true, blob: img && img.blob || null, url: img && img.url || '' }));
+        const img = await bestImageForTransfer(e, pick.get(e._id), canFetch);
+        if (!img || img.dead) { noImg++; dead.push(items.length); } else if (!img.blob) links++;
+        items.push(Object.assign(base, { create: true, blob: img && img.blob || null, url: img && !img.dead && img.url || '' }));
+      }
+      // Einträge, bei denen kein einziges Bild lädt: nachfragen statt stillschweigend ohne Bild anlegen
+      if (dead.length) {
+        const names = dead.map(i => items[i].name);
+        const keep = confirm(`${dead.length} Eintr${dead.length === 1 ? 'ag hat' : 'äge haben'} kein Bild, das lädt:\n\n${names.slice(0, 15).join('\n')}${names.length > 15 ? `\n… und ${names.length - 15} weitere` : ''}\n\n[OK] = trotzdem ohne Bild im Ranker anlegen\n[Abbrechen] = diese weglassen (der Rest wird gesendet)`);
+        if (!keep) {
+          const drop = new Set(dead);
+          for (let i = items.length - 1; i >= 0; i--) if (drop.has(i)) items.splice(i, 1);
+          noImg = 0;
+          if (!items.length) { $('#rk-send').disabled = false; $('#rk-msg2').textContent = 'Nichts mehr zu senden. Hinterlege zuerst ein Bild (z. B. „Eigene Bilder“ im Bearbeiten-Formular).'; return; }
+        }
       }
       try {
         const d = await transferDb();
@@ -1789,9 +1824,9 @@
       } catch (err) { $('#rk-send').disabled = false; $('#rk-msg2').textContent = 'Übergabe fehlgeschlagen: ' + (err && err.message || err); return; }
       if (transferChannel) transferChannel.postMessage({ type: 'job' });
       closeModal(true);
-      const nl = send.length - nNew;
+      const sentNew = items.filter(x => x.create).length, nl = items.length - sentNew;
       const hints = [links ? `${links} nur als Link${canFetch ? '' : ' (Userscript nicht aktiv)'}` : '', noImg ? `${noImg} ohne Bild` : ''].filter(Boolean).join(', ');
-      toast(`An „${t}“ übergeben: ${nl} verknüpfen, ${nNew} neu${hints ? ' – ' + hints : ''}. Der Image Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
+      toast(`An „${t}“ übergeben: ${nl} verknüpfen, ${sentNew} neu${hints ? ' – ' + hints : ''}. Der Image Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
       rkOfferOpen();
     }
   }
