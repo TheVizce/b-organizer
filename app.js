@@ -516,8 +516,41 @@
     }
   }
 
+  // Fragt das Tampermonkey-Skript, wohin eine Babepedia-Adresse heute führt (Weiterleitung + Babe ID).
+  // Liefert null, wenn das Skript nicht da ist oder nicht antwortet.
+  let resolverOk = null;
+  function scriptPing() {
+    if (resolverOk !== null) return Promise.resolve(resolverOk);
+    return new Promise(res => {
+      const t = setTimeout(() => { window.removeEventListener('message', on); resolverOk = false; res(false); }, 1500);
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_RESOLVE_ACK') { clearTimeout(t); window.removeEventListener('message', on); resolverOk = true; res(true); } }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_RESOLVE_PING' }, location.origin);
+    });
+  }
+  async function resolveProfile(url) {
+    if (!(await scriptPing())) return null;
+    const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return new Promise(res => {
+      const t = setTimeout(() => { window.removeEventListener('message', on); res(null); }, 20000);
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_RESOLVE_RESULT' && ev.data.id === id) { clearTimeout(t); window.removeEventListener('message', on); res(ev.data); } }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_RESOLVE', id, url }, location.origin);
+    });
+  }
+  // Ist „old“ wirklich dasselbe Babepedia-Profil wie „item“? Nur mit Beleg: gleiche Babe ID
+  // oder die alte Adresse leitet heute auf die neue weiter.
+  async function sameProfile(old, item) {
+    const a = v(old, 'Babe ID'), b = v(item, 'Babe ID');
+    if (a && b) return a === b;
+    const r = await resolveProfile(old['Profile URL']);
+    if (!r || !r.ok) return false;
+    if (b && r.babeId) return r.babeId === b;
+    return normUrl(r.finalUrl) === normUrl(item['Profile URL']);
+  }
+
   async function importItems(items) {
-    let added = 0, updated = 0, skipped = 0, merged = 0;
+    let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0;
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const byId = new Map(entries.map(e => [e._id, e]));
     let ix = null;
@@ -529,18 +562,18 @@
       if (!item.Name) { skipped++; continue; }
       const k = keyOf(item);
       let existing = (raw._id && byId.get(raw._id)) || index.get(k);
-      // Umbenanntes Profil? Nur für frisch geholte Babepedia-Profile (Backups bringen ihre _id mit);
-      // gleiche Babe ID gilt als sicher, sonst wird immer nachgefragt.
+      // Umbenanntes Profil? Nur für frisch geholte Babepedia-Profile (Backups bringen ihre _id mit).
+      // Kandidaten (alter Name im AKA, andere Schreibweise, gleiche Babe ID) werden nur übernommen,
+      // wenn Babepedia es belegt: gleiche Babe ID oder Weiterleitung der alten Adresse auf die neue.
       if (!raw._id && /\/babe\//.test(normUrl(item['Profile URL']))) {
         if (!ix) ix = buildRenameIndex();
         const cands = renameCandidates(item, existing, ix);
-        if (cands.length === 1) {
-          const old = cands[0];
-          const sameId = v(item, 'Babe ID') && v(old, 'Babe ID') === v(item, 'Babe ID');
-          const msg = existing
-            ? `„${old.Name}“ und „${existing.Name}“ sind offenbar dasselbe Babepedia-Profil (umbenannt).\n\nZusammenführen? Der ältere Eintrag „${old.Name}“ bleibt erhalten (mit Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die neuen Daten; „${existing.Name}“ wird entfernt.`
-            : `Babepedia-Profil umbenannt?\n\nAlt: ${old.Name}  (${old['Profile URL']})\nNeu: ${item.Name}  (${item['Profile URL']})\n\n[OK] = vorhandenen Eintrag aktualisieren\n[Abbrechen] = als neuen Eintrag anlegen`;
-          if (sameId || confirm(msg)) {
+        let old = null;
+        for (const c of cands) { if (await sameProfile(c, item)) { old = c; break; } }
+        if (old) {
+          const msg = `„${old.Name}“ und „${existing && existing.Name}“ sind dasselbe Babepedia-Profil (umbenannt, von Babepedia bestätigt).\n\nZusammenführen? Der ältere Eintrag „${old.Name}“ bleibt erhalten (mit Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die neuen Daten; „${existing && existing.Name}“ wird entfernt.`;
+          if (!existing || confirm(msg)) {
+            if (!existing) renamed++;
             if (existing && existing !== old) {
               mergeOwn(old, existing);
               entries = entries.filter(x => x !== existing);
@@ -572,7 +605,7 @@
     refreshFilters();
     render();
     await save();
-    return { added, updated, skipped, merged };
+    return { added, updated, skipped, merged, renamed };
   }
 
   function parseCSV(text) {
@@ -637,7 +670,7 @@
     if (!items.length) { toast('Keine Einträge in der Datei gefunden.', 'err'); return; }
     let r;
     try { r = await importItems(items); } catch { return; }
-    toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.merged ? `, ${r.merged} zusammengeführt` : ''}${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
+    toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
   }
 
   // ---------- Brücke zum Userscript ----------
@@ -658,7 +691,7 @@
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
       bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
-        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
+        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
   });

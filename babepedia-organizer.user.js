@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.4
+// @version      14.5
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -89,6 +89,28 @@
                     else reply(null);
                 },
                 onerror: () => reply(null), ontimeout: () => reply(null)
+            });
+        });
+
+        // Für die Erkennung umbenannter Profile: wohin führt eine Babepedia-Adresse heute? (Weiterleitung + Babe ID)
+        window.addEventListener('message', (ev) => {
+            if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
+            const d = ev.data;
+            if (d.type === 'BP_RESOLVE_PING') { window.postMessage({ type: 'BP_RESOLVE_ACK' }, location.origin); return; }
+            if (d.type !== 'BP_RESOLVE' || typeof d.url !== 'string') return;
+            const reply = (x) => window.postMessage({ type: 'BP_RESOLVE_RESULT', id: d.id, ...x }, location.origin);
+            let u;
+            try { u = new URL(d.url); } catch (e) { reply({ ok: false }); return; }
+            if (!/(^|\.)babepedia\.com$/.test(u.hostname) || !/^\/babe\//.test(u.pathname)) { reply({ ok: false }); return; }
+            GM_xmlhttpRequest({
+                method: 'GET', url: u.href, timeout: 20000,
+                onload: (r) => {
+                    const html = r.responseText || '';
+                    const babeId = (html.match(/babeid\s*[:=]\s*['"]?(\d+)/i) || [])[1] || '';
+                    const hasProfile = /id=["']babename["']/.test(html);
+                    reply({ ok: r.status >= 200 && r.status < 300 && hasProfile, status: r.status, finalUrl: r.finalUrl || u.href, babeId });
+                },
+                onerror: () => reply({ ok: false }), ontimeout: () => reply({ ok: false })
             });
         });
 
