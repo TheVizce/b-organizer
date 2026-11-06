@@ -518,15 +518,34 @@
   const slugOf = (u) => { const m = normUrl(u).match(/\/babe\/([^/]+)/); return m ? plain(m[1]) : ''; };
   // Grundform einer Profiladresse: Klammerzusatz weg ("Ariadna_Majewska_(Ari_Maj)" -> "ariadnamajewska")
   const baseSlugOf = (u) => { const m = normUrl(u).match(/\/babe\/([^/]+)/); return m ? plain(m[1].replace(/\([^)]*\)/g, '')) : ''; };
+  // Tippfehler-Abstand (Vertauschen zweier Buchstaben zählt als 1): "bhattaria" ~ "bhattarai"
+  function typoDist(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let p2 = null, p1 = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i]; let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        let d = Math.min(p1[j] + 1, cur[j - 1] + 1, p1[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (p2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d = Math.min(d, p2[j - 2] + 1);
+        cur.push(d); if (d < best) best = d;
+      }
+      if (best > max) return max + 1;
+      p2 = p1; p1 = cur;
+    }
+    return p1[b.length];
+  }
+  const typoMax = (n) => n >= 10 ? 2 : n >= 6 ? 1 : 0;
   function buildRenameIndex() {
-    const bySlug = new Map(), byBabeId = new Map();
+    const bySlug = new Map(), byBabeId = new Map(), byPrefix = new Map();
     const add = (k, e) => { if (k) { const l = bySlug.get(k) || bySlug.set(k, []).get(k); if (!l.includes(e)) l.push(e); } };
     for (const e of entries) {
       add(slugOf(e['Profile URL']), e);
       add(baseSlugOf(e['Profile URL']), e);
+      const b = baseSlugOf(e['Profile URL']);
+      if (b.length >= 6) { const k = b.slice(0, 3); (byPrefix.get(k) || byPrefix.set(k, []).get(k)).push([b, e]); }
       const id = v(e, 'Babe ID'); if (id) (byBabeId.get(id) || byBabeId.set(id, []).get(id)).push(e);
     }
-    return { bySlug, byBabeId };
+    return { bySlug, byBabeId, byPrefix };
   }
   function renameCandidates(item, exclude, ix) {
     const id = v(item, 'Babe ID');
@@ -540,6 +559,15 @@
         if (id && v(e, 'Babe ID') && v(e, 'Babe ID') !== id) continue; // beide haben IDs, aber verschiedene
         found.add(e);
       }
+    }
+    // Tippfehler in der alten Adresse (Grace_Bhattaria -> Grace_Bhattarai): ähnliche Schreibweise mit gleichem Anfang
+    const base = baseSlugOf(item['Profile URL']), mx = typoMax(base.length);
+    if (mx) for (const [b, e] of ix.byPrefix.get(base.slice(0, 3)) || []) {
+      if (found.has(e) || b === base || normUrl(e['Profile URL']) === ownUrl) continue;
+      if (id && v(e, 'Babe ID') && v(e, 'Babe ID') !== id) continue;
+      const bi = v(item, 'Born'), be = v(e, 'Born');
+      if (bi && be && bi !== be) continue;   // anderes Geburtsdatum = andere Person, nicht erst bei Babepedia fragen
+      if (typoDist(base, b, mx) <= mx) found.add(e);
     }
     found.delete(exclude);
     return [...found].slice(0, 6);   // jeder Kandidat wird bei Babepedia geprüft – nicht zu viele
@@ -567,7 +595,29 @@
       window.postMessage({ type: 'BP_RESOLVE_PING' }, location.origin);
     });
   }
+  // Babepedia schonen: jede Adresse nur einmal pro Sitzung abrufen, mind. 2,5 s Abstand,
+  // und bei einer Sperre (429 / Cloudflare 1015, 403) 30 Minuten gar nicht mehr fragen.
+  const resolveCache = new Map();
+  let resolveNext = 0, resolveBlockedUntil = 0;
+  const resolveBlocked = () => Date.now() < resolveBlockedUntil;
   async function resolveProfile(url) {
+    const key = normUrl(url);
+    if (resolveCache.has(key)) return resolveCache.get(key);
+    if (resolveBlocked()) return null;
+    const wait = resolveNext - Date.now();
+    resolveNext = Math.max(Date.now(), resolveNext) + 2500;
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    if (resolveBlocked()) return null;
+    const r = await resolveRaw(url);
+    if (r && (r.status === 429 || r.status === 403 || r.status === 503)) {
+      resolveBlockedUntil = Date.now() + 30 * 60e3;
+      toast('Babepedia blockt gerade Anfragen (zu viele Zugriffe). Prüfungen pausieren 30 Minuten.', 'err');
+      return null;
+    }
+    if (r && r.ok) resolveCache.set(key, r);
+    return r;
+  }
+  async function resolveRaw(url) {
     if (!(await scriptPing())) return null;
     const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     return new Promise(res => {
@@ -609,9 +659,23 @@
       const [a, b] = pairs[i];
       const st = $('#dup-status'); if (!st) return;   // Fenster geschlossen
       st.textContent = `Prüfe bei Babepedia… ${i + 1} / ${pairs.length}`;
-      const [ra, rb] = [await resolveProfile(a['Profile URL']), await resolveProfile(b['Profile URL'])];
-      const same = (ra && rb && ra.ok && rb.ok) && (normUrl(ra.finalUrl) === normUrl(rb.finalUrl) || (ra.babeId && ra.babeId === rb.babeId));
+      const ia = v(a, 'Babe ID'), ib = v(b, 'Babe ID');
+      let ra = null, rb = null, same = false;
+      if (ia && ib) same = ia === ib;   // beide IDs bekannt: kein Abruf nötig
+      else {
+        // erst eine Adresse abrufen – leitet sie auf die andere weiter, reicht das
+        ra = await resolveProfile(a['Profile URL']);
+        if (ra && ra.ok && normUrl(ra.finalUrl) === normUrl(b['Profile URL'])) same = true;
+        else if (ra && ra.ok && ra.babeId && ib) same = ra.babeId === ib;
+        else if (ra && ra.ok) {
+          rb = await resolveProfile(b['Profile URL']);
+          same = !!(rb && rb.ok) && (normUrl(ra.finalUrl) === normUrl(rb.finalUrl) || (!!ra.babeId && ra.babeId === rb.babeId));
+        }
+      }
+      if (resolveBlocked()) { st.textContent = `Babepedia blockt gerade Anfragen – abgebrochen bei ${i + 1} / ${pairs.length}. Später erneut versuchen (bereits geprüfte Adressen werden nicht noch einmal abgerufen, solange das Tool offen bleibt).`; break; }
       if (!same) continue;
+      // ohne Abruf (beide IDs bekannt): der zuletzt aktualisierte Eintrag hat die aktuelle Adresse
+      ra = ra || { finalUrl: ((b._updated || 0) > (a._updated || 0) ? b : a)['Profile URL'], babeId: ia }; rb = rb || { babeId: ib };
       // Behalten: der Eintrag mit Ranker-Verknüpfung, sonst der ältere. Daten kommen vom Eintrag mit der aktuellen Adresse.
       const cur = normUrl(a['Profile URL']) === normUrl(ra.finalUrl) ? a : b;
       const keep = (a._ranker && !b._ranker) ? a : (b._ranker && !a._ranker) ? b : ((a._created || 0) <= (b._created || 0) ? a : b);
@@ -625,7 +689,7 @@
         <button class="btn small" data-dup-merge="${idx}">Zusammenführen</button></div>`);
     }
     const st = $('#dup-status'); if (!st) return;
-    st.innerHTML = found.length
+    if (!resolveBlocked()) st.innerHTML = found.length
       ? `${found.length} Doppel-Eintr${found.length === 1 ? 'ag' : 'äge'} von Babepedia bestätigt. Beim Zusammenführen bleibt der obere Eintrag (ID, Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die aktuellen Babepedia-Daten; der untere wird entfernt.`
       : 'Keine bestätigten Doppel-Einträge (die verdächtigen Paare sind laut Babepedia verschiedene Profile).';
     list.addEventListener('click', async (ev) => {
