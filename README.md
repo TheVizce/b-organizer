@@ -160,3 +160,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Umbenennungen werden auch erkannt, wenn der alte Name einen Zusatz in Klammern hatte (z. B. `Ariadna_Majewska_(Ari_Maj)` → `Ariadna_Majewska`). Bestätigt wird weiterhin nur über Babepedia (Weiterleitung oder gleiche Babe ID).
 - **Daten → Doppel-Einträge suchen**: prüft bereits vorhandene Paare über das Skript und bietet pro bestätigtem Paar „Zusammenführen“ an. Es bleibt der ältere bzw. im Ranker verknüpfte Eintrag (ID, eigene Felder, Ranker-Verknüpfung); die Babepedia-Daten kommen von der aktuellen Profiladresse.
 - **⚙︎ Ansicht**: Angaben unter dem Namen auf den Kacheln (Reihenfolge = Klick-Reihenfolge), Abzeichen auf dem Bild, sichtbare Filter und zusätzliche Filter (z. B. Ethnicity, Geburtsjahr, Tattoos – mit allen vorkommenden Werten und „leer“) selbst wählen. Gespeichert pro Gerät im localStorage (`bp-organizer-ui`), nicht im Sync.
+
+## Änderungen in 14.9 (Tool) – Tippfehler-Umbenennungen, Babepedia schonen
+- Umbenennungen mit korrigiertem Tippfehler werden erkannt (z. B. `Grace_Bhattaria` → `Grace_Bhattarai`: vertauschte, fehlende oder falsche Buchstaben). Kandidaten mit unterschiedlichem Geburtsdatum werden gar nicht erst geprüft; bestätigt wird weiter nur über Babepedia.
+- Prüfungen bei Babepedia: höchstens ein Abruf alle 2,5 s, jede Adresse nur einmal pro Sitzung, bei bekannten Babe IDs gar kein Abruf. Meldet Babepedia eine Sperre (429 / Cloudflare 1015, 403, 503), pausieren alle Prüfungen 30 Minuten und die Doppel-Suche bricht mit Hinweis ab.
