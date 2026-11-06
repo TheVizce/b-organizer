@@ -29,6 +29,7 @@
           <button data-action="import-file">Importieren (CSV / JSON)…</button>
           <button data-action="export-json">Backup exportieren (JSON)</button>
           <button data-action="export-csv">Als CSV exportieren (Notion)</button>
+          <button data-action="scan-images">Alle Bilder neu prüfen</button>
           <hr>
           <button data-action="help">Anleitung</button>
           <button data-action="clear-all" class="danger">Alle Einträge löschen…</button>
@@ -70,11 +71,22 @@
       <option value="">Fehlende Werte: egal</option>
       <option value="any">⚠ irgendeiner fehlt</option>
       <option value="none">✓ alle vorhanden</option>
-      <option value="Professions">fehlt: Profession</option>
-      <option value="Nationality">fehlt: Nationality</option>
-      <option value="Hair color">fehlt: Hair Color</option>
-      <option value="Born">fehlt: Born</option>
-      <option value="Bra/Cup">fehlt: Bra/Cup</option>
+      <optgroup label="fehlt (evtl. auch andere)">
+        <option value="Professions">fehlt: Profession</option>
+        <option value="Nationality">fehlt: Nationality</option>
+        <option value="Hair color">fehlt: Hair Color</option>
+        <option value="Born">fehlt: Born</option>
+        <option value="Bra/Cup">fehlt: Bra/Cup</option>
+        <option value="__img">fehlt: Bild (lädt nicht)</option>
+      </optgroup>
+      <optgroup label="nur dieser fehlt">
+        <option value="only:Professions">nur Profession fehlt</option>
+        <option value="only:Nationality">nur Nationality fehlt</option>
+        <option value="only:Hair color">nur Hair Color fehlt</option>
+        <option value="only:Born">nur Born fehlt</option>
+        <option value="only:Bra/Cup">nur Bra/Cup fehlt</option>
+        <option value="only:__img">nur Bild (lädt nicht) fehlt</option>
+      </optgroup>
     </select>
     <label class="chk"><input type="checkbox" id="f-fav"> nur Favoriten</label>
     <select id="sort">

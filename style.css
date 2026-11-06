@@ -402,3 +402,10 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   .form-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
   .detail { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
+
+/* Fortschritt der Bildprüfung (unten mittig, damit es nicht mit ⌂/☁︎ unten links kollidiert) */
+.scanbar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 85;
+  display: flex; gap: 12px; align-items: center; padding: 8px 10px 8px 14px; border-radius: 10px;
+  background: var(--surface-3); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 13px; white-space: nowrap;
+}
