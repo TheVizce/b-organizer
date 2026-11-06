@@ -412,14 +412,46 @@
   }
   // Cover: nimmt das erste Bild (als Vorschaubild); lädt es nicht (oder ist es winzig),
   // wird erst das große Bild und dann das nächste probiert
-  const coverTag = (e, cls = '') => {
-    const list = images(e);
-    const alt = v(e, 'Name');
-    if (!list.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
+  function coverTries(e) {
     const tries = [];
-    list.slice(0, 6).forEach(u => { const full = R(u), th = thumbUrl(full); tries.push(th); if (th !== full) tries.push(full); });
-    return `<img src="${esc(tries[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}" data-alts="${esc(tries.slice(1).join('\n'))}">`;
+    images(e).slice(0, 6).forEach(u => { const full = R(u); if (!full) return; const th = thumbUrl(full); tries.push(th); if (th !== full) tries.push(full); });
+    return tries;
+  }
+  const coverTag = (e, cls = '') => {
+    const tries = coverTries(e);
+    const alt = v(e, 'Name');
+    if (!tries.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
+    return `<img src="${esc(tries[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-eid="${esc(e._id)}" data-fallback="${esc(initials(alt))}" data-alts="${esc(tries.slice(1).join('\n'))}">`;
   };
+
+  // ---------- Bildprüfung: lädt bei einem Eintrag überhaupt ein Bild? ----------
+  // Ergebnis bleibt lokal in der eigenen IndexedDB (Schlüssel 'imgcheck'); ändern sich die Bilder, wird neu geprüft.
+  const imgCheck = new Map(); // _id -> { s: 'ok' | 'none', sig, at }
+  const hashStr = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return h.toString(36); };
+  const imgSig = (e) => hashStr(coverTries(e).join('|'));
+  function imgState(e) {
+    if (!coverTries(e).length) return 'none';
+    const c = imgCheck.get(e._id);
+    return c && c.sig === imgSig(e) ? c.s : 'unknown';
+  }
+  let imgSaveTimer = null;
+  function saveImgCheck(now) {
+    clearTimeout(imgSaveTimer);
+    const run = () => idbSet('imgcheck', Object.fromEntries(imgCheck)).catch(() => {});
+    if (now) return run();
+    imgSaveTimer = setTimeout(run, 2000);
+  }
+  function recordImg(id, s) {
+    const e = entries.find(x => x._id === id); if (!e) return;
+    const prev = imgCheck.get(id), sig = imgSig(e);
+    if (prev && prev.s === s && prev.sig === sig) return;
+    imgCheck.set(id, { s, sig, at: Date.now() });
+    saveImgCheck();
+  }
+  async function loadImgCheck() {
+    const d = await idbGet('imgcheck').catch(() => null);
+    if (d && typeof d === 'object') for (const [k, x] of Object.entries(d)) imgCheck.set(k, x);
+  }
   const imgTag = (src, alt, cls = '') => src
     ? `<img src="${esc(src)}" alt="${esc(alt)}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(initials(alt))}">`
     : `<div class="placeholder">${esc(initials(alt))}</div>`;
@@ -437,11 +469,14 @@
     const img = ev.target;
     if (img.tagName === 'IMG' && img.dataset.alts !== undefined && img.naturalWidth > 0 && img.naturalWidth < 40) {
       if (!nextAlt(img)) img.dispatchEvent(new Event('error'));
+      return;
     }
+    if (img.tagName === 'IMG' && img.dataset.eid && img.naturalWidth >= 40) recordImg(img.dataset.eid, 'ok');
   }, true);
   document.addEventListener('error', (ev) => {
     const img = ev.target;
     if (img.tagName === 'IMG' && nextAlt(img)) return;
+    if (img.tagName === 'IMG' && img.dataset.eid && !img.dataset.failed) recordImg(img.dataset.eid, 'none');
     if (img.tagName === 'IMG' && img.dataset.fallback !== undefined && !img.dataset.failed) {
       img.dataset.failed = '1';
       const ph = document.createElement('div');
@@ -727,9 +762,52 @@
 
   const collator = new Intl.Collator('de');
   // Felder, die auch der Image Ranker nutzt – Filter „Fehlende Werte“
-  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup']];
-  const isMissing = (e, f) => { const x = v(e, f).toLowerCase(); return !x || x === 'n/a' || x === '-' || x === 'unknown'; };
+  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup'], ['__img', 'Bild']];
+  const isMissing = (e, f) => {
+    if (f === '__img') return imgState(e) === 'none';
+    const x = v(e, f).toLowerCase(); return !x || x === 'n/a' || x === '-' || x === 'unknown';
+  };
+  const filterNeedsImages = (mf) => mf && (mf === 'any' || mf === 'none' || /__img$/.test(mf));
   const missingCore = (e) => CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([, label]) => label);
+
+  let scanning = null;
+  async function scanImages(all = false) {
+    if (scanning) return;
+    const todo = entries.filter(e => coverTries(e).length && (all || imgState(e) === 'unknown'));
+    if (!todo.length) { if (all) toast('Keine Einträge mit Bildern.'); return; }
+    const bar = document.createElement('div');
+    bar.className = 'scanbar';
+    bar.innerHTML = `<span class="scan-txt"></span><button class="btn small">Abbrechen</button>`;
+    document.body.appendChild(bar);
+    const txt = $('.scan-txt', bar);
+    scanning = { cancel: false };
+    $('button', bar).addEventListener('click', () => { scanning.cancel = true; });
+    let done = 0, bad = 0, idx = 0;
+    const upd = () => { txt.textContent = `Bilder prüfen: ${done} / ${todo.length}${bad ? ` · ${bad} ohne ladbares Bild` : ''}`; };
+    upd();
+    const tryLoad = (u) => new Promise(res => {
+      const im = new Image(); im.referrerPolicy = 'no-referrer'; im.decoding = 'async';
+      const t = setTimeout(() => { im.src = ''; res(false); }, 12000);
+      im.onload = () => { clearTimeout(t); res(im.naturalWidth >= 40); };
+      im.onerror = () => { clearTimeout(t); res(false); };
+      im.src = u;
+    });
+    async function check(e) {
+      for (const u of coverTries(e)) {
+        if (scanning.cancel) return;
+        if (await tryLoad(u)) { recordImg(e._id, 'ok'); return; }
+      }
+      recordImg(e._id, 'none'); bad++;
+    }
+    await Promise.all(Array.from({ length: 6 }, async () => {
+      while (!scanning.cancel && idx < todo.length) { await check(todo[idx++]); done++; upd(); }
+    }));
+    const cancelled = scanning.cancel;
+    scanning = null; bar.remove();
+    await saveImgCheck(true);
+    render();
+    toast(cancelled ? `Bildprüfung abgebrochen (${done} geprüft).` : `Bildprüfung fertig: ${bad} von ${todo.length} ohne ladbares Bild.`, cancelled ? '' : 'ok');
+  }
 
   function filtered() {
     const q = $('#q').value.trim().toLowerCase();
@@ -745,9 +823,13 @@
     let list = entries.filter(e => {
       if (fav && !isTrue(e.Favorite)) return false;
       if (cf && !catList(e).includes(cf)) return false;
-      if (mf === 'any' && !CORE_FIELDS.some(([f]) => isMissing(e, f))) return false;
-      if (mf === 'none' && CORE_FIELDS.some(([f]) => isMissing(e, f))) return false;
-      if (mf && mf !== 'any' && mf !== 'none' && !isMissing(e, mf)) return false;
+      if (mf) {
+        const miss = CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([f]) => f);
+        if (mf === 'any') { if (!miss.length) return false; }
+        else if (mf === 'none') { if (miss.length) return false; }
+        else if (mf.startsWith('only:')) { if (miss.length !== 1 || miss[0] !== mf.slice(5)) return false; }
+        else if (!miss.includes(mf)) return false;
+      }
       if (rk === 'tool' || rk === 'notool') { if (!!e._ranker !== (rk === 'tool')) return false; }
       else if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
       if (rf) {
@@ -1289,6 +1371,7 @@
           if (n) toast(`Backup mit ${n} eigenen Bildern erstellt.`, 'ok');
         })().catch(err => toast('Backup fehlgeschlagen: ' + (err.message || err), 'err'));
         break;
+      case 'scan-images': scanImages(true); break;
       case 'export-csv':
         if (!entries.length) { toast('Keine Einträge zum Exportieren.', 'err'); break; }
         download(`babe-organizer-${entries.length}-profile.csv`, '﻿' + toCSV(entries), 'text/csv;charset=utf-8');
@@ -1357,6 +1440,8 @@
   let searchTimer = null;
   $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); });
   ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing'].forEach(s => $(s).addEventListener('input', render));
+  // Bild-Filter: ungeprüfte Einträge im Hintergrund prüfen, Liste danach aktualisieren
+  $('#f-missing').addEventListener('input', (ev) => { if (filterNeedsImages(ev.target.value)) scanImages(false); });
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
@@ -1787,6 +1872,7 @@
     try {
       entries = await load();
       await loadLocalImages().catch(() => {});
+      await loadImgCheck();
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;

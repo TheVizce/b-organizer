@@ -150,3 +150,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Umbenannte Profile werden nicht mehr über die weiteren Namen (AKA) geraten. Das Tool lässt das Skript prüfen, wohin die alte Babepedia-Adresse heute führt: nur bei Weiterleitung auf die neue Adresse oder gleicher Babe ID gilt es als dasselbe Profil.
 - Bestätigte Umbenennung: vorhandener Eintrag wird ohne Rückfrage aktualisiert. Gibt es schon ein Duplikat, wird vor dem Zusammenführen gefragt.
 - Ohne Skript (z. B. Datei-Import) wird nichts zusammengeführt.
+
+## Änderungen in 14.7 (Tool) – Bild im Filter „Fehlende Werte“
+- Neuer Wert **Bild**: fehlt, wenn ein Eintrag kein Bild hat oder keines davon lädt. Das Tool merkt sich das lokal (IndexedDB `bp-organizer`, Schlüssel `imgcheck`, nicht im Sync) – beim Anschauen nebenbei und über einen Prüflauf, der beim Wählen eines Bild-Filters automatisch für ungeprüfte Einträge startet (Fortschritt unten, abbrechbar). Ändern sich die Bilder eines Eintrags, wird neu geprüft. *Daten → Alle Bilder neu prüfen* prüft alles erneut.
+- Filter erweitert: **„fehlt: X“** (X fehlt, andere evtl. auch) und **„nur X fehlt“** (alle anderen Werte vorhanden).
