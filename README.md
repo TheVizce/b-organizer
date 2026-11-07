@@ -168,3 +168,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.10 (Tool) – Limit beim Senden an den Ranker
 - **🏆 An Ranker** hat ein einstellbares Limit („Höchstens N Einträge, die noch nicht im Ranker sind“). Es gilt in der aktuellen Sortierung; schon verknüpfte Einträge zählen nicht mit. Der Rest steht unter „⏸ Später“ und kommt beim nächsten Senden dran. Das Limit wird gemerkt (leer = alle).
 - Einträge aus einem Auftrag, den der Image Ranker noch nicht abgeholt hat, werden nicht noch einmal gesendet („⏳ Schon gesendet, wartet auf den Ranker“). So entstehen keine Doppelten, wenn du mehrmals hintereinander sendest, ohne den Ranker zu öffnen.
+
+## Änderungen in 14.11 (Tool) – Ranker nur über die Verknüpfung
+- Filter „Ranker“ und 🏆-Anzeige (Kachel, Tabelle) richten sich nur noch nach der Verknüpfung mit dem Image Ranker. Die Optionen zur Babepedia-Liste sind weg.
+- Das Feld „In Ranker“ wird nicht mehr angezeigt oder bearbeitet. Die Werte bleiben in den Daten (Backup, Sync, CSV) erhalten.
