@@ -164,3 +164,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.9 (Tool) – Tippfehler-Umbenennungen, Babepedia schonen
 - Umbenennungen mit korrigiertem Tippfehler werden erkannt (z. B. `Grace_Bhattaria` → `Grace_Bhattarai`: vertauschte, fehlende oder falsche Buchstaben). Kandidaten mit unterschiedlichem Geburtsdatum werden gar nicht erst geprüft; bestätigt wird weiter nur über Babepedia.
 - Prüfungen bei Babepedia: höchstens ein Abruf alle 2,5 s, jede Adresse nur einmal pro Sitzung, bei bekannten Babe IDs gar kein Abruf. Meldet Babepedia eine Sperre (429 / Cloudflare 1015, 403, 503), pausieren alle Prüfungen 30 Minuten und die Doppel-Suche bricht mit Hinweis ab.
+
+## Änderungen in 14.10 (Tool) – Limit beim Senden an den Ranker
+- **🏆 An Ranker** hat ein einstellbares Limit („Höchstens N Einträge, die noch nicht im Ranker sind“). Es gilt in der aktuellen Sortierung; schon verknüpfte Einträge zählen nicht mit. Der Rest steht unter „⏸ Später“ und kommt beim nächsten Senden dran. Das Limit wird gemerkt (leer = alle).
+- Einträge aus einem Auftrag, den der Image Ranker noch nicht abgeholt hat, werden nicht noch einmal gesendet („⏳ Schon gesendet, wartet auf den Ranker“). So entstehen keine Doppelten, wenn du mehrmals hintereinander sendest, ohne den Ranker zu öffnen.
