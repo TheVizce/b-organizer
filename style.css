@@ -421,3 +421,6 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .cfg-grid .chk { color: var(--text); }
 /* Kachel-Angaben dürfen über bis zu 3 Zeilen laufen */
 .card .meta { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+
+.rk-limit { display: block; margin: 8px 0 4px; color: var(--text); }
+.rk-limit input { width: 80px; margin: 0 4px; }

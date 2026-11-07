@@ -1738,6 +1738,15 @@
   const transferChannel = 'BroadcastChannel' in window ? new BroadcastChannel('tool-transfer') : null;
   const isMobileDevice = () => /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 
+  // Einträge, die schon in einem noch nicht abgeholten Auftrag stecken (Ranker noch nicht geöffnet) – nicht doppelt senden
+  async function pendingTransferIds(tab) {
+    try {
+      const d = await transferDb();
+      const jobs = await new Promise(res => { const r = d.transaction('jobs').objectStore('jobs').getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => res([]); });
+      d.close();
+      return new Set(jobs.filter(j => j.from === 'b-organizer' && j.tab === tab).flatMap(j => (j.items || []).map(i => i.boId)));
+    } catch { return new Set(); }
+  }
   function transferDb() {
     return new Promise((res, rej) => {
       const r = indexedDB.open('tool-transfer', 1);
@@ -1925,6 +1934,7 @@
         <div class="rk-tabrow"><select id="rk-tab">${tabs.map(t => `<option ${t === tab ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="__new">＋ Neuer Reiter…</option></select>
           <input type="text" id="rk-newtab" placeholder="Name des neuen Reiters" hidden></div>
         <label class="chk rk-linkonly"><input type="checkbox" id="rk-linkonly" ${prefs._linkOnly ? 'checked' : ''}> <b>Nur verknüpfen</b> – keine neuen Bilder anlegen</label>
+        ${single ? '' : `<label class="rk-limit">Höchstens <input type="number" id="rk-limit" min="1" step="1" inputmode="numeric" placeholder="alle" value="${prefs._limit || ''}"> Einträge, die noch nicht im Ranker sind <span class="muted">(in der aktuellen Sortierung; schon verknüpfte zählen nicht – beim nächsten Mal kommen die nächsten dran)</span></label>`}
         <h3>Bild <span class="muted" style="text-transform:none;letter-spacing:0">(für neu angelegte Bilder)</span></h3>
         <div id="rk-imgbox">${imgsHTML()}</div>
         <h3>Eigenschaften übernehmen</h3>
@@ -1959,12 +1969,22 @@
       const t = curTab();
       if (!t) { $('#rk-msg').textContent = 'Bitte einen Reiter wählen oder benennen.'; return; }
       const fields = readFields(), linkOnly = $('#rk-linkonly').checked;
-      prefs[t] = Object.assign({}, prefs[t], { fields }); prefs._lastTab = t; prefs._linkOnly = linkOnly; rkSavePrefs(prefs);
+      const limit = single ? 0 : Math.max(0, Math.floor(Number($('#rk-limit').value) || 0));
+      prefs[t] = Object.assign({}, prefs[t], { fields }); prefs._lastTab = t; prefs._linkOnly = linkOnly;
+      if (!single) { if (limit) prefs._limit = limit; else delete prefs._limit; }
+      rkSavePrefs(prefs);
       $('#rk-next').disabled = true; $('#rk-msg').textContent = 'Lese den Ranker…';
       const rImgs = await rankerTabImages(t);
       const rows = matchEntries(list, rImgs);
       // Entscheidung je Eintrag: 'link' (target), 'new', 'skip'
+      const pending = await pendingTransferIds(t);
+      rows.forEach(r => { if (pending.has(r.e._id) && (r.kind === 'none' || r.kind === 'check')) { r.kind = 'pending'; r.target = null; } });
       rows.forEach(r => { r.dec = r.target ? 'link' : (r.kind === 'none' && !linkOnly ? 'new' : 'skip'); });
+      // Limit: nur die ersten N Einträge, die noch nicht im Ranker sind (kein Treffer / bitte prüfen); der Rest kommt beim nächsten Mal
+      if (limit) {
+        let n = 0;
+        rows.forEach(r => { if (r.kind === 'none' || r.kind === 'check') { if (++n > limit) { r.kind = 'later'; r.dec = 'skip'; r.target = null; } } });
+      }
       $('#rk-step1').hidden = true;
       renderStep2(t, fields, linkOnly, rows, rImgs);
     });
@@ -1998,6 +2018,8 @@
           ${sec('⚠ Bitte prüfen', g('check'), true, 'Nur der Name passt oder mehrere Bilder haben denselben Profil-Link. Ohne Klick werden sie übersprungen – richtiges Bild antippen, um zu verknüpfen.')}
           ${sec('Kein Treffer', g('none'), true, linkOnly ? 'Kein passendes Bild gefunden. Von Hand suchen oder überspringen.' : 'Kein passendes Bild gefunden. Werden neu angelegt, außer du wählst ein Bild oder überspringst.')}
           ${sec('✓ Automatisch über den Profil-Link', g('auto'), false)}
+          ${sec('⏳ Schon gesendet, wartet auf den Ranker', g('pending'), false, 'Diese Einträge stecken in einem Auftrag, den der Image Ranker noch nicht abgeholt hat (er übernimmt ihn beim nächsten Öffnen). Sie werden nicht noch einmal gesendet.')}
+          ${sec('⏸ Später (über dem Limit)', g('later'), false, 'Werden diesmal übersprungen und beim nächsten Senden angeboten. Einzelne kannst du trotzdem jetzt verknüpfen oder neu anlegen.')}
           ${sec('✓ Bereits verknüpft', g('linked'), false)}
           <div class="rk-foot"><button class="btn ghost" id="rk-back">← Zurück</button><span class="muted" id="rk-msg2">${c.link} verknüpfen · ${c.new} neu · ${c.skip} überspringen</span>
             <button class="btn primary" id="rk-send" ${c.link + c.new ? '' : 'disabled'}>Ausführen</button></div>`;
