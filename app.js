@@ -22,7 +22,7 @@
   const GROUPS = [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes'] },
+    { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
@@ -959,8 +959,8 @@
         else if (mf.startsWith('only:')) { if (miss.length !== 1 || miss[0] !== mf.slice(5)) return false; }
         else if (!miss.includes(mf)) return false;
       }
-      if (rk === 'tool' || rk === 'notool') { if (!!e._ranker !== (rk === 'tool')) return false; }
-      else if (rk && String(isTrue(e['In Ranker'])) !== rk) return false;
+      // Ranker-Filter nur über die Verknüpfung mit dem Image Ranker (alte Werte tool/notool aus gespeicherten Filtern weiter verstehen)
+      if (rk) { const want = rk === 'true' || rk === 'tool'; if (!!e._ranker !== want) return false; }
       if (rf) {
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
@@ -1182,7 +1182,7 @@
           <td class="num">${esc(v(e, 'User Rating'))}</td>
           <td class="num">${esc(v(e, 'My Rating'))}</td>
           <td class="num">${diffCell(e)}</td>
-          <td>${isTrue(e['In Ranker']) ? '🏆' : ''}</td>
+          <td>${e._ranker ? '🏆' : ''}</td>
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
         </tr>`;
   }
@@ -1195,7 +1195,7 @@
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
-            ${!ui.cardBadges.includes('ranker') ? '' : e._ranker ? rankerBadge(e) : (isTrue(e['In Ranker']) ? '<span class="badge ranker" title="In der Babepedia-Liste „Ranker“">🏆</span>' : '')}
+            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}
           </div>
         </div>
         <div class="body">
@@ -1323,7 +1323,7 @@
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
-            ${isTrue(e['In Ranker']) ? '<span class="chip ranker" title="In der Babepedia-Liste „Ranker“">🏆 Babepedia-Liste</span>' : ''}
+
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
