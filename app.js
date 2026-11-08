@@ -946,6 +946,7 @@
 
     const xf = Object.entries(xfVals).filter(([, x]) => x);
     let list = entries.filter(e => {
+      if (statFilter && !statFilter.test(e)) return false;
       if (fav && !isTrue(e.Favorite)) return false;
       for (const [f, want] of xf) {
         const vals = fieldValues(e, f);
@@ -1153,7 +1154,9 @@
         <button class="btn ghost" data-action="help">Anleitung</button></div>`;
       return;
     }
+    renderStatChip();
     if (!list.length) { main.innerHTML = `<div class="empty"><h2>Keine Treffer</h2><p>Passe Suche oder Filter an.</p></div>`; return; }
+    if (ui.view === 'stats') { main.innerHTML = statsHTML(list); return; }
 
     shown = list; shownCount = 0;
     if (ui.view === 'table') {
@@ -1206,6 +1209,124 @@
   }
   // Nur so viele Karten erzeugen, wie sichtbar sind; weitere beim Scrollen nachladen
   let shown = [], shownCount = 0;
+  // ---------- Statistik ----------
+  // Zeigt, wie oft Eigenschaften vorkommen – immer für die aktuell gefilterte Liste.
+  // Ein Klick auf einen Balken filtert die Liste danach (Chip in der Leiste, ✕ entfernt ihn).
+  let statFilter = null;          // { label, test(e) } – nicht gespeichert
+  let statRefs = [];              // Klickziele der aktuellen Statistik
+  const STAT_CATS = [
+    ['Nationality', 'Nationalität'], ['Profession Category', 'Bereich'], ['Professions', 'Professions'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'],
+    ['Body type', 'Figur'], ['Ethnicity', 'Ethnicity'], ['Bra/Cup', 'Cup'], ['Boobs', 'Boobs'], ['Sexuality', 'Sexuality'], ['Tattoos', 'Tattoos'],
+    ['Piercings', 'Piercings'], ['Active', 'Aktiv'], ['Favorite', 'Favorit'], ['Tags', 'Tags'], ['Geburtsland', 'Geburtsland'], ['Birthplace', 'Geburtsort']];
+  const COUNTRY_ALIAS = { 'usa': 'United States', 'us': 'United States', 'u.s.': 'United States', 'uk': 'United Kingdom', 'england': 'United Kingdom', 'russian federation': 'Russia' };
+  function statValues(e, f) {
+    if (f !== 'Geburtsland') return fieldValues(e, f);
+    const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return [];
+    const last = bp.split(',').pop().trim(); return last ? [COUNTRY_ALIAS[last.toLowerCase()] || last] : [];
+  }
+  const STAT_NUMS = [
+    ['Alter', 'Alter', 5, ' J.'], ['Geburtsjahr', 'Geburtsjahrzehnt', 10, 'er'], ['Height', 'Größe', 5, ' cm'], ['Weight', 'Gewicht', 5, ' kg'],
+    ['Global Rating', 'Global Rating', 0.5, ''], ['User Rating', 'User Rating (Babepedia)', 1, ''], ['My Rating', 'Meine Bewertung', 1, '']];
+  const CUP_ORDER = 'AA A B C D DD DDD E F FF G GG H HH I J K L M N'.split(' ');
+  function statSection(title, rows, total, empty, opts = {}) {
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map(r => r.n), opts.emptyRow ? opts.emptyRow.n : 0);
+    const limit = opts.limit || 15;
+    const bar = (r) => {
+      const i = statRefs.push(r) - 1;
+      const pct = total ? (r.n / total * 100) : 0;
+      return `<button class="st-row" data-sf="${i}" title="Liste danach filtern"><span class="st-lbl">${r.html || esc(r.label)}</span><span class="st-bar"><i style="width:${(r.n / max * 100).toFixed(1)}%"></i></span><span class="st-n">${r.n}</span><span class="st-p">${pct < 1 && pct > 0 ? '<1' : Math.round(pct)} %</span></button>`;
+    };
+    const head = rows.slice(0, limit), rest = rows.slice(limit);
+    return `<section class="st-card${opts.wide ? ' wide' : ''}">
+      <h3>${esc(title)} <span class="muted">${rows.length} Wert${rows.length === 1 ? '' : 'e'}${empty ? ` · ${empty} ohne Angabe` : ''}</span></h3>
+      ${head.map(bar).join('')}
+      ${rest.length ? `<details><summary>alle ${rows.length} zeigen</summary>${rest.map(bar).join('')}</details>` : ''}
+      ${opts.emptyRow ? `<div class="st-empty">${bar(opts.emptyRow)}</div>` : ''}
+    </section>`;
+  }
+  function statsHTML(list) {
+    statRefs = [];
+    const total = list.length;
+    const mean = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+    const median = (xs) => { if (!xs.length) return null; const a = xs.slice().sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+    const f1 = (x, d = 1) => x == null ? '–' : x.toLocaleString('de-DE', { maximumFractionDigits: d });
+    const pct = (n) => total ? Math.round(n / total * 100) + ' %' : '–';
+    const ages = list.map(age).filter(x => x != null), hs = list.map(e => num(v(e, 'Height'))).filter(x => x > 100 && x < 230);
+    const gr = list.map(e => num(v(e, 'Global Rating'))).filter(x => x != null), mr = list.map(e => num(v(e, 'My Rating'))).filter(x => x != null);
+    const fav = list.filter(e => isTrue(e.Favorite)).length, rk = list.filter(e => e._ranker).length, act = list.filter(e => isTrue(e.Active)).length;
+    const tile = (big, small, test, label) => {
+      const i = test ? statRefs.push({ label, test }) - 1 : -1;
+      return `<${test ? `button data-sf="${i}"` : 'div'} class="st-tile"><b>${big}</b><span>${small}</span></${test ? 'button' : 'div'}>`;
+    };
+    const tiles = [
+      tile(total.toLocaleString('de-DE'), total === entries.length ? 'Einträge' : `von ${entries.length} Einträgen (gefiltert)`),
+      tile(`${fav} <small>${pct(fav)}</small>`, 'Favoriten', e => isTrue(e.Favorite), 'Favorit'),
+      tile(`${rk} <small>${pct(rk)}</small>`, 'im Image Ranker', e => !!e._ranker, 'im Ranker'),
+      tile(`${act} <small>${pct(act)}</small>`, 'aktiv', e => isTrue(e.Active), 'aktiv'),
+      tile(f1(mean(ages)), `Ø Alter · Median ${f1(median(ages), 0)}`),
+      tile(f1(mean(hs), 0) + ' cm', `Ø Größe · ${hs.length ? Math.min(...hs) + '–' + Math.max(...hs) : '–'}`),
+      tile(f1(mean(gr), 2), `Ø Global Rating · ${gr.length} bewertet`),
+      tile(f1(mean(mr), 1), `Ø meine Bewertung · ${mr.length} bewertet`, e => num(v(e, 'My Rating')) != null, 'selbst bewertet'),
+    ].join('');
+
+    // Kategorien: Werte zählen (Mehrfachfelder einzeln)
+    const cats = STAT_CATS.map(([f, title]) => {
+      const counts = new Map(); let empty = 0;
+      for (const e of list) { const vals = [...new Set(statValues(e, f))]; if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
+      let rows = [...counts].map(([label, n]) => ({ label, n, test: e => statValues(e, f).includes(label), flabel: `${title}: ${label}` }));
+      if (f === 'Bra/Cup') rows.sort((a, b) => { const ia = CUP_ORDER.indexOf(a.label.toUpperCase()), ib = CUP_ORDER.indexOf(b.label.toUpperCase()); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label); });
+      else rows.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'de'));
+      if (f === 'Nationality') rows.forEach(r => { r.html = `${flagFor(r.label) || ''} ${esc(r.label)}`; });
+      return statSection(title, rows, total, empty, { limit: f === 'Bra/Cup' ? 30 : 15,
+        emptyRow: empty ? { label: '(ohne Angabe)', n: empty, test: e => !statValues(e, f).length, flabel: `${title}: ohne Angabe` } : null });
+    });
+
+    // Zahlen: in Stufen einteilen
+    const nums = STAT_NUMS.map(([f, title, step, unit]) => {
+      const counts = new Map(); let empty = 0;
+      for (const e of list) {
+        let x = f === 'Alter' ? age(e) : num(fieldValues(e, f)[0]);
+        if (x == null || (f === 'Height' && (x < 100 || x > 230)) || (f === 'Weight' && (x < 25 || x > 200))) { empty++; continue; }
+        const b = Math.floor(x / step + 1e-9) * step;
+        counts.set(b, (counts.get(b) || 0) + 1);
+      }
+      const keys = [...counts.keys()].sort((a, b) => a - b);
+      const lbl = (b) => step === 1 || f === 'Geburtsjahr' ? `${f1(b, 1)}${unit}` : `${f1(b, 1)}–${f1(b + step - (step < 1 ? 0.01 : 1), 2)}${unit}`;
+      const rows = keys.map(b => ({ label: lbl(b), n: counts.get(b), flabel: `${title}: ${lbl(b)}`,
+        test: e => { const x = f === 'Alter' ? age(e) : num(fieldValues(e, f)[0]); return x != null && Math.floor(x / step + 1e-9) * step === b; } }));
+      return statSection(title, rows, total, empty, { limit: 40 });
+    });
+
+    // Image Ranker: Tiers
+    const tiers = new Map();
+    list.forEach(e => { if (e._ranker && e._ranker.tier) tiers.set(e._ranker.tier, (tiers.get(e._ranker.tier) || 0) + 1); });
+    const tierRows = RK_TIERS.map(([, t]) => t).filter(t => tiers.has(t)).map(t => ({ label: t, n: tiers.get(t), flabel: `Ranker-Tier: ${t}`,
+      html: `<span class="badge rk-tier" style="--rk:${rkColor(t)}">${esc(t)}</span>`, test: e => e._ranker && e._ranker.tier === t }));
+
+    // Vollständigkeit
+    const COMPLETE = ['Main Image URL', 'Born', 'Nationality', 'Professions', 'Hair color', 'Eye color', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Body type', 'Ethnicity', 'Babe ID', 'My Rating'];
+    const compRows = COMPLETE.map(f => {
+      const n = list.filter(e => f === 'Main Image URL' ? imgState(e) !== 'none' : fieldValues(e, f).length).length;
+      return { label: f === 'Main Image URL' ? 'Bild' : f, n, flabel: `${f === 'Main Image URL' ? 'Bild' : f}: fehlt`, test: e => f === 'Main Image URL' ? imgState(e) === 'none' : !fieldValues(e, f).length, title: 'Klick: Einträge, bei denen es fehlt' };
+    });
+
+    return `<div class="stats">
+      <div class="st-tiles">${tiles}</div>
+      <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile filtert die Liste danach.</p>
+      <div class="st-grid">
+        ${cats.join('')}
+        ${statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })}
+        ${nums.join('')}
+        ${statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })}
+      </div>
+    </div>`;
+  }
+  function renderStatChip() {
+    const box = $('#sf'); if (!box) return;
+    box.innerHTML = statFilter ? `<button class="chip st-chip" id="sf-clear" title="Diesen Filter entfernen">${esc(statFilter.label)} ✕</button>` : '';
+  }
+
   const STEP = 60;
   function renderMore() {
     const box = ui.view === 'table' ? $('#main tbody') : $('#main .grid');
@@ -1724,8 +1845,15 @@
   // Bild-Filter: ungeprüfte Einträge im Hintergrund prüfen, Liste danach aktualisieren
   $('#f-missing').addEventListener('input', (ev) => { if (filterNeedsImages(ev.target.value)) scanImages(false); });
   $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
-  $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; saveUI(); render(); }));
+  $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; if (ui.view !== 'stats') ui.lastListView = ui.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
+  $('#main').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-sf]'); if (!b || ui.view !== 'stats') return;
+    const r = statRefs[Number(b.dataset.sf)]; if (!r || !r.test) return;
+    statFilter = { label: r.flabel || r.label, test: r.test };
+    ui.view = ui.lastListView || 'grid'; saveUI(); render(); window.scrollTo(0, 0);
+  });
+  $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
   applyFilterVisibility();
@@ -1733,6 +1861,7 @@
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false;
     for (const k of Object.keys(xfVals)) delete xfVals[k];
+    statFilter = null;
     renderExtraFilters(); render();
   });
 

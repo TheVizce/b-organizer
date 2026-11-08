@@ -173,3 +173,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.11 (Tool) – Ranker nur über die Verknüpfung
 - Filter „Ranker“ und 🏆-Anzeige (Kachel, Tabelle) richten sich nur noch nach der Verknüpfung mit dem Image Ranker. Die Optionen zur Babepedia-Liste sind weg.
 - Das Feld „In Ranker“ wird nicht mehr angezeigt oder bearbeitet. Die Werte bleiben in den Daten (Backup, Sync, CSV) erhalten.
+
+## Änderungen in 14.12 (Tool) – Statistik
+- Neue Ansicht **📊 Statistik** (neben Karten/Tabelle): Kennzahlen (Favoriten, im Ranker, aktiv, Ø Alter/Größe/Ratings), Häufigkeit aller Eigenschaften (Nationalität, Bereich, Professions, Haare, Augen, Figur, Ethnicity, Cup, Boobs, Sexuality, Tattoos, Piercings, Tags, Geburtsland/-ort …), Verteilungen (Alter, Geburtsjahrzehnt, Größe, Gewicht, Ratings), Ranker-Tiers und wie vollständig die Felder ausgefüllt sind.
+- Gilt immer für die aktuell gefilterte Liste. Ein Klick auf eine Zeile filtert die Liste danach (Chip in der Leiste, ✕ entfernt ihn).
