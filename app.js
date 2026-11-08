@@ -1287,6 +1287,40 @@
     saveQuiet(); refreshItem(id); showDetail(id);
   }
 
+  // Bild für den Image Ranker austauschen: der Ranker öffnet den Eintrag mit #e=<id>&pick=<Ranker-Bild>&tab=<Reiter>
+  let rankerPick = null;   // { id: Ranker-Bild, tab, boId }
+  function decoratePick(e) {
+    const m = $('#modal .detail') || document.querySelector('.detail'); if (!m) return;
+    const bar = document.createElement('div');
+    bar.className = 'rk-pickbar';
+    bar.innerHTML = `🖼️ <b>Anderes Bild für den Image Ranker wählen:</b> Klick auf „Dieses Bild nehmen“ unter dem gewünschten Bild. Elo, Duelle und Eigenschaften bleiben erhalten. <span data-rk-pick-msg></span>`;
+    m.parentNode.insertBefore(bar, m);
+    document.querySelectorAll('.img-grid .img-cell').forEach(cell => {
+      const im = cell.querySelector('img[data-full]'); if (!im) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn small rk-pick-btn'; b.textContent = '✔ Dieses Bild nehmen'; b.dataset.rkPick = im.dataset.full;
+      cell.appendChild(b);
+    });
+  }
+  async function sendReplacement(ref, btn) {
+    if (!rankerPick) return;
+    const msg = document.querySelector('[data-rk-pick-msg]'), setMsg = (t) => { if (msg) msg.textContent = t; };
+    btn.disabled = true; setMsg('Hole das Bild…');
+    try {
+      const canFetch = await userscriptCanFetch();
+      const img = await imageForTransfer(ref, canFetch);
+      if (!img || (!img.blob && !img.url)) { btn.disabled = false; setMsg('Dieses Bild lässt sich nicht laden – bitte ein anderes wählen.'); return; }
+      const e = byId(rankerPick.boId);
+      const d = await transferDb();
+      await new Promise((res, rej) => { const tx = d.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put({ id: 'bo-img-' + Date.now(), from: 'b-organizer', createdAt: Date.now(), tab: rankerPick.tab, items: [{ boId: rankerPick.boId, name: e ? v(e, 'Name') : '', props: [], linkTo: rankerPick.id, create: false, replaceImage: true, blob: img.blob || null, url: img.url || '' }] }); tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error); });
+      d.close();
+      if (transferChannel) transferChannel.postMessage({ type: 'job' });
+      toast('Neues Bild an den Image Ranker übergeben' + (img.blob ? '.' : ' (nur als Link – Userscript nicht aktiv).'), 'ok');
+      setMsg('✓ Gesendet. Du kannst zum Ranker zurückwechseln.');
+      document.querySelectorAll('.rk-pick-btn').forEach(x => { x.disabled = true; });
+      rankerPick = null;
+    } catch (err) { btn.disabled = false; setMsg('Übergabe fehlgeschlagen: ' + (err && err.message || err)); }
+  }
   function showDetail(id) {
     const e = byId(id); if (!e) return;
     const imgs = images(e);
@@ -1339,6 +1373,7 @@
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
       </div>`);
+    if (rankerPick && rankerPick.boId === e._id) decoratePick(e);
   }
 
   function ownItemsHTML(refs, cover) {
@@ -1649,6 +1684,8 @@
       return;
     }
     if (t.closest('.gallery .main img')) { lightbox(t.src); return; }
+    const rkPick = t.closest('[data-rk-pick]');
+    if (rkPick) { sendReplacement(rkPick.dataset.rkPick, rkPick); return; }
     const setCover = t.closest('[data-set-cover]');
     if (setCover) {
       const e = byId(setCover.dataset.id);
@@ -2162,9 +2199,10 @@
 
   // Direktlink /b-organizer/#e=<id> (z. B. aus dem Image Ranker) öffnet den Eintrag
   function openFromHash() {
-    const m = location.hash.match(/^#e=(.+)$/);
+    const m = location.hash.match(/^#e=([^&]+)(?:&pick=(\d+)&tab=(.*))?$/);
     if (!m || !ready) return;
     const id = decodeURIComponent(m[1]);
+    rankerPick = m[2] ? { id: Number(m[2]), tab: decodeURIComponent(m[3] || '') || 'Standard', boId: id } : null;
     history.replaceState(null, '', location.pathname + location.search);
     if (byId(id)) showDetail(id); else toast('Dieser Eintrag ist im Babe Organizer nicht (mehr) vorhanden.', 'err');
   }
