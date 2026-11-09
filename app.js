@@ -117,8 +117,11 @@
   }
 
   // Nationalität: Flaggen/Klammern entfernen und in einzelne Namen zerlegen
-  const natNames = (e) => String(e.Nationality || '')
+  // Namen, die selbst „and“ enthalten, vor dem Zerlegen schützen
+  const NAT_KEEP = [[/turks\s*(?:and|&)\s*caicos\s*islanders?/gi, 'Turks and Caicos Islander']];
+  const natNames = (e) => NAT_KEEP.reduce((t, [re, name]) => t.replace(re, name.replace(/ and /g, '\u0001')), String(e.Nationality || ''))
     .split(/[,/&]+|\s+and\s+/i)
+    .map(x => x.replace(/\u0001/g, ' and '))
     .map(x => x.replace(/[()]/g, '').replace(/^[^A-Za-zÀ-ž]+/, '').trim())
     .filter(Boolean);
   const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${n}` : n; };
