@@ -999,7 +999,8 @@
       height: (e) => -(num(e.Height) ?? -1),
       ranker: (e) => e._ranker ? -(e._ranker.score + 1) : 1,
       site: (e) => -(num(e['User Rating']) ?? -1),
-      diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); }
+      diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); },
+      random: (e) => shuffleKey(e._id)
     }[ui.sort] || (() => 0);
     return list.map(e => ({ e, k: key(e), n: v(e, 'Name') }))
       .sort((a, b) => (a.k - b.k) || collator.compare(a.n, b.n))
@@ -1404,6 +1405,57 @@
       <div class="rate-cmp">${cmp} ${take}</div></div>`;
   }
 
+  // Zufällige Reihenfolge: fest pro „Mischen“, damit Blättern/Nachladen stabil bleibt
+  let shuffleSeed = Math.floor(Math.random() * 2 ** 31);
+  function shuffleKey(id) {
+    let h = shuffleSeed ^ 0x9e3779b9;
+    for (let i = 0; i < id.length; i++) { h = Math.imul(h ^ id.charCodeAt(i), 0x5bd1e995); h ^= h >>> 13; }
+    return (h >>> 0) / 4294967296;
+  }
+  // 🎲 Zufälliger Eintrag aus der aktuellen (gefilterten) Liste
+  let lastRandom = null;
+  function randomEntry() {
+    const list = shown.length ? shown : [];
+    if (!list.length) { toast('Keine Einträge – Filter lockern.'); return; }
+    let e = list[Math.floor(Math.random() * list.length)];
+    if (list.length > 1 && e._id === lastRandom) e = list[(list.indexOf(e) + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length];
+    lastRandom = e._id;
+    showDetail(e._id);
+  }
+  function showShortcuts() {
+    openModal(`
+      <div class="modal-head"><h2>Tastenkürzel &amp; Gesten</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help keys">
+        <h3>Liste</h3>
+        <dl class="kv">
+          <div><dt><kbd>/</kbd></dt><dd>Suche</dd></div>
+          <div><dt><kbd>Z</kbd></dt><dd>🎲 zufälliger Eintrag (aus der gefilterten Liste)</dd></div>
+          <div><dt><kbd>B</kbd></dt><dd>🖼 Bilder der Liste durchblättern</dd></div>
+          <div><dt><kbd>N</kbd></dt><dd>neuer Eintrag</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>diese Übersicht</dd></div>
+        </dl>
+        <h3>Detailansicht</h3>
+        <dl class="kv">
+          <div><dt><kbd>←</kbd> <kbd>→</kbd> / wischen</dt><dd>vorheriger / nächster Eintrag</dd></div>
+          <div><dt><kbd>Z</kbd></dt><dd>noch ein zufälliger Eintrag</dd></div>
+          <div><dt><kbd>Leertaste</kbd> / <kbd>B</kbd></dt><dd>Bilder groß ansehen</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Favorit an/aus</dd></div>
+          <div><dt><kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd></dt><dd>eigene Bewertung 1–9, 10 (<kbd>Entf</kbd> löscht sie)</dd></div>
+          <div><dt><kbd>E</kbd></dt><dd>bearbeiten</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>schließen</dd></div>
+        </dl>
+        <h3>Bild-Betrachter</h3>
+        <dl class="kv">
+          <div><dt><kbd>←</kbd> <kbd>→</kbd> / seitlich wischen</dt><dd>Bild zurück / weiter (am Ende: nächster Eintrag)</dd></div>
+          <div><dt><kbd>↑</kbd> <kbd>↓</kbd> / nach oben wischen</dt><dd>Eintrag zurück / weiter</dd></div>
+          <div><dt><kbd>Z</kbd></dt><dd>zufälliger Eintrag</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Favorit an/aus</dd></div>
+          <div><dt>Doppelklick / Doppeltipp</dt><dd>Zoom</dd></div>
+          <div><dt><kbd>Esc</kbd> / nach unten wischen</dt><dd>schließen</dd></div>
+        </dl>
+      </div>`);
+  }
+
   function setRating(id, val) {
     const e = byId(id); if (!e) return;
     e['My Rating'] = val === '' ? '' : String(val);
@@ -1462,7 +1514,8 @@
     const nav = pos >= 0 && shown.length > 1 ? `<div class="d-nav">
           <button class="btn small" data-dnav="-1" ${pos === 0 ? 'disabled' : ''} title="Vorheriger Eintrag (←)" aria-label="Vorheriger Eintrag">‹</button>
           <span class="muted">${pos + 1} / ${shown.length}</span>
-          <button class="btn small" data-dnav="1" ${pos === shown.length - 1 ? 'disabled' : ''} title="Nächster Eintrag (→)" aria-label="Nächster Eintrag">›</button></div>` : '';
+          <button class="btn small" data-dnav="1" ${pos === shown.length - 1 ? 'disabled' : ''} title="Nächster Eintrag (→)" aria-label="Nächster Eintrag">›</button>
+          <button class="btn small" data-action="random" title="Noch ein zufälliger Eintrag (Z)" aria-label="Zufälliger Eintrag">🎲</button></div>` : '';
     openModal(`
       <div class="modal-head">
         <h2>${esc(v(e, 'Name'))}</h2>
@@ -1827,7 +1880,7 @@
   function viewerShow() {
     const { el, ids, ei, ii, imgs } = viewer;
     const e = byId(ids[ei]);
-    $('.vw-name', el).textContent = e ? v(e, 'Name') : '';
+    $('.vw-name', el).textContent = e ? (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name') : '';
     $('.vw-count', el).textContent = (imgs.length ? `Bild ${ii + 1} / ${imgs.length}` : 'keine Bilder') + (ids.length > 1 ? ` · Eintrag ${ei + 1} / ${ids.length}` : '');
     const img = $('.vw-stage img', el), err = $('.vw-err', el);
     el.classList.remove('zoom');
@@ -1933,6 +1986,8 @@
         break;
       case 'scan-images': scanImages(true); break;
       case 'find-dups': findDuplicates(); break;
+      case 'random': randomEntry(); break;
+      case 'shortcuts': showShortcuts(); break;
       case 'export-csv':
         if (!entries.length) { toast('Keine Einträge zum Exportieren.', 'err'); break; }
         download(`babe-organizer-${entries.length}-profile.csv`, '﻿' + toCSV(entries), 'text/csv;charset=utf-8');
@@ -2000,7 +2055,30 @@
       if (k === 'ArrowLeft') { ev.preventDefault(); viewerStep(-1); return; }
       if (k === 'ArrowDown' || k === 'PageDown') { ev.preventDefault(); viewerEntry(1); return; }
       if (k === 'ArrowUp' || k === 'PageUp') { ev.preventDefault(); viewerEntry(-1); return; }
+      if ((k === 'z' || k === 'Z') && viewer.ids.length > 1) { viewer.ei = Math.floor(Math.random() * viewer.ids.length); viewer.dir = 1; viewerLoad(false); return; }
+      if (k === 'f' || k === 'F') { toggleFav(viewer.ids[viewer.ei]); viewerShow(); return; }
       return;
+    }
+    const tag = ((document.activeElement || {}).tagName || '');
+    const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (document.activeElement && document.activeElement.isContentEditable);
+    if (!typing && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      const det = !overlay.hidden && $('[data-detail]', modal);
+      const k = ev.key;
+      if (det) {
+        const id = det.dataset.detail;
+        if (k === 'z' || k === 'Z') { randomEntry(); return; }
+        if (k === ' ' || k === 'b' || k === 'B') { ev.preventDefault(); openViewer(id, 0); return; }
+        if (k === 'f' || k === 'F') { toggleFav(id); return; }
+        if (k === 'e' || k === 'E') { ev.preventDefault(); showForm(id); return; }
+        if (/^[0-9]$/.test(k)) { setRating(id, k === '0' ? 10 : Number(k)); return; }
+        if (k === 'Delete' || k === 'Backspace') { setRating(id, ''); return; }
+      } else if (overlay.hidden) {
+        if (k === '/') { ev.preventDefault(); $('#q').focus(); return; }
+        if (k === 'z' || k === 'Z') { randomEntry(); return; }
+        if (k === 'b' || k === 'B') { browseImages(); return; }
+        if (k === 'n' || k === 'N') { ev.preventDefault(); showForm(); return; }
+        if (k === '?') { showShortcuts(); return; }
+      }
     }
     if (!overlay.hidden && $('[data-detail]', modal) && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
       if (ev.key === 'ArrowRight') { ev.preventDefault(); detailStep(1); return; }
@@ -2015,6 +2093,9 @@
 
   $('#btn-new').addEventListener('click', () => showForm());
   $('#btn-browse').addEventListener('click', browseImages);
+  $('#btn-random').addEventListener('click', randomEntry);
+  // „Zufällig“ in der Sortierung: bei jeder erneuten Wahl neu mischen
+  $('#sort').addEventListener('change', () => { if (ui.sort === 'random') { shuffleSeed = Math.floor(Math.random() * 2 ** 31); render(); } });
   {
     // Detail: seitlich wischen = vorheriger/nächster Eintrag
     let sx = 0, sy = 0, st = 0, ok = false;

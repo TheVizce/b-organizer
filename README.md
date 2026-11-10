@@ -182,3 +182,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **Detailansicht:** ‹ › oben (mit „3 / 120“), Pfeiltasten ← → oder seitlich wischen wechseln zum vorherigen/nächsten Eintrag der aktuellen Liste (Filter und Sortierung gelten).
 - **Bild-Betrachter:** Klick aufs Titelbild oder ein Bild im Raster öffnet alle Bilder groß. ← → / seitlich wischen = nächstes Bild; nach dem letzten Bild geht es mit dem nächsten Eintrag weiter (Einträge ohne Bilder werden übersprungen). ↑ ↓ / „⏮ Eintrag“ „Eintrag ⏭“ / nach oben wischen = Eintrag wechseln, nach unten wischen oder Esc = schließen, Doppelklick/Doppeltipp = Zoom. Der Name oben öffnet die Details.
 - **🖼 Blättern** in der Leiste startet den Betrachter mit der ganzen aktuellen Liste.
+
+## Änderungen in 14.14 (Tool) – Zufall und Tastenkürzel
+- **🎲 Zufall** in der Leiste (oder Taste `Z`): öffnet einen zufälligen Eintrag aus der aktuell gefilterten Liste. In der Detailansicht holt 🎲 bzw. `Z` den nächsten zufälligen, im Bild-Betrachter springt `Z` zu einem zufälligen Eintrag.
+- Sortierung **🎲 Zufällige Reihenfolge**: mischt die Liste (erneut wählen = neu mischen); Blättern und Bild-Betrachter folgen dieser Reihenfolge.
+- Tastenkürzel (Übersicht mit `?` oder *Daten → Tastenkürzel & Gesten*): `/` Suche, `B` Bilder blättern, `N` neuer Eintrag; im Detail `F` Favorit, `1`–`9`/`0` Bewertung, `Entf` Bewertung löschen, `E` bearbeiten, Leertaste Bilder.
