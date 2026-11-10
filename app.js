@@ -1458,9 +1458,15 @@
     const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
     const tags = splitList(e.Tags);
 
+    const pos = shown.findIndex(x => x._id === e._id);
+    const nav = pos >= 0 && shown.length > 1 ? `<div class="d-nav">
+          <button class="btn small" data-dnav="-1" ${pos === 0 ? 'disabled' : ''} title="Vorheriger Eintrag (←)" aria-label="Vorheriger Eintrag">‹</button>
+          <span class="muted">${pos + 1} / ${shown.length}</span>
+          <button class="btn small" data-dnav="1" ${pos === shown.length - 1 ? 'disabled' : ''} title="Nächster Eintrag (→)" aria-label="Nächster Eintrag">›</button></div>` : '';
     openModal(`
       <div class="modal-head">
         <h2>${esc(v(e, 'Name'))}</h2>
+        ${nav}
         <div class="actions">
           <button class="btn small" data-action="to-ranker" data-id="${esc(e._id)}" title="An Image Ranker senden">🏆 An Ranker</button>
           <button class="btn small" data-action="edit" data-id="${esc(e._id)}">Bearbeiten</button>
@@ -1468,9 +1474,9 @@
           <button class="x" data-action="close" aria-label="Schließen">×</button>
         </div>
       </div>
-      <div class="detail">
+      <div class="detail" data-detail="${esc(e._id)}">
         <div class="gallery">
-          <div class="main">${coverTag(e)}</div>
+          <div class="main" data-vw="0" title="Bilder ansehen">${coverTag(e)}${imgs.length > 1 ? `<span class="vw-hint">🖼 ${imgs.length}</span>` : ''}</div>
         </div>
         <div>
           <h1 class="d-title">${esc(v(e, 'Name'))}</h1>
@@ -1492,7 +1498,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -1715,6 +1721,158 @@
       </div>`);
   }
 
+  // ---------- Blättern ----------
+  // Detail: ‹ › / Pfeiltasten / Wischen wechseln zum vorherigen/nächsten Eintrag der aktuellen Liste.
+  function detailStep(dir) {
+    const det = $('[data-detail]', modal); if (!det) return;
+    const i = shown.findIndex(x => x._id === det.dataset.detail);
+    const n = shown[i + dir]; if (i < 0 || !n) return;
+    showDetail(n._id);
+    modal.classList.remove('slide-l', 'slide-r'); void modal.offsetWidth; modal.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+  }
+
+  // Bild-Betrachter: alle Bilder eines Eintrags; am Ende geht es mit dem nächsten Eintrag der Liste weiter.
+  // Bedienung: ‹ › / Pfeiltasten / seitlich wischen = Bilder, ↑ ↓ / Knöpfe / nach oben wischen = Eintrag,
+  // nach unten wischen / Esc = schließen, Doppeltipp = Zoom.
+  let viewer = null;
+  function openViewer(id, idx = 0) {
+    let ids = shown.map(x => x._id);
+    if (!ids.includes(id)) ids = [id];
+    const el = document.createElement('div');
+    el.className = 'viewer';
+    el.innerHTML = `
+      <div class="vw-top">
+        <button class="vw-name" title="Details anzeigen"></button>
+        <span class="vw-count"></span>
+        <button class="vw-x" aria-label="Schließen">×</button>
+      </div>
+      <div class="vw-stage"><img alt="" referrerpolicy="no-referrer" draggable="false"><div class="vw-err" hidden>Bild lässt sich nicht laden</div></div>
+      <button class="vw-arrow prev" aria-label="Vorheriges Bild">‹</button>
+      <button class="vw-arrow next" aria-label="Nächstes Bild">›</button>
+      <div class="vw-bottom">
+        <button class="btn small" data-vwe="-1">⏮ Eintrag</button>
+        <div class="vw-dots"></div>
+        <button class="btn small" data-vwe="1">Eintrag ⏭</button>
+      </div>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    viewer = { el, ids, ei: ids.indexOf(id), ii: idx, imgs: [] };
+    viewerLoad(true);
+
+    el.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t.closest('.vw-x')) return closeViewer();
+      if (t.closest('.vw-arrow.prev')) return viewerStep(-1);
+      if (t.closest('.vw-arrow.next')) return viewerStep(1);
+      const eb = t.closest('[data-vwe]'); if (eb) return viewerEntry(Number(eb.dataset.vwe));
+      const dot = t.closest('[data-dot]'); if (dot) { viewer.ii = Number(dot.dataset.dot); return viewerShow(); }
+      if (t.closest('.vw-name')) { const id = viewer.ids[viewer.ei]; closeViewer(); showDetail(id); return; }
+      if (t === el || t.classList.contains('vw-stage')) closeViewer();
+    });
+    el.addEventListener('dblclick', (ev) => { if (ev.target.tagName === 'IMG') toggleZoom(ev); });
+
+    // Wischen
+    let sx = 0, sy = 0, st = 0, multi = false, lastTap = 0;
+    const img = $('.vw-stage img', el);
+    el.addEventListener('touchstart', (ev) => {
+      multi = ev.touches.length > 1; if (multi) return;
+      sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; st = Date.now();
+    }, { passive: true });
+    el.addEventListener('touchmove', (ev) => {
+      if (multi || ev.touches.length > 1 || el.classList.contains('zoom')) { multi = multi || ev.touches.length > 1; return; }
+      const dx = ev.touches[0].clientX - sx, dy = ev.touches[0].clientY - sy;
+      img.style.transition = 'none';
+      img.style.transform = Math.abs(dx) > Math.abs(dy) ? `translateX(${dx}px)` : `translateY(${dy}px)`;
+      img.style.opacity = Math.abs(dy) > Math.abs(dx) ? String(Math.max(0.3, 1 - Math.abs(dy) / 500)) : '1';
+    }, { passive: true });
+    el.addEventListener('touchend', (ev) => {
+      img.style.transition = ''; img.style.transform = ''; img.style.opacity = '';
+      if (multi || el.classList.contains('zoom')) { if (ev.touches.length === 0) multi = false; return; }
+      const tch = ev.changedTouches[0], dx = tch.clientX - sx, dy = tch.clientY - sy, fast = Date.now() - st < 300;
+      const ax = Math.abs(dx), ay = Math.abs(dy);
+      if (ax < 10 && ay < 10) {        // Tipp: Doppeltipp = Zoom
+        if (ev.target.tagName === 'IMG' && Date.now() - lastTap < 300) { toggleZoom({ clientX: tch.clientX, clientY: tch.clientY }); lastTap = 0; ev.preventDefault(); }
+        else lastTap = Date.now();
+        return;
+      }
+      if (ax > ay && (ax > 60 || (fast && ax > 30))) viewerStep(dx < 0 ? 1 : -1);
+      else if (ay > ax && (ay > 90 || (fast && ay > 40))) { if (dy > 0) closeViewer(); else viewerEntry(1); }
+    });
+  }
+  function toggleZoom(ev) {
+    const el = viewer && viewer.el; if (!el) return;
+    const stage = $('.vw-stage', el), img = $('img', stage);
+    const on = el.classList.toggle('zoom');
+    if (on) {
+      const r = img.getBoundingClientRect();
+      const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height;
+      requestAnimationFrame(() => { stage.scrollLeft = fx * stage.scrollWidth - stage.clientWidth / 2; stage.scrollTop = fy * stage.scrollHeight - stage.clientHeight / 2; });
+    }
+  }
+  function viewerLoad(keepIdx, atEnd) {
+    // aktuellen Eintrag laden; Einträge ohne Bilder in Blätterrichtung überspringen
+    const v0 = viewer, dir = v0.dir || 1, start = v0.ei;
+    for (;;) {
+      const e = byId(v0.ids[v0.ei]);
+      v0.imgs = e ? images(e) : [];
+      if (v0.imgs.length) break;
+      const nx = v0.ei + dir;
+      if (nx < 0 || nx >= v0.ids.length) { if (start !== v0.ei) { v0.ei = start; v0.imgs = images(byId(v0.ids[start])) || []; } break; }
+      v0.ei = nx;
+    }
+    if (!keepIdx) v0.ii = atEnd ? v0.imgs.length - 1 : 0;
+    v0.ii = Math.max(0, Math.min(v0.ii, v0.imgs.length - 1));
+    viewerShow();
+  }
+  function viewerShow() {
+    const { el, ids, ei, ii, imgs } = viewer;
+    const e = byId(ids[ei]);
+    $('.vw-name', el).textContent = e ? v(e, 'Name') : '';
+    $('.vw-count', el).textContent = (imgs.length ? `Bild ${ii + 1} / ${imgs.length}` : 'keine Bilder') + (ids.length > 1 ? ` · Eintrag ${ei + 1} / ${ids.length}` : '');
+    const img = $('.vw-stage img', el), err = $('.vw-err', el);
+    el.classList.remove('zoom');
+    err.hidden = true; img.hidden = !imgs.length;
+    if (imgs.length) {
+      const full = R(imgs[ii]), alts = [full, thumbUrl(full)].filter((x, i, a) => x && a.indexOf(x) === i);
+      let k = 0;
+      img.onerror = () => { if (++k < alts.length) img.src = alts[k]; else { img.hidden = true; err.hidden = false; } };
+      img.onload = () => { img.hidden = false; };
+      img.src = alts[0];
+      // Nachbarn vorladen
+      [imgs[ii + 1], imgs[ii - 1]].filter(Boolean).forEach(u => { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); });
+    }
+    $('.vw-dots', el).innerHTML = imgs.length > 1 && imgs.length <= 30 ? imgs.map((_, i) => `<button data-dot="${i}" class="${i === ii ? 'on' : ''}" aria-label="Bild ${i + 1}"></button>`).join('') : '';
+    const last = ids.length === 1 && ii === imgs.length - 1, first = ids.length === 1 && ii === 0;
+    $('.vw-arrow.prev', el).disabled = first; $('.vw-arrow.next', el).disabled = last;
+    $$('[data-vwe]', el).forEach(b => { b.hidden = ids.length < 2; b.disabled = (b.dataset.vwe === '-1' ? ei === 0 : ei === ids.length - 1); });
+  }
+  function viewerStep(dir) {
+    if (!viewer) return;
+    const nx = viewer.ii + dir;
+    if (nx >= 0 && nx < viewer.imgs.length) { viewer.ii = nx; return viewerShow(); }
+    viewerEntry(dir, true);
+  }
+  function viewerEntry(dir, edge) {
+    if (!viewer || viewer.ids.length < 2) return;
+    const ne = viewer.ei + dir;
+    if (ne < 0 || ne >= viewer.ids.length) { toast(dir > 0 ? 'Ende der Liste' : 'Anfang der Liste'); return; }
+    viewer.ei = ne; viewer.dir = dir;
+    viewerLoad(false, edge && dir < 0);
+  }
+  function closeViewer() {
+    if (!viewer) return;
+    const id = viewer.ids[viewer.ei];
+    viewer.el.remove(); viewer = null;
+    // Detail im Hintergrund auf den zuletzt angesehenen Eintrag bringen
+    const det = !overlay.hidden && $('[data-detail]', modal);
+    if (det && det.dataset.detail !== id) showDetail(id);
+    if (overlay.hidden) document.body.style.overflow = '';
+  }
+  function browseImages() {
+    if (!shown.length) { toast('Keine Einträge in der Liste.'); return; }
+    openViewer(shown[0]._id, 0);
+  }
+
   function lightbox(src) {
     const lb = document.createElement('div');
     lb.className = 'lightbox';
@@ -1807,7 +1965,13 @@
       $$('.gallery .thumbs img', modal).forEach(i => i.classList.toggle('on', i === thumb));
       return;
     }
-    if (t.closest('.gallery .main img')) { lightbox(t.src); return; }
+    const dnav = t.closest('[data-dnav]');
+    if (dnav) { detailStep(Number(dnav.dataset.dnav)); return; }
+    const vw = t.closest('.detail [data-vw]');
+    if (vw && t.tagName === 'IMG' || (vw && vw.classList.contains('main'))) {
+      const det = t.closest('[data-detail]');
+      if (det) { openViewer(det.dataset.detail, Number(vw.dataset.vw)); return; }
+    }
     const rkPick = t.closest('[data-rk-pick]');
     if (rkPick) { sendReplacement(rkPick.dataset.rkPick, rkPick); return; }
     const setCover = t.closest('[data-set-cover]');
@@ -1829,6 +1993,19 @@
   });
 
   document.addEventListener('keydown', (ev) => {
+    if (viewer) {
+      const k = ev.key;
+      if (k === 'Escape') { closeViewer(); return; }
+      if (k === 'ArrowRight' || k === ' ') { ev.preventDefault(); viewerStep(1); return; }
+      if (k === 'ArrowLeft') { ev.preventDefault(); viewerStep(-1); return; }
+      if (k === 'ArrowDown' || k === 'PageDown') { ev.preventDefault(); viewerEntry(1); return; }
+      if (k === 'ArrowUp' || k === 'PageUp') { ev.preventDefault(); viewerEntry(-1); return; }
+      return;
+    }
+    if (!overlay.hidden && $('[data-detail]', modal) && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); detailStep(1); return; }
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); detailStep(-1); return; }
+    }
     if (ev.key === 'Escape') {
       const lb = $('.lightbox'); if (lb) { lb.remove(); return; }
       if (!overlay.hidden) closeModal();
@@ -1837,6 +2014,21 @@
   });
 
   $('#btn-new').addEventListener('click', () => showForm());
+  $('#btn-browse').addEventListener('click', browseImages);
+  {
+    // Detail: seitlich wischen = vorheriger/nächster Eintrag
+    let sx = 0, sy = 0, st = 0, ok = false;
+    overlay.addEventListener('touchstart', (ev) => {
+      ok = ev.touches.length === 1 && !!$('[data-detail]', modal) && !ev.target.closest('input, textarea, select, .rating, .rk-pick');
+      if (!ok) return;
+      sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; st = Date.now();
+    }, { passive: true });
+    overlay.addEventListener('touchend', (ev) => {
+      if (!ok || viewer) return; ok = false;
+      const t = ev.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8 && Date.now() - st < 700) detailStep(dx < 0 ? 1 : -1);
+    });
+  }
   $('#file-input').addEventListener('change', (ev) => {
     const f = ev.target.files[0];
     if (f) handleFile(f);

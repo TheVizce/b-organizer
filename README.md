@@ -177,3 +177,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.12 (Tool) – Statistik
 - Neue Ansicht **📊 Statistik** (neben Karten/Tabelle): Kennzahlen (Favoriten, im Ranker, aktiv, Ø Alter/Größe/Ratings), Häufigkeit aller Eigenschaften (Nationalität, Bereich, Professions, Haare, Augen, Figur, Ethnicity, Cup, Boobs, Sexuality, Tattoos, Piercings, Tags, Geburtsland/-ort …), Verteilungen (Alter, Geburtsjahrzehnt, Größe, Gewicht, Ratings), Ranker-Tiers und wie vollständig die Felder ausgefüllt sind.
 - Gilt immer für die aktuell gefilterte Liste. Ein Klick auf eine Zeile filtert die Liste danach (Chip in der Leiste, ✕ entfernt ihn).
+
+## Änderungen in 14.13 (Tool) – Blättern und Wischen
+- **Detailansicht:** ‹ › oben (mit „3 / 120“), Pfeiltasten ← → oder seitlich wischen wechseln zum vorherigen/nächsten Eintrag der aktuellen Liste (Filter und Sortierung gelten).
+- **Bild-Betrachter:** Klick aufs Titelbild oder ein Bild im Raster öffnet alle Bilder groß. ← → / seitlich wischen = nächstes Bild; nach dem letzten Bild geht es mit dem nächsten Eintrag weiter (Einträge ohne Bilder werden übersprungen). ↑ ↓ / „⏮ Eintrag“ „Eintrag ⏭“ / nach oben wischen = Eintrag wechseln, nach unten wischen oder Esc = schließen, Doppelklick/Doppeltipp = Zoom. Der Name oben öffnet die Details.
+- **🖼 Blättern** in der Leiste startet den Betrachter mit der ganzen aktuellen Liste.
