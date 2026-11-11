@@ -714,7 +714,10 @@
   // Bei frisch geholten Babepedia-Profilen (ohne _id, also nicht aus einem Backup) werden Änderungen an
   // bekannten Einträgen nicht direkt geschrieben, sondern als „offen“ gemerkt (IndexedDB-Schlüssel
   // 'pending-updates' in bp-organizer, nur auf diesem Gerät) und können einzeln übernommen oder abgelehnt werden.
-  const VOLATILE = ['Rank', 'Highest Rank', 'Votes', 'Global Rating', 'Scraped At'];   // ändern sich ständig – auf Wunsch automatisch
+  const VOLATILE = ['Rank', 'Highest Rank', 'Votes', 'Global Rating', 'Peakdays', 'Scraped At'];
+  // Diese Felder werden ohne Nachfrage gefüllt, wenn sie bisher leer waren (Kennung, keine inhaltliche Änderung)
+  const FILL_IF_EMPTY = ['Babe ID'];
+  const autoField = (e, f, val) => (ui.autoVolatile && VOLATILE.includes(f)) || (FILL_IF_EMPTY.includes(f) && !normVal(e[f]) && normVal(val));   // ändern sich ständig – auf Wunsch automatisch
   if (ui.reviewUpdates === undefined) ui.reviewUpdates = true;
   if (ui.autoVolatile === undefined) ui.autoVolatile = true;
   let pendingUpdates = [];   // [{ id, at, item: { Feld: neuer Wert } }]
@@ -725,11 +728,11 @@
     try { pendingUpdates = (await idbGet('pending-updates')) || []; } catch { pendingUpdates = []; }
     try { rejectedUpdates = (await idbGet('rejected-updates')) || {}; } catch { rejectedUpdates = {}; }
     // Schon offene Änderungen: automatisch zu übernehmende Felder (z. B. Scraped At) jetzt eintragen
-    if (ui.autoVolatile && pendingUpdates.length) {
+    if (pendingUpdates.length) {
       let changed = false, touched = false;
       for (const p of pendingUpdates) {
         const e = byId(p.id);
-        for (const f of VOLATILE) if (p.item[f] !== undefined) {
+        for (const f of Object.keys(p.item)) if (e && autoField(e, f, p.item[f])) {
           if (e && normVal(e[f]) !== normVal(p.item[f])) { e[f] = p.item[f]; e._updated = Date.now(); touched = true; }
           delete p.item[f]; changed = true;
         }
@@ -789,7 +792,7 @@
     const vals = {};
     for (const f of ALL_FIELDS) if (item[f] || (after[f] !== e[f] && f === 'Profession Category')) vals[f] = after[f];
     // ständig wechselnde Werte gleich übernehmen
-    if (ui.autoVolatile) for (const f of VOLATILE) if (vals[f] !== undefined) { if (normVal(e[f]) !== normVal(vals[f])) { e[f] = vals[f]; e._updated = Date.now(); } delete vals[f]; }
+    for (const f of Object.keys(vals)) if (autoField(e, f, vals[f])) { if (normVal(e[f]) !== normVal(vals[f])) { e[f] = vals[f]; e._updated = Date.now(); } delete vals[f]; }
     const rej = rejectedUpdates[e._id];
     if (rej) {
       for (const f of Object.keys(vals)) if (!IMAGE_FIELDS.includes(f) && rej[f] !== undefined && normVal(rej[f]) === normVal(vals[f])) delete vals[f];
@@ -822,7 +825,7 @@
           <button class="btn primary small" id="pu-all">Alle übernehmen</button>
           <button class="btn small" id="pu-none">Alle ablehnen</button>
         </div>
-        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes, Global Rating und Scraped At automatisch übernehmen</label>
+        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes, Global Rating, Peakdays und Scraped At automatisch übernehmen</label>
         <label class="chk"><input type="checkbox" id="pu-off" ${ui.reviewUpdates ? '' : 'checked'}> Künftig nicht mehr fragen – alle Änderungen direkt übernehmen</label>
         <div class="pu-list">${list.map(({ p, d }) => { const e = byId(p.id); return `
           <section class="pu-card" data-pu="${esc(p.id)}">
