@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.7
+// @version      14.8
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -1075,6 +1075,24 @@
         standingsRowsFrom(document).forEach(r => { r.li.style.opacity = isKnown(r, known) ? '0.35' : ''; });
     }
 
+    // ---- Advanced Search: Ergebnisse werden per AJAX nachgeladen ----
+    const isAdvSearch = () => /^\/advancedsearch/i.test(location.pathname);
+    function markKnownSearchResults() {
+        const known = getKnownSets();
+        document.querySelectorAll('#resultsPreview .thumbshot').forEach(el => {
+            const a = el.querySelector('a[href*="/babe/"]');
+            if (!a) return;
+            el.style.opacity = known.slugs.has(slugOfUrl(a.getAttribute('href'))) ? '0.35' : '';
+        });
+    }
+    function watchSearchResults() {
+        markKnownSearchResults();
+        let t = null;
+        new MutationObserver(() => { clearTimeout(t); t = setTimeout(markKnownSearchResults, 150); })
+            .observe(document.body, { childList: true, subtree: true });
+        window.addEventListener('focus', markKnownSearchResults);
+    }
+
     async function copyStandingsLinks(onlyNew, onProgress) {
         const allPages = confirm('Alle Seiten der Standings durchgehen?\n\n[OK] = Alle Seiten\n[Abbrechen] = Nur diese Seite');
         let rows = standingsRowsFrom(document);
@@ -1484,6 +1502,11 @@
             markKnownRows();
             window.addEventListener('focus', markKnownRows);
         }
+        if (isAdvSearch()) {
+            autoFetchBtn.style.display = 'none';
+            moveListBtn.style.display = 'none';
+            watchSearchResults();
+        }
 
         const ctxLabel = {
             neu: '📥 Liste NEU → wird nach GELISTET verschoben',
@@ -1493,8 +1516,10 @@
             andere: 'Keine deiner Listen erkannt'
         }[getListContext()];
         const status = document.createElement('div');
-        status.textContent = isStandings() ? `Battle-Standings · bekannt (ausgegraut): ${knownSummary()}` : ctxLabel;
-        if (isStandings()) window.addEventListener('focus', () => { status.textContent = `Battle-Standings · bekannt (ausgegraut): ${knownSummary()}`; });
+        const knownLabel = () => `${isStandings() ? 'Battle-Standings' : 'Advanced Search'} · bekannt (ausgegraut): ${knownSummary()}`;
+        const withKnown = isStandings() || isAdvSearch();
+        status.textContent = withKnown ? knownLabel() : ctxLabel;
+        if (withKnown) window.addEventListener('focus', () => { status.textContent = knownLabel(); });
         status.style.cssText = 'width:170px;font-size:11px;line-height:1.3;color:#fff;background:rgba(0,0,0,.65);padding:6px 8px;border-radius:6px;';
         container.appendChild(status);
         container.appendChild(rankerBtn);
