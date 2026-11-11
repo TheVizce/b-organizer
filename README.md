@@ -198,3 +198,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Das Tool vergleicht bei verknüpften Einträgen die Eigenschaften, die du beim Senden pro Ranker-Reiter gewählt hast, mit den Werten im Image Ranker (nur lesend). Weichen sie ab, erscheint **⟳ Ranker** auf der Kachel und in der Detailansicht „Im Ranker veraltet: … – nochmal senden“ (Klick öffnet das Senden).
 - Filter **Ranker → ⟳ im Ranker veraltet** zeigt alle betroffenen; danach **🏆 An Ranker** für die ganze Liste. Nach dem Übernehmen im Ranker verschwindet die Markierung von selbst.
 - Funktioniert auf dem Gerät, auf dem der Image Ranker läuft und von dem aus gesendet wurde (dort liegt die Feldauswahl). Kein neuer Speicher.
+
+## Änderungen in 14.10 (Skript) / Tool – Ranker-Liste auf Babepedia entfällt
+- Der Knopf **🏆 Ranker-Abgleich** und die Übergabe der Babepedia-Liste „Ranker“ (ID 172740) ans Tool sind entfernt. Ob ein Eintrag im Image Ranker ist, kommt nur noch aus der Verknüpfung im Tool.
+- Die Liste selbst wird vom Skript weiter erkannt und beim Holen nicht verändert. Das alte Feld „In Ranker“ bleibt in den Daten, wird aber nirgends mehr gesetzt oder angezeigt.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.9
+// @version      14.10
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -60,14 +60,8 @@
                     sentUrls = new Set(batch.map(i => i['Profile URL']));
                     window.postMessage({ type: 'BP_SYNC', id: syncId, items: batch }, location.origin);
                 }
-                const ranker = GM_getValue('bp_ranker_sync', null);
-                if (ranker && Array.isArray(ranker.urls)) {
-                    window.postMessage({ type: 'BP_RANKER', id: syncId, ...ranker }, location.origin);
-                }
-            }
-
-            if (d.type === 'BP_RANKER_ACK' && d.id === syncId) {
-                GM_setValue('bp_ranker_sync', null);
+                // Ranker-Abgleich über die Babepedia-Liste gibt es nicht mehr (Verknüpfung läuft im Tool) – Reste aufräumen
+                if (GM_getValue('bp_ranker_sync', null)) GM_setValue('bp_ranker_sync', null);
             }
 
             if (d.type === 'BP_SYNC_ACK' && d.id === syncId) {
@@ -1008,22 +1002,6 @@
               (rest.length ? `\nWeiterhin fehlgeschlagen: ${rest.length}\n\n` + rest.slice(0, 15).map(f => `• ${decodeURIComponent(f.url.split('/babe/')[1] || f.url)} – ${f.error}`).join('\n') : ''));
     }
 
-    // Sammelt alle Profil-Links der RANKER-Liste und legt sie für das Tool bereit
-    async function collectRankerList(onProgress) {
-        if (getListContext() !== 'ranker') {
-            alert('Bitte zuerst deine Ranker-Liste (ID ' + LIST_RANKER + ') öffnen, am besten nach Name sortiert.');
-            return;
-        }
-        const links = await getAllBabeLinksMultiPage(onProgress);
-        const urls = [...new Set(links.map(u => u.split('?')[0].split('#')[0]))];
-        const expected = getExpectedListTotal(document);
-        GM_setValue('bp_ranker_sync', { urls, expected, at: new Date().toISOString() });
-        rememberList('ranker', urls);
-        alert(`Ranker-Abgleich: ${urls.length} Profile gesammelt` + (expected ? ` (laut Babepedia ${expected})` : '') +
-              `.\n\nJetzt über „🗂️ Tool öffnen“ ins Tool übernehmen – dort wird „In Ranker“ für alle Einträge gesetzt.`);
-    }
-
-
     // ===================================================================
     // Abgleich: Profile, die schon im Organizer oder in einer deiner Listen sind
     // ===================================================================
@@ -1466,18 +1444,6 @@
         });
         failedBtn.title = 'Klick: erneut versuchen · Shift+Klick: Liste anzeigen/leeren';
 
-        const rankerBtn = document.createElement('button');
-        rankerBtn.id = 'bp-ranker-btn';
-        rankerBtn.className = 'bp-btn';
-        rankerBtn.innerHTML = '🏆 Ranker-Abgleich';
-        rankerBtn.title = 'Alle Profile der Ranker-Liste einsammeln und im Tool als „In Ranker“ markieren';
-        if (getListContext() !== 'ranker') rankerBtn.style.display = 'none';
-        rankerBtn.addEventListener('click', async () => {
-            rankerBtn.disabled = true;
-            await collectRankerList((txt) => { rankerBtn.innerHTML = txt; });
-            rankerBtn.innerHTML = '🏆 Ranker-Abgleich';
-            rankerBtn.disabled = false;
-        });
 
         const clearBtn = document.createElement('button');
         clearBtn.id = 'bp-clear-btn';
@@ -1550,7 +1516,7 @@
         const ctxLabel = {
             neu: '📥 Liste NEU → wird nach GELISTET verschoben',
             gelistet: '✅ Liste GELISTET → bleibt unverändert',
-            ranker: '🏆 Liste RANKER → „Ranker-Abgleich“ nutzen',
+            ranker: '🏆 Liste RANKER → bleibt unverändert',
             profil: 'Profil: Add nimmt es in GELISTET auf',
             andere: 'Keine deiner Listen erkannt'
         }[getListContext()];
@@ -1561,7 +1527,6 @@
         if (withKnown) window.addEventListener('focus', () => { status.textContent = knownLabel(); });
         status.style.cssText = 'width:170px;font-size:11px;line-height:1.3;color:#fff;background:rgba(0,0,0,.65);padding:6px 8px;border-radius:6px;';
         container.appendChild(status);
-        container.appendChild(rankerBtn);
         container.appendChild(rememberBtn);
         container.appendChild(newLinksBtn);
         container.appendChild(allLinksBtn);

@@ -43,7 +43,7 @@
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
-    'Exact Birthdate': 'aus = nur Jahr bekannt', 'In Ranker': 'wird beim Ranker-Abgleich automatisch gesetzt', 'Professions': 'kommagetrennt, wie auf Babepedia'
+    'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
@@ -491,25 +491,6 @@
 
   // ---------- Import / Zusammenführen ----------
   const normUrl = (u) => { try { u = decodeURIComponent(String(u || '')); } catch {} return u.toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '').replace(/[\s_]+/g, '_'); };
-
-  // Setzt "In Ranker" für alle Einträge anhand der kompletten Ranker-Liste von Babepedia
-  async function applyRanker(urls) {
-    const set = new Set(urls.map(normUrl));
-    const matched = new Set();
-    let on = 0, changed = 0;
-    const now = Date.now();
-    for (const e of entries) {
-      const k = normUrl(e['Profile URL']);
-      const inR = !!k && set.has(k);
-      if (inR) { on++; matched.add(k); }
-      const val = inR ? 'true' : 'false';
-      if (e['In Ranker'] !== val) { e['In Ranker'] = val; e._updated = now; changed++; }
-    }
-    const missing = urls.filter(u => !matched.has(normUrl(u)));
-    refreshFilters(); render();
-    await save();
-    return { on, changed, missing };
-  }
 
   function keyOf(e) {
     const url = v(e, 'Profile URL').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
@@ -1024,13 +1005,6 @@
         const id = v(e, 'Babe ID'); if (id) ids.push(String(id));
       }
       window.postMessage({ type: 'BP_KNOWN', id: d.id, slugs, ids, count: entries.length }, location.origin);
-    }
-    if (d.type === 'BP_RANKER' && Array.isArray(d.urls) && ready) {
-      // Läuft nach einem evtl. gleichzeitig übertragenen Batch-Import (Kette), damit neue Einträge mitzählen
-      bridgeQueue = bridgeQueue.then(() => applyRanker(d.urls)).then(r => {
-        window.postMessage({ type: 'BP_RANKER_ACK', id: d.id }, location.origin);
-        showRankerResult(r, d.urls.length, d.expected);
-      }).catch(() => toast('Ranker-Abgleich konnte nicht gespeichert werden.', 'err'));
     }
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
@@ -1947,19 +1921,6 @@
         if (el) el.textContent = `Belegt: ${mb(usage || 0)} von ${mb(quota || 0)} verfügbarem Speicher (${entries.length} Einträge).`;
       }).catch(() => {});
     }
-  }
-
-  function showRankerResult(r, total, expected) {
-    const names = r.missing.map(u => { try { return decodeURIComponent(u.split('/babe/')[1] || u).replace(/_/g, ' '); } catch { return u; } });
-    openModal(`
-      <div class="modal-head"><h2>🏆 Ranker-Abgleich</h2><div class="actions"><button class="x" data-action="close">×</button></div></div>
-      <div class="help">
-        <p><strong>${r.on}</strong> Einträge sind im Ranker (${total} Profile in der Ranker-Liste${expected && expected !== total ? `, laut Babepedia ${expected}` : ''}).
-        ${r.changed} Einträge wurden geändert.</p>
-        ${names.length ? `<h3>${names.length} Profile aus der Ranker-Liste fehlen im Tool</h3>
-          <p class="muted">Diese Profile sind im Ranker, aber (noch) nicht im Tool erfasst – z. B. über die Profilseite mit ➕ Add holen.</p>
-          <ul>${names.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<p class="ok">✓ Alle Profile der Ranker-Liste sind im Tool vorhanden.</p>'}
-      </div>`);
   }
 
   // ---------- Blättern ----------
