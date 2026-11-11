@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.12
+// @version      14.13
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -51,7 +51,7 @@
 
             if (d.type === 'BP_TOOL_READY') requestKnown();
             if (d.type === 'BP_KNOWN' && Array.isArray(d.slugs)) {
-                GM_setValue('bp_known_organizer', { slugs: d.slugs, ids: Array.isArray(d.ids) ? d.ids : [], count: d.count || d.slugs.length, at: new Date().toISOString() });
+                GM_setValue('bp_known_organizer', { slugs: d.slugs, ids: Array.isArray(d.ids) ? d.ids : [], stale: Array.isArray(d.stale) ? d.stale : [], count: d.count || d.slugs.length, at: new Date().toISOString() });
             }
             if (d.type === 'BP_TOOL_READY' && !sent) {
                 sent = true;
@@ -299,6 +299,8 @@
         #bp-autofetch-btn:hover { background-color: #b23c00; }
         #bp-tool-btn { background-color: #ad3a63; }
         #bp-tool-btn:hover { background-color: #7d2747; }
+        #bp-update-btn { background-color: #00838f; }
+        #bp-update-btn:hover { background-color: #005662; }
         #bp-failed-btn { background-color: #8d6e00; }
         #bp-failed-btn:hover { background-color: #5f4a00; }
         #bp-ranker-btn { background-color: #b8860b; }
@@ -934,6 +936,68 @@
         if (list.some(f => f.url === url)) setFailed(list.filter(f => f.url !== url));
     }
 
+    // ---- Rollierendes Update: zuletzt geholte Profile merken ----
+    // Ergänzt den Stand aus dem Tool (Scraped At), falls das Tool zwischendurch nicht geöffnet wurde.
+    function getFetchedRecent() { const m = GM_getValue('bp_fetched_recent', {}); return m && typeof m === 'object' ? m : {}; }
+    function noteFetched(url) {
+        const m = getFetchedRecent(), now = Date.now(), k = slugOfUrl(url);
+        if (!k) return;
+        m[k] = now;
+        for (const [x, t] of Object.entries(m)) if (now - t > 120 * 864e5) delete m[x];   // nach 120 Tagen vergessen
+        GM_setValue('bp_fetched_recent', m);
+    }
+    function pickOldest(n) {
+        const org = GM_getValue('bp_known_organizer', null);
+        if (!org || !Array.isArray(org.stale) || !org.stale.length) return null;
+        const recent = getFetchedRecent();
+        const inBatch = new Set(getStoredData().map(i => slugOfUrl(i['Profile URL'])));
+        const list = org.stale.map(([url, ts]) => {
+            const k = slugOfUrl(url);
+            return { url, ts: Math.max(ts || 0, recent[k] || 0, inBatch.has(k) ? Date.now() : 0) };
+        }).sort((a, b) => a.ts - b.ts);
+        return { picked: list.slice(0, n), total: list.length, at: org.at };
+    }
+
+    // Am Ende eines Laufs: Fehlschläge einmal nachholen, dann anbieten, das Tool zu öffnen
+    async function finishRun(title, okCount, total, failed, onProgress) {
+        let retried = 0;
+        if (failed.length) {
+            if (onProgress) onProgress(`⏸ Pause vor 2. Versuch (${failed.length})`);
+            await new Promise(r => setTimeout(r, 60000));
+            for (let i = 0; i < failed.length; i++) {
+                if (onProgress) onProgress(`↻ 2. Versuch ${i + 1}/${failed.length}`);
+                const res = await fetchOneProfile(failed[i].url, failed[i].move);
+                if (res.ok) { retried++; okCount++; }
+                await new Promise(r => setTimeout(r, getRandomDelay(MIN_DELAY_MS + 1000, MAX_DELAY_MS + 2000)));
+            }
+        }
+        const rest = failed.length - retried;
+        const msg = `${title}: ${okCount} von ${total} Profilen geholt` + (retried ? ` (${retried} davon im 2. Versuch)` : '') + '.' +
+            (rest ? `\n${rest} weiterhin fehlgeschlagen – später über „↻ Fehlgeschlagene“.` : '');
+        if (okCount && confirm(msg + '\n\nJetzt ins Tool übernehmen?')) GM_openInTab(TOOL_URL, { active: true });
+        else if (!okCount) alert(msg);
+    }
+
+    async function updateOldest(onProgress) {
+        const def = Number(GM_getValue('bp_update_n', 300)) || 300;
+        const peek = pickOldest(1);
+        if (!peek) { alert('Das Skript kennt den Stand des Tools noch nicht.\n\nBitte das Tool einmal öffnen (🗂️ Tool öffnen) und danach hier erneut starten.'); return; }
+        const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('de-DE') : 'nie';
+        const ans = prompt(`Rollierendes Update: Wie viele Profile holen?\n\nDie am längsten nicht aktualisierten zuerst (ältestes: ${fmt(peek.picked[0].ts)}).\n${peek.total} Profile im Tool · Stand vom ${new Date(peek.at).toLocaleString('de-DE')}`, String(def));
+        if (ans === null) return;
+        const n = Math.max(1, Math.min(peek.total, Math.floor(Number(ans)) || def));
+        GM_setValue('bp_update_n', n);
+        const { picked } = pickOldest(n);
+        let okCount = 0; const failed = [];
+        for (let i = 0; i < picked.length; i++) {
+            if (onProgress) onProgress(`⏳ ${i + 1}/${picked.length} Update`);
+            const res = await fetchOneProfile(picked[i].url, false);
+            if (res.ok) okCount++; else { failed.push({ url: picked[i].url, move: false }); noteFetched(picked[i].url); }   // auch Fehlschläge rotieren weiter (z. B. gelöschte Profile)
+            await new Promise(r => setTimeout(r, getRandomDelay(MIN_DELAY_MS, MAX_DELAY_MS)));
+        }
+        await finishRun('Update', okCount, picked.length, failed, onProgress);
+    }
+
     // Holt ein einzelnes Profil, legt es im Batch ab und verschiebt es ggf. in GELISTET
     async function fetchOneProfile(url, moveToListed) {
         try {
@@ -954,6 +1018,7 @@
                 await safeMoveBabeBetweenLists(babeId, LIST_NEU, LIST_GELISTET);
             }
             clearFailed(url);
+            noteFetched(url);
             return { ok: true };
         } catch (err) {
             console.error(`[Fetch Fehler] ${url}:`, err.message);
@@ -1129,7 +1194,7 @@
             const url = links[i];
             if (onProgress) onProgress(i + 1, links.length);
             const res = await fetchOneProfile(url, moveToListed);
-            if (res.ok) okCount++; else failedPages.push({ url, error: res.error });
+            if (res.ok) okCount++; else failedPages.push({ url, error: res.error, move: moveToListed });
             await new Promise(r => setTimeout(r, getRandomDelay(MIN_DELAY_MS, MAX_DELAY_MS)));
         }
 
@@ -1137,9 +1202,7 @@
             console.warn("=== FEHLGESCHLAGENE PROFILE ===");
             console.table(failedPages);
         }
-        alert(`Auto Fetch fertig: ${okCount} von ${links.length} Profilen geholt.` +
-              (failedPages.length ? `\n${failedPages.length} fehlgeschlagen – über „↻ Fehlgeschlagene“ erneut versuchen.` : '') +
-              `\n\nÜber „🗂️ Tool öffnen“ ins Tool übernehmen.`);
+        await finishRun('Auto Fetch fertig', okCount, links.length, failedPages, onProgress);
     }
 
     function initArchiveUI() {
@@ -1256,6 +1319,19 @@
             }, 3000);
         });
 
+        const updateBtn = document.createElement('button');
+        updateBtn.id = 'bp-update-btn';
+        updateBtn.className = 'bp-btn';
+        updateBtn.innerHTML = '🔁 Update (älteste)';
+        updateBtn.title = 'Holt die Profile neu, die im Tool am längsten nicht aktualisiert wurden (Anzahl wählbar)';
+        updateBtn.addEventListener('click', async () => {
+            updateBtn.disabled = true;
+            await updateOldest((txt) => { updateBtn.innerHTML = txt; updateAddBtnText(); });
+            updateBtn.innerHTML = '🔁 Update (älteste)';
+            updateBtn.disabled = false;
+            updateAddBtnText();
+        });
+
         const toolBtn = document.createElement('button');
         toolBtn.id = 'bp-tool-btn';
         toolBtn.className = 'bp-btn';
@@ -1345,11 +1421,13 @@
         });
         if (isStandings()) {
             autoFetchBtn.style.display = 'none';
+            updateBtn.style.display = 'none';
             markKnownRows();
             window.addEventListener('focus', markKnownRows);
         }
         if (isAdvSearch()) {
             autoFetchBtn.style.display = 'none';
+            updateBtn.style.display = 'none';
         }
         if (!isStandings()) watchThumbs();
 
@@ -1373,6 +1451,7 @@
         container.appendChild(addBtn);
         container.appendChild(toolBtn);
         container.appendChild(autoFetchBtn);
+        container.appendChild(updateBtn);
         container.appendChild(failedBtn);
         document.body.appendChild(container);
     }

@@ -207,3 +207,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Entfernt: **🗑️ Clear Batch**, **📥 Download CSV**, **📋 Copy Babe Links** und **🔄 Move Lists Only**. Die Profile gehen direkt ins Tool (CSV-Export gibt es dort unter *Daten*), Auto Fetch verschiebt NEU → GELISTET selbst.
 - Notfall statt Clear Batch: **Shift+Klick auf „🗂️ Tool öffnen“** verwirft die gesammelten Profile (mit Rückfrage).
 - **📋 Alle Links kopieren** erscheint jetzt auf allen Kachel-Seiten (Top 100, Suche …) neben „🆕 Neue Links kopieren“.
+
+## Änderungen in 14.13 (Skript) / Tool – rollierendes Update
+- Neuer Knopf **🔁 Update (älteste)**: holt nur die N Profile neu, die im Tool am längsten nicht aktualisiert wurden (nach *Scraped At*; Anzahl wählbar, Standard 300, wird gemerkt). Listen werden dabei nicht verändert. So ist nach einigen Läufen alles einmal aktuell, ohne stundenlangen Komplett-Fetch.
+- Den Stand bekommt das Skript vom Tool (beim Öffnen und nach jeder Übernahme). Was das Skript selbst geholt hat, merkt es sich zusätzlich, damit zwei Läufe hintereinander nicht dieselben Profile holen – auch wenn das Tool dazwischen nicht geöffnet war. Profile, die nur im Internet Archive liegen, sind ausgenommen.
+- Auto Fetch und Update versuchen Fehlschläge am Ende nach einer Minute Pause einmal erneut und fragen dann „Jetzt ins Tool übernehmen?“ (öffnet das Tool direkt).

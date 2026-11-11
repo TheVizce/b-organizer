@@ -991,25 +991,38 @@
   }
 
   // ---------- Brücke zum Userscript ----------
+  // Scraped At (Skript schreibt TTMMJJJJ) → Zeitstempel; ohne Datum = 0 (zuerst aktualisieren)
+  function scrapedTs(e) {
+    const x = v(e, 'Scraped At'); let m;
+    if ((m = x.match(/^(\d{2})\.?(\d{2})\.?(\d{4})$/))) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
+    if ((m = x.match(/^(\d{4})-(\d{2})-(\d{2})/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    return 0;
+  }
+  // Dem Skript mitteilen, welche Profile schon im Tool sind (Ausgrauen auf Babepedia) und wann sie
+  // zuletzt geholt wurden (für „🔁 Update – älteste zuerst“)
+  function sendKnown(reqId) {
+    const slugs = [], ids = [], stale = [];
+    for (const e of entries) {
+      const s = slugOf(e['Profile URL']); if (s) slugs.push(s);
+      const id = v(e, 'Babe ID'); if (id) ids.push(String(id));
+      const url = v(e, 'Profile URL');
+      if (/^https?:\/\/(www\.)?babepedia\.com\/babe\//i.test(url)) stale.push([url, scrapedTs(e)]);
+    }
+    stale.sort((a, b) => a[1] - b[1]);
+    window.postMessage({ type: 'BP_KNOWN', id: reqId || null, slugs, ids, count: entries.length, stale }, location.origin);
+  }
   let bridgeQueue = Promise.resolve();
   window.addEventListener('message', (ev) => {
     if (ev.origin !== location.origin) return;
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
     if (d.type === 'BP_PING' && ready) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
-    if (d.type === 'BP_KNOWN_REQ' && ready) {
-      // Für den Abgleich auf der Battle-Standings-Seite: welche Babepedia-Profile sind schon im Tool?
-      const slugs = [], ids = [];
-      for (const e of entries) {
-        const s = slugOf(e['Profile URL']); if (s) slugs.push(s);
-        const id = v(e, 'Babe ID'); if (id) ids.push(String(id));
-      }
-      window.postMessage({ type: 'BP_KNOWN', id: d.id, slugs, ids, count: entries.length }, location.origin);
-    }
+    if (d.type === 'BP_KNOWN_REQ' && ready) sendKnown(d.id);
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
       bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
+        sendKnown();   // neuer Stand (z. B. Scraped At) gleich ans Skript
         toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
