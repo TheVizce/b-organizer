@@ -216,3 +216,6 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.17 (Tool) – UK-Landesteile → British
 - Nationalitäten „English“, „Scottish“, „Welsh“ und „Northern Irish“ werden zu „British“ zusammengelegt (Babepedia nutzt British teils synonym; „Irish“ bleibt): vorhandene Einträge beim ersten Öffnen (wird gespeichert und synchronisiert), neue und aktualisierte Profile beim Übernehmen. Doppelte („British, English“) werden zu einem Wert. Die Zuordnung steht in `NAT_MERGE` in `app.js`.
 - Das Skript bleibt unverändert: alles, was ins Tool kommt, läuft durch dieselbe Umstellung, und „Aktualisierungen prüfen“ zeigt dadurch kein English → British als Änderung.
+
+## Änderungen in 14.18 (Tool) – Nationalität mit Flagge an den Ranker
+- Beim Senden an den Image Ranker wird die Nationalität immer als „Flagge Name“ geschickt (z. B. „🇬🇧 British“), auch wenn sie im Tool von Hand ohne Flagge eingetragen wurde. Vorher landete „British“ im Ranker als eigener Auswahlwert neben „🇬🇧 British“.

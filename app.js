@@ -2402,6 +2402,8 @@
   function rkValues(e, f, type) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
     if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
+    // Nationalität immer einheitlich mit Flagge senden – auch bei von Hand eingetragenen Werten ohne Flagge
+    if (f === 'Nationality') { const n = natNames(e).map(withFlag); return !n.length ? [] : type === 'multi' ? n : [n.join(', ')]; }
     const raw = v(e, f);
     if (!raw) return [];
     if (type === 'multi') return splitList(raw);
