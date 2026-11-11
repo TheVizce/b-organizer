@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.13
+// @version      14.14
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -227,7 +227,7 @@
         ['Science / Health / Education', ['Cybersecurity expert', 'Dentist', 'Doctor - Physician', 'Nurse', 'Professor', 'Programmer', 'Science Communicator', 'Sex Therapist', 'Teacher', 'Veterinarian']],
         ['Business / Law / Politics', ['Activist', 'Barrister', 'Business Woman', 'Lawyer', 'Military Personnel', 'Political Commentator', 'Politician', 'Realtor', 'Royalty']],
         ['Creative & Design', ['Artist', 'Author', 'Fashion Designer', 'Graphic Designer', 'Photographer', 'Writer']],
-        ['Service & Hospitality', ['Barista', 'Bartender', 'Beautician', 'Flight Attendant', 'Hooters Girl', 'Nail Designer']],
+        ['Service & Hospitality', ['Barista', 'Bartender', 'Beautician', 'Flight Attendant', 'Hairdresser', 'Hooters Girl', 'Nail Designer']],
         ['Sonstige', ['Housewife', 'Paranormal Investigator', 'Student', 'Trucker']]
     ];
     // Für Werte, die (noch) nicht in der Liste stehen: Regeln nach Wortbestandteilen
@@ -236,6 +236,7 @@
         [/musician|singer|rapper|\bdj\b|pop idol|band/i, 'Music'],
         [/scientist|engineer|doctor|physician|biologist|researcher|veterinar|pharmacist|psycholog|paramedic|midwife/i, 'Science / Health / Education'],
         [/porn|adult (film|actress)|onlyfans/i, 'Adult Industry'],
+        [/hairdresser|hair ?stylist|barber|waitress|stewardess/i, 'Service & Hospitality'],
         [/model/i, 'Modeling'],
         [/dancer|actress|performer/i, 'Acting & Performing'],
         [/host|reporter|presenter|anchor/i, 'TV & Media'],
