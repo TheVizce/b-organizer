@@ -841,6 +841,15 @@
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
     if (d.type === 'BP_PING' && ready) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+    if (d.type === 'BP_KNOWN_REQ' && ready) {
+      // Für den Abgleich auf der Battle-Standings-Seite: welche Babepedia-Profile sind schon im Tool?
+      const slugs = [], ids = [];
+      for (const e of entries) {
+        const s = slugOf(e['Profile URL']); if (s) slugs.push(s);
+        const id = v(e, 'Babe ID'); if (id) ids.push(String(id));
+      }
+      window.postMessage({ type: 'BP_KNOWN', id: d.id, slugs, ids, count: entries.length }, location.origin);
+    }
     if (d.type === 'BP_RANKER' && Array.isArray(d.urls) && ready) {
       // Läuft nach einem evtl. gleichzeitig übertragenen Batch-Import (Kette), damit neue Einträge mitzählen
       bridgeQueue = bridgeQueue.then(() => applyRanker(d.urls)).then(r => {

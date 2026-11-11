@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.6
+// @version      14.7
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -41,11 +41,18 @@
         let sent = false;
         let sentUrls = new Set();
         const syncId = String(Date.now());
+        // Bekannte Profile des Tools abfragen (für den Abgleich auf der Battle-Standings-Seite)
+        const requestKnown = () => window.postMessage({ type: 'BP_KNOWN_REQ', id: syncId }, location.origin);
+        window.addEventListener('blur', requestKnown); // beim Verlassen des Tabs den neuesten Stand holen
 
         window.addEventListener('message', (ev) => {
             if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
             const d = ev.data;
 
+            if (d.type === 'BP_TOOL_READY') requestKnown();
+            if (d.type === 'BP_KNOWN' && Array.isArray(d.slugs)) {
+                GM_setValue('bp_known_organizer', { slugs: d.slugs, ids: Array.isArray(d.ids) ? d.ids : [], count: d.count || d.slugs.length, at: new Date().toISOString() });
+            }
             if (d.type === 'BP_TOOL_READY' && !sent) {
                 sent = true;
                 const batch = GM_getValue('bp_batch_data', []);
@@ -308,6 +315,10 @@
         #bp-failed-btn:hover { background-color: #5f4a00; }
         #bp-ranker-btn { background-color: #b8860b; }
         #bp-ranker-btn:hover { background-color: #8a6508; }
+        #bp-remember-btn, #bp-newlinks-btn { background-color: #1565c0; }
+        #bp-remember-btn:hover, #bp-newlinks-btn:hover { background-color: #0d47a1; }
+        #bp-alllinks-btn { background-color: #455a64; }
+        #bp-alllinks-btn:hover { background-color: #263238; }
         #bp-clear-btn { background-color: #c62828; }
         #bp-clear-btn:hover { background-color: #8e0000; }
     `);
@@ -1007,8 +1018,91 @@
         const urls = [...new Set(links.map(u => u.split('?')[0].split('#')[0]))];
         const expected = getExpectedListTotal(document);
         GM_setValue('bp_ranker_sync', { urls, expected, at: new Date().toISOString() });
+        rememberList('ranker', urls);
         alert(`Ranker-Abgleich: ${urls.length} Profile gesammelt` + (expected ? ` (laut Babepedia ${expected})` : '') +
               `.\n\nJetzt über „🗂️ Tool öffnen“ ins Tool übernehmen – dort wird „In Ranker“ für alle Einträge gesetzt.`);
+    }
+
+
+    // ===================================================================
+    // Abgleich: Profile, die schon im Organizer oder in einer deiner Listen sind
+    // ===================================================================
+    const plainSlug = (x) => String(x || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    function slugOfUrl(u) {
+        let s = String(u || '');
+        try { s = decodeURIComponent(s); } catch (e) {}
+        const m = s.match(/\/babe\/([^/?#]+)/i);
+        return m ? plainSlug(m[1].replace(/[\s_]+/g, '_')) : '';
+    }
+    const LIST_NAMES = { neu: 'NEU', gelistet: 'GELISTET', ranker: 'RANKER' };
+    function getKnownLists() { const k = GM_getValue('bp_known_lists', {}); return k && typeof k === 'object' ? k : {}; }
+    function rememberList(ctx, urls) {
+        const lists = getKnownLists();
+        lists[ctx] = { slugs: [...new Set(urls.map(slugOfUrl).filter(Boolean))], at: new Date().toISOString() };
+        GM_setValue('bp_known_lists', lists);
+        return lists[ctx].slugs.length;
+    }
+    function getKnownSets() {
+        const slugs = new Set(), ids = new Set();
+        const org = GM_getValue('bp_known_organizer', null);
+        if (org && Array.isArray(org.slugs)) { org.slugs.forEach(x => slugs.add(x)); (org.ids || []).forEach(x => ids.add(String(x))); }
+        Object.values(getKnownLists()).forEach(l => (l.slugs || []).forEach(x => slugs.add(x)));
+        return { slugs, ids, org };
+    }
+    const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('de-DE'); } catch (e) { return '?'; } };
+    function knownSummary() {
+        const org = GM_getValue('bp_known_organizer', null);
+        const lists = getKnownLists();
+        const parts = [org ? `Organizer ${org.count} (${fmtDate(org.at)})` : '⚠️ Organizer noch nicht abgeglichen – Tool einmal öffnen'];
+        for (const [k, name] of Object.entries(LIST_NAMES)) {
+            parts.push(lists[k] ? `${name} ${lists[k].slugs.length} (${fmtDate(lists[k].at)})` : `${name} nicht gemerkt`);
+        }
+        return parts.join(' · ');
+    }
+
+    // ---- Battle-Standings ----
+    const isStandings = () => /^\/battles\/standings/i.test(location.pathname);
+    function standingsRowsFrom(doc) {
+        return [...doc.querySelectorAll('#battle-standings li.bb-row')].map(li => {
+            const a = li.querySelector('a.bb-row-name');
+            return a ? { li, url: new URL(a.getAttribute('href'), 'https://www.babepedia.com').href, id: li.getAttribute('data-babe') || '' } : null;
+        }).filter(Boolean);
+    }
+    const isKnown = (row, known) => (row.id && known.ids.has(String(row.id))) || known.slugs.has(slugOfUrl(row.url));
+
+    function markKnownRows() {
+        const known = getKnownSets();
+        standingsRowsFrom(document).forEach(r => { r.li.style.opacity = isKnown(r, known) ? '0.35' : ''; });
+    }
+
+    async function copyStandingsLinks(onlyNew, onProgress) {
+        const allPages = confirm('Alle Seiten der Standings durchgehen?\n\n[OK] = Alle Seiten\n[Abbrechen] = Nur diese Seite');
+        let rows = standingsRowsFrom(document);
+        if (allPages) {
+            const total = getTotalPages(document);
+            const cur = parseInt(new URL(location.href).searchParams.get('page') || '1', 10);
+            const failed = [];
+            for (let p = 1; p <= total; p++) {
+                if (p === cur) continue;
+                if (onProgress) onProgress(`📄 Seite ${p}/${total}`);
+                try {
+                    const html = await fetchWithRetry(`https://www.babepedia.com/battles/standings?page=${p}`, {}, 5, 2000);
+                    const found = standingsRowsFrom(new DOMParser().parseFromString(html, 'text/html'));
+                    if (!found.length) throw new Error('keine Einträge');
+                    rows = rows.concat(found);
+                } catch (err) { failed.push(p); }
+                await new Promise(r => setTimeout(r, getRandomDelay(400, 800)));
+            }
+            if (failed.length) alert(`Diese Seiten konnten nicht geladen werden: ${failed.join(', ')}\nEs wird mit den übrigen weitergemacht.`);
+        }
+        const seen = new Set();
+        rows = rows.filter(r => !seen.has(r.url) && seen.add(r.url));
+        const known = getKnownSets();
+        const out = onlyNew ? rows.filter(r => !isKnown(r, known)) : rows;
+        if (!out.length) { alert(onlyNew ? `Alle ${rows.length} Profile sind schon bekannt – nichts zu kopieren.` : 'Keine Links gefunden.'); return; }
+        GM_setClipboard(out.map(r => r.url).join('\n'));
+        alert(`${out.length} Links kopiert` + (onlyNew ? ` (${rows.length - out.length} von ${rows.length} schon bekannt, ausgelassen).` : '.') +
+              (onlyNew ? `\n\nAbgleich mit: ${knownSummary()}` : ''));
     }
 
     async function autoFetchAllProfiles(onProgress) {
@@ -1343,6 +1437,54 @@
             }
         });
 
+
+        // Eigene Liste für den Standings-Abgleich merken
+        const rememberBtn = document.createElement('button');
+        rememberBtn.id = 'bp-remember-btn';
+        rememberBtn.className = 'bp-btn';
+        const ctxNow = getListContext();
+        const rememberLabel = () => {
+            const l = getKnownLists()[ctxNow];
+            rememberBtn.innerHTML = `📌 ${LIST_NAMES[ctxNow] || ''} für Abgleich merken` + (l ? ` (${fmtDate(l.at)})` : '');
+        };
+        if (LIST_NAMES[ctxNow]) rememberLabel(); else rememberBtn.style.display = 'none';
+        rememberBtn.title = 'Alle Seiten dieser Liste einsammeln; diese Profile werden auf der Battle-Standings-Seite als bekannt ausgelassen';
+        rememberBtn.addEventListener('click', async () => {
+            rememberBtn.disabled = true;
+            const links = await getAllBabeLinksMultiPage((txt) => { rememberBtn.innerHTML = txt; });
+            const n = rememberList(ctxNow, links);
+            alert(`${n} Profile der Liste ${LIST_NAMES[ctxNow]} gemerkt.`);
+            rememberLabel();
+            rememberBtn.disabled = false;
+        });
+
+        // Battle-Standings: Links kopieren
+        const newLinksBtn = document.createElement('button');
+        newLinksBtn.id = 'bp-newlinks-btn';
+        newLinksBtn.className = 'bp-btn';
+        newLinksBtn.innerHTML = '🆕 Neue Links kopieren';
+        newLinksBtn.title = 'Nur Profile kopieren, die weder im Organizer noch in einer gemerkten Liste sind';
+        const allLinksBtn = document.createElement('button');
+        allLinksBtn.id = 'bp-alllinks-btn';
+        allLinksBtn.className = 'bp-btn';
+        allLinksBtn.innerHTML = '📋 Alle Links kopieren';
+        [[newLinksBtn, true], [allLinksBtn, false]].forEach(([btn, onlyNew]) => {
+            const label = btn.innerHTML;
+            if (!isStandings()) btn.style.display = 'none';
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                await copyStandingsLinks(onlyNew, (txt) => { btn.innerHTML = txt; });
+                btn.innerHTML = label;
+                btn.disabled = false;
+            });
+        });
+        if (isStandings()) {
+            autoFetchBtn.style.display = 'none';
+            moveListBtn.style.display = 'none';
+            markKnownRows();
+            window.addEventListener('focus', markKnownRows);
+        }
+
         const ctxLabel = {
             neu: '📥 Liste NEU → wird nach GELISTET verschoben',
             gelistet: '✅ Liste GELISTET → bleibt unverändert',
@@ -1351,10 +1493,14 @@
             andere: 'Keine deiner Listen erkannt'
         }[getListContext()];
         const status = document.createElement('div');
-        status.textContent = ctxLabel;
+        status.textContent = isStandings() ? `Battle-Standings · bekannt (ausgegraut): ${knownSummary()}` : ctxLabel;
+        if (isStandings()) window.addEventListener('focus', () => { status.textContent = `Battle-Standings · bekannt (ausgegraut): ${knownSummary()}`; });
         status.style.cssText = 'width:170px;font-size:11px;line-height:1.3;color:#fff;background:rgba(0,0,0,.65);padding:6px 8px;border-radius:6px;';
         container.appendChild(status);
         container.appendChild(rankerBtn);
+        container.appendChild(rememberBtn);
+        container.appendChild(newLinksBtn);
+        container.appendChild(allLinksBtn);
         container.appendChild(addBtn);
         container.appendChild(toolBtn);
         container.appendChild(autoFetchBtn);
