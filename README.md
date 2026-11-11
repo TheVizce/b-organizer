@@ -202,3 +202,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.10 (Skript) / Tool – Ranker-Liste auf Babepedia entfällt
 - Der Knopf **🏆 Ranker-Abgleich** und die Übergabe der Babepedia-Liste „Ranker“ (ID 172740) ans Tool sind entfernt. Ob ein Eintrag im Image Ranker ist, kommt nur noch aus der Verknüpfung im Tool.
 - Die Liste selbst wird vom Skript weiter erkannt und beim Holen nicht verändert. Das alte Feld „In Ranker“ bleibt in den Daten, wird aber nirgends mehr gesetzt oder angezeigt.
+
+## Änderungen in 14.11 (Skript) – aufgeräumt
+- Entfernt: **🗑️ Clear Batch**, **📥 Download CSV**, **📋 Copy Babe Links** und **🔄 Move Lists Only**. Die Profile gehen direkt ins Tool (CSV-Export gibt es dort unter *Daten*), Auto Fetch verschiebt NEU → GELISTET selbst.
+- Notfall statt Clear Batch: **Shift+Klick auf „🗂️ Tool öffnen“** verwirft die gesammelten Profile (mit Rückfrage).
+- **📋 Alle Links kopieren** erscheint jetzt auf allen Kachel-Seiten (Top 100, Suche …) neben „🆕 Neue Links kopieren“.

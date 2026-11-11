@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.10
+// @version      14.11
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -297,12 +297,6 @@
         #bp-add-btn:hover { background-color: #1d3e61; }
         #bp-autofetch-btn { background-color: #e65100; }
         #bp-autofetch-btn:hover { background-color: #b23c00; }
-        #bp-movelist-btn { background-color: #00838f; }
-        #bp-movelist-btn:hover { background-color: #005662; }
-        #bp-dl-btn { background-color: #2e7d32; }
-        #bp-dl-btn:hover { background-color: #1b5e20; }
-        #bp-copy-btn { background-color: #6a1b9a; }
-        #bp-copy-btn:hover { background-color: #4a148c; }
         #bp-tool-btn { background-color: #ad3a63; }
         #bp-tool-btn:hover { background-color: #7d2747; }
         #bp-failed-btn { background-color: #8d6e00; }
@@ -313,8 +307,6 @@
         #bp-remember-btn:hover, #bp-newlinks-btn:hover { background-color: #0d47a1; }
         #bp-alllinks-btn { background-color: #455a64; }
         #bp-alllinks-btn:hover { background-color: #263238; }
-        #bp-clear-btn { background-color: #c62828; }
-        #bp-clear-btn:hover { background-color: #8e0000; }
     `);
 
     function extractBabeId(doc) {
@@ -925,23 +917,6 @@
         } catch (e) { /* ignorieren */ }
     })();
 
-    function buildBatchCSV(list) {
-        const escapeCSV = (val) => {
-            if (val === undefined || val === null) return '""';
-            let str = String(val).replace(/"/g, '""');
-            return `"${str}"`;
-        };
-
-        const lines = [];
-        lines.push(FIELDS.map(f => escapeCSV(f)).join(','));
-
-        list.forEach(item => {
-            lines.push(FIELDS.map(f => escapeCSV(item[f] || '')).join(','));
-        });
-
-        return lines.join('\n');
-    }
-
     function getRandomDelay(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
@@ -1167,62 +1142,6 @@
               `\n\nÜber „🗂️ Tool öffnen“ ins Tool übernehmen.`);
     }
 
-    async function moveListsOnly(onProgress) {
-        const ctx = getListContext();
-        if (ctx === 'gelistet' || ctx === 'ranker') {
-            alert('In dieser Liste gibt es nichts zu verschieben.');
-            return;
-        }
-        if (ctx !== 'neu' && !confirm('Diese Seite ist nicht deine NEU-Liste. Trotzdem alle Profile dieser Seite nach GELISTET verschieben?')) {
-            return;
-        }
-        const includeAllPages = confirm("Möchtest du ALLE Folgeseiten dieser Liste durchsuchen?\n\n[OK] = Alle Seiten (z.B. 1 bis 20) abklappern\n[Abbrechen] = Nur diese aktuelle Seite verarbeiten");
-
-        const links = includeAllPages ? await getAllBabeLinksMultiPage(onProgress && ((txt) => onProgress(txt))) : getBabeLinksFromDoc(document);
-
-        if (links.length === 0) {
-            alert('Keine /babe/ Profil-Links gefunden!');
-            return;
-        }
-
-        const failedPages = [];
-        let successCount = 0;
-
-        for (let i = 0; i < links.length; i++) {
-            const url = links[i];
-            if (onProgress) onProgress(i + 1, links.length);
-
-            try {
-                const htmlText = await fetchWithRetry(url);
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlText, 'text/html');
-                
-                let babeId = extractBabeId(doc);
-
-                if (babeId) {
-                    await safeMoveBabeBetweenLists(babeId, LIST_NEU, LIST_GELISTET);
-                    successCount++;
-                } else {
-                    throw new Error("Babe ID konnte nicht ermittelt werden");
-                }
-            } catch (err) {
-                console.error(`[MoveList Fehler] ${url}:`, err.message);
-                failedPages.push({ url, error: err.message });
-                markFailed(url, true, err.message);
-            }
-
-            const delay = getRandomDelay(MIN_DELAY_MS, MAX_DELAY_MS);
-            await new Promise(r => setTimeout(r, delay));
-        }
-
-        console.log("================ MOVE LISTS ZUSAMMENFASSUNG ================");
-        console.log(`Erfolgreich: ${successCount} | Fehlgeschlagen: ${failedPages.length}`);
-        if (failedPages.length > 0) {
-            console.table(failedPages);
-        }
-        console.log("============================================================");
-    }
-
     function initArchiveUI() {
         const container = document.createElement('div');
         container.className = 'bp-btn-container';
@@ -1337,82 +1256,17 @@
             }, 3000);
         });
 
-        const moveListBtn = document.createElement('button');
-        moveListBtn.id = 'bp-movelist-btn';
-        moveListBtn.className = 'bp-btn';
-        moveListBtn.innerHTML = '🔄 Move Lists Only';
-
-        moveListBtn.addEventListener('click', async () => {
-            moveListBtn.disabled = true;
-            moveListBtn.style.opacity = '0.7';
-
-            await moveListsOnly((current, total) => {
-                moveListBtn.innerHTML = typeof current === 'string' ? current : `⏳ ${current}/${total} Moved`;
-            });
-
-            moveListBtn.innerHTML = '✅ Moved All!';
-            moveListBtn.style.backgroundColor = '#2e7d32';
-
-            setTimeout(() => {
-                moveListBtn.innerHTML = '🔄 Move Lists Only';
-                moveListBtn.style.backgroundColor = '#00838f';
-                moveListBtn.disabled = false;
-                moveListBtn.style.opacity = '1';
-            }, 3000);
-        });
-
-        const dlBtn = document.createElement('button');
-        dlBtn.id = 'bp-dl-btn';
-        dlBtn.className = 'bp-btn';
-        dlBtn.innerHTML = '📥 Download CSV';
-
-        dlBtn.addEventListener('click', () => {
-            const list = getStoredData();
-            if (list.length === 0) {
-                alert('Der Batch ist leer! Klicke zuerst auf "Add" oder "Auto Fetch All".');
-                return;
-            }
-            const csvText = buildBatchCSV(list);
-            const blob = new Blob(['\uFEFF' + csvText], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `notion_batch_${list.length}_profiles.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        });
-
-        const copyBtn = document.createElement('button');
-        copyBtn.id = 'bp-copy-btn';
-        copyBtn.className = 'bp-btn';
-        copyBtn.innerHTML = '📋 Copy Babe Links';
-
-        copyBtn.addEventListener('click', async () => {
-            const includeAllPages = confirm("Möchtest du die Links ALLER Folgeseiten kopieren?\n\n[OK] = Alle Seiten der Liste kopieren\n[Abbrechen] = Nur Links der aktuellen Seite kopieren");
-            const linkList = includeAllPages ? await getAllBabeLinksMultiPage() : getBabeLinksFromDoc(document);
-
-            if (linkList.length === 0) {
-                alert('Keine /babe/ Links gefunden!');
-                return;
-            }
-            const textToCopy = linkList.join('\n');
-            if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(textToCopy);
-            else navigator.clipboard.writeText(textToCopy);
-
-            copyBtn.innerHTML = `✅ Copied (${linkList.length})`;
-            copyBtn.style.backgroundColor = '#2e7d32';
-            setTimeout(() => { 
-                copyBtn.innerHTML = '📋 Copy Babe Links';
-                copyBtn.style.backgroundColor = '#6a1b9a';
-            }, 2000);
-        });
-
         const toolBtn = document.createElement('button');
         toolBtn.id = 'bp-tool-btn';
         toolBtn.className = 'bp-btn';
         toolBtn.innerHTML = '🗂️ Tool öffnen';
-        toolBtn.title = 'Öffnet den Babe Organizer – gesammelte Profile werden dort automatisch übernommen';
-        toolBtn.addEventListener('click', () => {
+        toolBtn.title = 'Öffnet den Babe Organizer – gesammelte Profile werden dort automatisch übernommen · Shift+Klick: gesammelte Profile verwerfen';
+        toolBtn.addEventListener('click', (ev) => {
+            if (ev.shiftKey) {
+                const n = getStoredData().length;
+                if (n && confirm(`${n} gesammelte Profile verwerfen, ohne sie ins Tool zu übernehmen?`)) { saveStoredData([]); updateAddBtnText(); }
+                return;
+            }
             if (TOOL_URL.includes('DEIN-GITHUB-NAME')) {
                 alert('Bitte zuerst oben im Skript TOOL_URL auf die Adresse deines Tools setzen.');
                 return;
@@ -1443,18 +1297,6 @@
             updateAddBtnText();
         });
         failedBtn.title = 'Klick: erneut versuchen · Shift+Klick: Liste anzeigen/leeren';
-
-
-        const clearBtn = document.createElement('button');
-        clearBtn.id = 'bp-clear-btn';
-        clearBtn.className = 'bp-btn';
-        clearBtn.innerHTML = '🗑️ Clear Batch';
-        clearBtn.addEventListener('click', () => {
-            if (confirm('Batch-Liste wirklich leeren?')) {
-                saveStoredData([]);
-                updateAddBtnText();
-            }
-        });
 
 
         // Eigene Liste für den Standings-Abgleich merken
@@ -1492,7 +1334,7 @@
             (isAdvSearch() || document.querySelector('.thumbshot a[href*="/babe/"]'));
         [[newLinksBtn, true], [allLinksBtn, false]].forEach(([btn, onlyNew]) => {
             const label = btn.innerHTML;
-            if (!isStandings() && !(isThumbPage && onlyNew)) btn.style.display = 'none'; // „alle“ gibt es dort schon als „Copy Babe Links“
+            if (!isStandings() && !isThumbPage) btn.style.display = 'none';
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
                 if (isStandings()) await copyStandingsLinks(onlyNew, (txt) => { btn.innerHTML = txt; });
@@ -1503,13 +1345,11 @@
         });
         if (isStandings()) {
             autoFetchBtn.style.display = 'none';
-            moveListBtn.style.display = 'none';
             markKnownRows();
             window.addEventListener('focus', markKnownRows);
         }
         if (isAdvSearch()) {
             autoFetchBtn.style.display = 'none';
-            moveListBtn.style.display = 'none';
         }
         if (!isStandings()) watchThumbs();
 
@@ -1533,11 +1373,7 @@
         container.appendChild(addBtn);
         container.appendChild(toolBtn);
         container.appendChild(autoFetchBtn);
-        container.appendChild(moveListBtn);
-        container.appendChild(dlBtn);
-        container.appendChild(copyBtn);
         container.appendChild(failedBtn);
-        container.appendChild(clearBtn);
         document.body.appendChild(container);
     }
 
