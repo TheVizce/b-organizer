@@ -219,9 +219,31 @@
     const next = out.join(', ');
     if (next !== raw) { e.Nationality = next; deriveChanged = true; }
   }
+  // Babepedia-Zusätze entfernen: „?–68.6–81.3 cm (B–W–H) · WHR 0.84“ → „?-69-81“, „F (32F US / 70H JP)“ → „F“
+  function cleanMeasurements(x) {
+    const t = String(x || '').trim();
+    const m = t.replace(/,/g, '.').match(/^(\d+(?:\.\d+)?|\?)\s*[-–—]\s*(\d+(?:\.\d+)?|\?)\s*[-–—]\s*(\d+(?:\.\d+)?|\?)\s*(cm|in(?:ch(?:es)?)?|["″])?/i);
+    if (!m || ![1, 2, 3].some(i => m[i] === '?')) return t;   // ohne „?“ kümmert sich measToCm/Zoll-Umrechnung
+    const inch = /^(in|inch|inches|"|″)$/i.test(m[4] || '');
+    if ([1, 2, 3].every(i => m[i] === '?')) return '';   // gar keine Angabe
+    return [m[1], m[2], m[3]].map(v => v === '?' ? '?' : String(Math.round(parseFloat(v) * (inch ? INCH : 1)))).join('-');
+  }
+  function cleanCup(x) {
+    const t = String(x || '').trim();
+    const m = t.match(/^([A-Z]{1,3})\s*\(/);          // „F (32F US / 70H JP)“, „D (old cup size: B)“
+    return m ? m[1] : t;
+  }
+  function cleanValues(e) {
+    for (const [f, fn] of [['Measurements', cleanMeasurements], ['Bra/Cup', cleanCup]]) {
+      if (!e[f]) continue;
+      const nx = fn(e[f]);
+      if (nx !== e[f]) { e[f] = nx; deriveChanged = true; }
+    }
+  }
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     mergeNationality(e);
+    cleanValues(e);
     e['Profession Category'] = professionCategories(e.Professions);
     if (looksLikeInches(e.Measurements)) e.Measurements = measToCm(e.Measurements, 'in');
     return e;
@@ -2847,7 +2869,7 @@
       await loadImgCheck();
       await loadPending();
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
-      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Nationalitäten vereinheitlicht (English/Scottish/Welsh/Northern Irish → British) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
+      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Werte vereinheitlicht (Nationalität, Measurements, Bra/Cup) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;

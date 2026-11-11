@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.14
+// @version      14.15
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -714,20 +714,23 @@
                     if (match) data['Weight'] = match[1];
                 } else if (label === 'Measurements') {
                     // Immer in cm speichern. Babepedia zeigt je nach Kontoeinstellung "36–24–36 in" oder cm.
-                    const triple = /(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)\s*[\-–—]\s*(\d+(?:\.\d+)?)\s*(cm|in(?:ch(?:es)?)?\b|["″])?/gi;
+                    // Unbekannte Werte stehen auf Babepedia als „?“ (z. B. „?–68.6–81.3 cm (B–W–H) · WHR 0.84“)
+                    const triple = /(\d+(?:\.\d+)?|\?)\s*[\-–—]\s*(\d+(?:\.\d+)?|\?)\s*[\-–—]\s*(\d+(?:\.\d+)?|\?)\s*(cm|in(?:ch(?:es)?)?\b|["″])?/gi;
                     const all = [...value.matchAll(triple)];
                     const cmHit = all.find(m => m[4] && m[4].toLowerCase() === 'cm');
                     const match = cmHit || all[0];
                     if (match) {
-                        const isInch = !cmHit && (/^(in|inch|inches|"|″)$/i.test(match[4] || '') || parseFloat(match[1]) < 60);
+                        const firstNum = [match[1], match[2], match[3]].find(x => x !== '?');
+                        const isInch = !cmHit && (/^(in|inch|inches|"|″)$/i.test(match[4] || '') || (match[1] !== '?' && parseFloat(match[1]) < 60) || (match[1] === '?' && parseFloat(firstNum) < 45));
                         const f = isInch ? 2.54 : 1;
-                        const [bust, waist, hips] = [match[1], match[2], match[3]].map(x => Math.round(parseFloat(x) * f));
-                        data['Measurements'] = `${bust}-${waist}-${hips}`;
+                        const [bust, waist, hips] = [match[1], match[2], match[3]].map(x => x === '?' ? '?' : Math.round(parseFloat(x) * f));
+                        data['Measurements'] = [bust, waist, hips].every(x => x === '?') ? '' : `${bust}-${waist}-${hips}`;
                     } else {
                         data['Measurements'] = value;
                     }
                 } else if (label === 'Bra/cup size') {
-                    const cupMatch = value.match(/^[0-9]+\s*([A-Za-z]+)/);
+                    // „34DD“ → DD; „F (32F US / 70H JP)“ → F; Zusätze in Klammern weglassen
+                    const cupMatch = value.match(/^[0-9]+\s*([A-Za-z]+)/) || value.match(/^([A-Z]{1,3})(?![a-z])/);
                     if (cupMatch) data['Bra/Cup'] = cupMatch[1];
                     else data['Bra/Cup'] = value;
                 } else if (label === 'Boobs') {

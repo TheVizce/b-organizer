@@ -219,3 +219,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 
 ## Änderungen in 14.18 (Tool) – Nationalität mit Flagge an den Ranker
 - Beim Senden an den Image Ranker wird die Nationalität immer als „Flagge Name“ geschickt (z. B. „🇬🇧 British“), auch wenn sie im Tool von Hand ohne Flagge eingetragen wurde. Vorher landete „British“ im Ranker als eigener Auswahlwert neben „🇬🇧 British“.
+
+## Änderungen in 14.15 (Skript) / Tool – Measurements und Bra/Cup sauber
+- Measurements mit unbekannten Teilen („?–68.6–81.3 cm (B–W–H) · WHR 0.84“) werden als „?-69-81“ gespeichert; nur „?“ ergibt ein leeres Feld.
+- Bra/Cup mit Zusatz in Klammern („F (32F US / 70H JP)“, „D (old cup size: B)“) wird auf den Cup gekürzt.
+- Vorhandene Einträge stellt das Tool beim nächsten Öffnen um und speichert sie.
