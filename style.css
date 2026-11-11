@@ -496,3 +496,27 @@ button.st-tile:hover { border-color: var(--accent); }
 }
 kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; background: var(--surface-2); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 .help.keys dl.kv dt { white-space: nowrap; }
+
+/* Aktualisierungen prüfen */
+.btn.warn { border-color: var(--warn, #e0a64a); color: var(--warn, #e0a64a); }
+.pu-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; }
+.pu-bar #pu-count { margin-right: auto; color: var(--muted); }
+.pu .chk { display: block; margin: 2px 0; }
+.pu-list { display: grid; gap: 10px; margin-top: 12px; }
+.pu-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--surface-2); }
+.pu-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.pu-thumb { width: 44px; height: 58px; flex: none; border-radius: 6px; overflow: hidden; background: var(--surface-3); }
+.pu-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pu-title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pu-title .linklike { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.pu-title .muted { font-size: 12px; }
+.pu-acts { display: flex; gap: 6px; flex: none; }
+.pu-row { display: grid; grid-template-columns: 20px minmax(90px, 150px) 1fr; gap: 8px; align-items: start; padding: 4px 0; border-top: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+.pu-f { color: var(--muted); }
+.pu-v { overflow-wrap: anywhere; }
+.pu-old { color: #f08a8a; }
+.pu-new { color: #6fd39a; }
+.pu-img { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pu-img img { width: 34px; height: 46px; object-fit: cover; border-radius: 4px; }
+.pu-img img.rem { opacity: .45; outline: 1px solid #f08a8a; }
+@media (max-width: 600px) { .pu-head { flex-wrap: wrap; } .pu-acts { width: 100%; } .pu-acts .btn { flex: 1; } .pu-row { grid-template-columns: 20px 1fr; } .pu-row .pu-v, .pu-row .pu-img { grid-column: 2; } }

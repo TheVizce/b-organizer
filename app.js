@@ -710,13 +710,161 @@
     });
   }
 
+  // ---------- Aktualisierungen prüfen ----------
+  // Bei frisch geholten Babepedia-Profilen (ohne _id, also nicht aus einem Backup) werden Änderungen an
+  // bekannten Einträgen nicht direkt geschrieben, sondern als „offen“ gemerkt (IndexedDB-Schlüssel
+  // 'pending-updates' in bp-organizer, nur auf diesem Gerät) und können einzeln übernommen oder abgelehnt werden.
+  const VOLATILE = ['Rank', 'Highest Rank', 'Votes', 'Global Rating'];   // ändern sich ständig – auf Wunsch automatisch
+  if (ui.reviewUpdates === undefined) ui.reviewUpdates = true;
+  if (ui.autoVolatile === undefined) ui.autoVolatile = true;
+  let pendingUpdates = [];   // [{ id, at, item: { Feld: neuer Wert } }]
+  // Abgelehnte Werte merken ('rejected-updates': { id: { Feld: Wert } }), damit sie beim nächsten Holen nicht wieder auftauchen
+  let rejectedUpdates = {};
+  const updImgSig = (o) => IMAGE_FIELDS.map(f => normVal(o[f])).join('\n');
+  async function loadPending() {
+    try { pendingUpdates = (await idbGet('pending-updates')) || []; } catch { pendingUpdates = []; }
+    try { rejectedUpdates = (await idbGet('rejected-updates')) || {}; } catch { rejectedUpdates = {}; }
+    updatePendingBtn();
+  }
+  async function savePendingUpdates() {
+    try { await idbSet('pending-updates', pendingUpdates); await idbSet('rejected-updates', rejectedUpdates); }
+    catch (err) { toast('Offene Aktualisierungen konnten nicht gespeichert werden: ' + (err && err.message || err), 'err'); throw err; }
+    updatePendingBtn();
+  }
+  function updatePendingBtn() {
+    const b = $('#btn-pending'); if (!b) return;
+    const n = pendingUpdates.filter(p => byId(p.id) && pendingDiff(p).length).length;
+    b.hidden = !n; b.style.display = n ? '' : 'none'; b.querySelector('.n').textContent = n;
+  }
+  const normVal = (x) => String(x ?? '').trim();
+  // Unterschiede zwischen gespeichertem Eintrag und offenem Stand; Bildfelder als eine Gruppe
+  function pendingDiff(p) {
+    const e = byId(p.id); if (!e) return [];
+    const out = [];
+    let imgChanged = false;
+    for (const [f, val] of Object.entries(p.item)) {
+      if (normVal(val) === normVal(e[f])) continue;
+      if (IMAGE_FIELDS.includes(f)) { imgChanged = true; continue; }
+      out.push({ f, old: normVal(e[f]), neu: normVal(val) });
+    }
+    if (imgChanged) {
+      const after = Object.assign({}, e); for (const f of IMAGE_FIELDS) if (p.item[f] !== undefined) after[f] = p.item[f];
+      const a = images(e), b = images(after);
+      const added = b.filter(u => !a.includes(u)), removed = a.filter(u => !b.includes(u));
+      if (added.length || removed.length || v(after, 'Main Image URL') !== v(e, 'Main Image URL'))
+        out.push({ f: '__images', added, removed, old: v(e, 'Main Image URL'), neu: v(after, 'Main Image URL') });
+    }
+    return out;
+  }
+  function applyPending(p, fields) {
+    const e = byId(p.id); if (!e) return false;
+    let n = 0;
+    for (const f of fields) {
+      const list = f === '__images' ? IMAGE_FIELDS : [f];
+      for (const g of list) if (p.item[g] !== undefined && normVal(p.item[g]) !== normVal(e[g])) { e[g] = p.item[g]; n++; }
+    }
+    if (n) { e._updated = Date.now(); derive(e); }
+    return n > 0;
+  }
+  function addPending(e, item) {
+    // Neuen Stand so berechnen, wie er nach dem Übernehmen gespeichert würde (Zoll → cm usw.)
+    const after = Object.assign({}, e);
+    for (const f of ALL_FIELDS) if (item[f]) after[f] = item[f];
+    derive(after);
+    const vals = {};
+    for (const f of ALL_FIELDS) if (item[f] || (after[f] !== e[f] && f === 'Profession Category')) vals[f] = after[f];
+    // ständig wechselnde Werte gleich übernehmen
+    if (ui.autoVolatile) for (const f of VOLATILE) if (vals[f] !== undefined) { if (normVal(e[f]) !== normVal(vals[f])) { e[f] = vals[f]; e._updated = Date.now(); } delete vals[f]; }
+    const rej = rejectedUpdates[e._id];
+    if (rej) {
+      for (const f of Object.keys(vals)) if (!IMAGE_FIELDS.includes(f) && rej[f] !== undefined && normVal(rej[f]) === normVal(vals[f])) delete vals[f];
+      if (rej.__images !== undefined && IMAGE_FIELDS.some(f => vals[f] !== undefined) && rej.__images === updImgSig(Object.assign({}, e, vals))) IMAGE_FIELDS.forEach(f => delete vals[f]);
+    }
+    const p = { id: e._id, at: Date.now(), name: v(e, 'Name'), item: vals };
+    if (!pendingDiff(p).length) return false;
+    const old = pendingUpdates.find(x => x.id === e._id);
+    if (old) { Object.assign(old.item, vals); old.at = p.at; } else pendingUpdates.push(p);
+    return true;
+  }
+
+  function showPending() {
+    const list = pendingUpdates.filter(p => byId(p.id)).map(p => ({ p, d: pendingDiff(p) })).filter(x => x.d.length);
+    if (!list.length) { pendingUpdates = []; savePendingUpdates().catch(() => {}); toast('Keine offenen Aktualisierungen.'); return; }
+    const LBL = { '__images': 'Bilder' };
+    const short = (x) => x.length > 80 ? esc(x.slice(0, 80)) + '…' : esc(x);
+    const thumbs = (urls, cls) => urls.slice(0, 8).map(u => `<img class="${cls}" src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join('') + (urls.length > 8 ? ` +${urls.length - 8}` : '');
+    const row = (c, i) => c.f === '__images'
+      ? `<label class="pu-row"><input type="checkbox" data-f="__images" checked><span class="pu-f">Bilder</span>
+          <span class="pu-img">${c.added.length ? `<span class="pu-new">+${c.added.length}</span> ${thumbs(c.added, 'add')}` : ''}${c.removed.length ? ` <span class="pu-old">−${c.removed.length}</span> ${thumbs(c.removed, 'rem')}` : ''}${!c.added.length && !c.removed.length ? 'anderes Titelbild' : ''}</span></label>`
+      : `<label class="pu-row"><input type="checkbox" data-f="${esc(c.f)}" checked><span class="pu-f">${esc(LBL[c.f] || c.f)}</span>
+          <span class="pu-v">${c.old ? `<s class="pu-old">${short(c.old)}</s> → ` : '<span class="muted">(leer)</span> → '}<span class="pu-new">${short(c.neu)}</span></span></label>`;
+    openModal(`
+      <div class="modal-head"><h2>Aktualisierungen prüfen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help pu">
+        <p class="muted">Diese Änderungen kamen beim Holen bekannter Profile von Babepedia. Häkchen = Feld übernehmen. Abgelehnte Werte werden gemerkt und beim nächsten Holen nicht wieder angeboten (erst wenn Babepedia etwas anderes liefert). Was du nicht entscheidest, bleibt hier offen.</p>
+        <div class="pu-bar">
+          <span id="pu-count"></span>
+          <button class="btn primary small" id="pu-all">Alle übernehmen</button>
+          <button class="btn small" id="pu-none">Alle ablehnen</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes und Global Rating künftig automatisch übernehmen</label>
+        <label class="chk"><input type="checkbox" id="pu-off" ${ui.reviewUpdates ? '' : 'checked'}> Künftig nicht mehr fragen – alle Änderungen direkt übernehmen</label>
+        <div class="pu-list">${list.map(({ p, d }) => { const e = byId(p.id); return `
+          <section class="pu-card" data-pu="${esc(p.id)}">
+            <div class="pu-head">
+              <div class="pu-thumb">${coverTag(e)}</div>
+              <div class="pu-title"><button class="linklike" data-pu-open="${esc(p.id)}">${esc(v(e, 'Name'))}</button><span class="muted">${d.length} Änderung${d.length === 1 ? '' : 'en'} · ${new Date(p.at).toLocaleDateString('de-DE')}</span></div>
+              <div class="pu-acts"><button class="btn small primary" data-pu-ok>Übernehmen</button><button class="btn small" data-pu-no>Ablehnen</button></div>
+            </div>
+            ${d.map(row).join('')}
+          </section>`; }).join('')}</div>
+      </div>`);
+    const box = $('.pu', modal);
+    const count = () => { const n = $$('.pu-card', box).length; $('#pu-count').textContent = `${n} Eintr${n === 1 ? 'ag' : 'äge'}`; if (!n) { closeModal(true); toast('Alle Aktualisierungen erledigt.', 'ok'); } };
+    count();
+    let dirty = false;
+    const finish = async () => {
+      updatePendingBtn();
+      try { await savePendingUpdates(); if (dirty) { refreshFilters(); render(); await save(); dirty = false; } } catch {}
+    };
+    const decide = (card, accept) => {
+      const id = card.dataset.pu, p = pendingUpdates.find(x => x.id === id);
+      if (p) {
+        const all = $$('input[data-f]', card).map(i => i.dataset.f);
+        const fields = accept ? $$('input[data-f]:checked', card).map(i => i.dataset.f) : [];
+        // nicht übernommene Werte als abgelehnt merken
+        const rej = rejectedUpdates[id] || {};
+        for (const f of all) if (!fields.includes(f)) {
+          if (f === '__images') rej.__images = updImgSig(Object.assign({}, byId(id), p.item));
+          else rej[f] = p.item[f];
+        }
+        if (Object.keys(rej).length) rejectedUpdates[id] = rej;
+        if (accept && applyPending(p, fields)) { dirty = true; refreshItem(id); }
+      }
+      pendingUpdates = pendingUpdates.filter(x => x.id !== id);
+      card.remove();
+    };
+    box.addEventListener('click', async (ev) => {
+      const t = ev.target;
+      const card = t.closest('.pu-card');
+      if (t.closest('[data-pu-ok]')) { decide(card, true); await finish(); count(); }
+      else if (t.closest('[data-pu-no]')) { decide(card, false); await finish(); count(); }
+      else if (t.closest('[data-pu-open]')) { const id = t.closest('[data-pu-open]').dataset.puOpen; showDetail(id); }
+    });
+    $('#pu-all').addEventListener('click', async () => { if (!confirm('Alle angezeigten Änderungen (mit Häkchen) übernehmen?')) return; $$('.pu-card', box).forEach(c => decide(c, true)); await finish(); count(); });
+    $('#pu-none').addEventListener('click', async () => { if (!confirm('Alle offenen Änderungen ablehnen? Die Einträge bleiben, wie sie sind.')) return; $$('.pu-card', box).forEach(c => decide(c, false)); await finish(); count(); });
+    $('#pu-auto').addEventListener('change', (ev) => { ui.autoVolatile = ev.target.checked; saveUI(); });
+    $('#pu-off').addEventListener('change', (ev) => { ui.reviewUpdates = !ev.target.checked; saveUI(); });
+  }
+
   async function importItems(items) {
-    let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0;
+    let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0;
+    const pendingBefore = JSON.stringify(pendingUpdates);
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const byId = new Map(entries.map(e => [e._id, e]));
     let ix = null;
     const now = Date.now();
-    for (const raw of items) {
+    for (let raw of items) {
       if (!raw || typeof raw !== 'object') { skipped++; continue; }
       const item = {};
       for (const f of ALL_FIELDS) if (raw[f] !== undefined && raw[f] !== null) item[f] = String(raw[f]).trim();
@@ -744,10 +892,16 @@
             index.delete(keyOf(old));
             existing = old;
             ix = null; // Index neu aufbauen, falls im selben Import noch mehr kommt
+            raw = Object.assign({}, raw, { __direct: true });   // bestätigte Umbenennung: direkt übernehmen
           }
         }
       }
-      if (existing) {
+      if (existing && !raw._id && !raw.__direct && ui.reviewUpdates) {
+        // bekanntes Profil von Babepedia: Änderungen zur Prüfung vormerken
+        if (addPending(existing, item)) pending++;
+        index.set(keyOf(existing), existing);
+        updated++;
+      } else if (existing) {
         for (const f of ALL_FIELDS) if (item[f]) existing[f] = item[f];
         existing._updated = now;
         derive(existing);
@@ -763,10 +917,13 @@
         added++;
       }
     }
+    // offene Änderungen zuerst sichern – erst danach bestätigt das Tool dem Userscript den Empfang
+    if (JSON.stringify(pendingUpdates) !== pendingBefore) await savePendingUpdates();
     refreshFilters();
     render();
     await save();
-    return { added, updated, skipped, merged, renamed };
+    if (pending) setTimeout(() => { if (overlay.hidden) showPending(); else toast(`${pending} Einträge mit Änderungen – oben „Änderungen prüfen“.`); }, 300);
+    return { added, updated, skipped, merged, renamed, pending };
   }
 
   function parseCSV(text) {
@@ -831,7 +988,7 @@
     if (!items.length) { toast('Keine Einträge in der Datei gefunden.', 'err'); return; }
     let r;
     try { r = await importItems(items); } catch { return; }
-    toast(`Import: ${r.added} neu, ${r.updated} aktualisiert${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
+    toast(`Import: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}${r.skipped ? `, ${r.skipped} übersprungen` : ''}.`, 'ok');
   }
 
   // ---------- Brücke zum Userscript ----------
@@ -861,7 +1018,7 @@
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
       bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
-        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} aktualisiert${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
+        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
   });
@@ -2102,6 +2259,7 @@
 
   $('#btn-new').addEventListener('click', () => showForm());
   $('#btn-browse').addEventListener('click', browseImages);
+  $('#btn-pending').addEventListener('click', showPending);
   $('#btn-random').addEventListener('click', randomEntry);
   // „Zufällig“ in der Sortierung: bei jeder erneuten Wahl neu mischen
   $('#sort').addEventListener('change', () => { if (ui.sort === 'random') { shuffleSeed = Math.floor(Math.random() * 2 ** 31); render(); } });
@@ -2631,6 +2789,7 @@
       entries = await load();
       await loadLocalImages().catch(() => {});
       await loadImgCheck();
+      await loadPending();
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;

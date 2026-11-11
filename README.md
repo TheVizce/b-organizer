@@ -187,3 +187,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **🎲 Zufall** in der Leiste (oder Taste `Z`): öffnet einen zufälligen Eintrag aus der aktuell gefilterten Liste. In der Detailansicht holt 🎲 bzw. `Z` den nächsten zufälligen, im Bild-Betrachter springt `Z` zu einem zufälligen Eintrag.
 - Sortierung **🎲 Zufällige Reihenfolge**: mischt die Liste (erneut wählen = neu mischen); Blättern und Bild-Betrachter folgen dieser Reihenfolge.
 - Tastenkürzel (Übersicht mit `?` oder *Daten → Tastenkürzel & Gesten*): `/` Suche, `B` Bilder blättern, `N` neuer Eintrag; im Detail `F` Favorit, `1`–`9`/`0` Bewertung, `Entf` Bewertung löschen, `E` bearbeiten, Leertaste Bilder.
+
+## Änderungen in 14.15 (Tool) – Aktualisierungen prüfen
+- Holt das Skript Profile, die schon im Tool sind, werden Änderungen nicht mehr direkt geschrieben. Das Fenster **Aktualisierungen prüfen** zeigt pro Eintrag alt → neu (Bilder als Vorschau +/−). Felder per Häkchen wählen, dann **Übernehmen** oder **Ablehnen** – einzeln oder alle auf einmal.
+- Nicht Entschiedenes bleibt offen (Knopf **⟳ Änderungen (n)** oben). Abgelehnte Werte werden gemerkt und erst wieder angeboten, wenn Babepedia etwas anderes liefert.
+- Rank, Highest Rank, Votes und Global Rating werden standardmäßig direkt übernommen (abschaltbar). Mit „Künftig nicht mehr fragen“ geht alles wieder direkt rein. Neue Einträge, Backups (JSON mit `_id`) und bestätigte Umbenennungen werden weiterhin direkt übernommen.
+- Speicher: zwei neue Schlüssel in der eigenen IndexedDB `bp-organizer` (`pending-updates`, `rejected-updates`), nur auf diesem Gerät, nicht im Sync.
