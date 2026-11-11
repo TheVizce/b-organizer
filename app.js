@@ -714,7 +714,7 @@
   // Bei frisch geholten Babepedia-Profilen (ohne _id, also nicht aus einem Backup) werden Änderungen an
   // bekannten Einträgen nicht direkt geschrieben, sondern als „offen“ gemerkt (IndexedDB-Schlüssel
   // 'pending-updates' in bp-organizer, nur auf diesem Gerät) und können einzeln übernommen oder abgelehnt werden.
-  const VOLATILE = ['Rank', 'Highest Rank', 'Votes', 'Global Rating'];   // ändern sich ständig – auf Wunsch automatisch
+  const VOLATILE = ['Rank', 'Highest Rank', 'Votes', 'Global Rating', 'Scraped At'];   // ändern sich ständig – auf Wunsch automatisch
   if (ui.reviewUpdates === undefined) ui.reviewUpdates = true;
   if (ui.autoVolatile === undefined) ui.autoVolatile = true;
   let pendingUpdates = [];   // [{ id, at, item: { Feld: neuer Wert } }]
@@ -724,6 +724,21 @@
   async function loadPending() {
     try { pendingUpdates = (await idbGet('pending-updates')) || []; } catch { pendingUpdates = []; }
     try { rejectedUpdates = (await idbGet('rejected-updates')) || {}; } catch { rejectedUpdates = {}; }
+    // Schon offene Änderungen: automatisch zu übernehmende Felder (z. B. Scraped At) jetzt eintragen
+    if (ui.autoVolatile && pendingUpdates.length) {
+      let changed = false, touched = false;
+      for (const p of pendingUpdates) {
+        const e = byId(p.id);
+        for (const f of VOLATILE) if (p.item[f] !== undefined) {
+          if (e && normVal(e[f]) !== normVal(p.item[f])) { e[f] = p.item[f]; e._updated = Date.now(); touched = true; }
+          delete p.item[f]; changed = true;
+        }
+      }
+      if (changed) {
+        pendingUpdates = pendingUpdates.filter(p => byId(p.id) && pendingDiff(p).length);
+        try { await idbSet('pending-updates', pendingUpdates); if (touched) setTimeout(() => save().catch(() => {}), 1500); } catch {}
+      }
+    }
     updatePendingBtn();
   }
   async function savePendingUpdates() {
@@ -807,7 +822,7 @@
           <button class="btn primary small" id="pu-all">Alle übernehmen</button>
           <button class="btn small" id="pu-none">Alle ablehnen</button>
         </div>
-        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes und Global Rating künftig automatisch übernehmen</label>
+        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes, Global Rating und Scraped At automatisch übernehmen</label>
         <label class="chk"><input type="checkbox" id="pu-off" ${ui.reviewUpdates ? '' : 'checked'}> Künftig nicht mehr fragen – alle Änderungen direkt übernehmen</label>
         <div class="pu-list">${list.map(({ p, d }) => { const e = byId(p.id); return `
           <section class="pu-card" data-pu="${esc(p.id)}">

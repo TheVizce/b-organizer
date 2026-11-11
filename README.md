@@ -191,5 +191,5 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.15 (Tool) – Aktualisierungen prüfen
 - Holt das Skript Profile, die schon im Tool sind, werden Änderungen nicht mehr direkt geschrieben. Das Fenster **Aktualisierungen prüfen** zeigt pro Eintrag alt → neu (Bilder als Vorschau +/−). Felder per Häkchen wählen, dann **Übernehmen** oder **Ablehnen** – einzeln oder alle auf einmal.
 - Nicht Entschiedenes bleibt offen (Knopf **⟳ Änderungen (n)** oben). Abgelehnte Werte werden gemerkt und erst wieder angeboten, wenn Babepedia etwas anderes liefert.
-- Rank, Highest Rank, Votes und Global Rating werden standardmäßig direkt übernommen (abschaltbar). Mit „Künftig nicht mehr fragen“ geht alles wieder direkt rein. Neue Einträge, Backups (JSON mit `_id`) und bestätigte Umbenennungen werden weiterhin direkt übernommen.
+- Rank, Highest Rank, Votes, Global Rating und Scraped At werden standardmäßig direkt übernommen (abschaltbar); schon offene Änderungen an diesen Feldern werden beim Öffnen des Tools nachgetragen. Mit „Künftig nicht mehr fragen“ geht alles wieder direkt rein. Neue Einträge, Backups (JSON mit `_id`) und bestätigte Umbenennungen werden weiterhin direkt übernommen.
 - Speicher: zwei neue Schlüssel in der eigenen IndexedDB `bp-organizer` (`pending-updates`, `rejected-updates`), nur auf diesem Gerät, nicht im Sync.
