@@ -1047,7 +1047,7 @@
 
   const collator = new Intl.Collator('de');
   // Felder, die auch der Image Ranker nutzt – Filter „Fehlende Werte“
-  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup'], ['__img', 'Bild']];
+  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Ethnicity', 'Ethnicity'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup'], ['__img', 'Bild']];
   const isMissing = (e, f) => {
     if (f === '__img') return imgState(e) === 'none';
     const x = v(e, f).toLowerCase(); return !x || x === 'n/a' || x === '-' || x === 'unknown';
