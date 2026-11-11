@@ -200,7 +200,8 @@
 
   // Abgeleitete Felder immer aus den Rohdaten neu berechnen
   // Nationalitäten zusammenlegen (gilt für vorhandene Einträge beim Laden und für alles, was neu reinkommt)
-  const NAT_MERGE = { english: ['🇬🇧', 'British'] };
+  // Babepedia nutzt British teils synonym zu den Landesteilen → alles als British (Irish bleibt Irish)
+  const NAT_MERGE = { english: ['🇬🇧', 'British'], scottish: ['🇬🇧', 'British'], welsh: ['🇬🇧', 'British'], 'northern irish': ['🇬🇧', 'British'] };
   let deriveChanged = false;
   function mergeNationality(e) {
     const raw = String(e.Nationality || '');
@@ -208,7 +209,7 @@
     const seen = new Set(), out = [];
     for (const part of raw.split(/\s*,\s*/)) {
       const name = part.replace(/^[^A-Za-z]+/, '').trim();
-      const m = NAT_MERGE[name.toLowerCase()];
+      const m = NAT_MERGE[name.toLowerCase().replace(/^british\s+/, '')];   // auch „British Welsh“
       const hasFlag = part.trim() !== name;
       const tok = m ? (hasFlag ? `${m[0]} ${m[1]}` : m[1]) : part.trim();
       const key = (m ? m[1] : name).toLowerCase();
@@ -2844,7 +2845,7 @@
       await loadImgCheck();
       await loadPending();
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
-      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Nationalitäten vereinheitlicht (English → British) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
+      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Nationalitäten vereinheitlicht (English/Scottish/Welsh/Northern Irish → British) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;

@@ -213,6 +213,6 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Den Stand bekommt das Skript vom Tool (beim Öffnen und nach jeder Übernahme). Was das Skript selbst geholt hat, merkt es sich zusätzlich, damit zwei Läufe hintereinander nicht dieselben Profile holen – auch wenn das Tool dazwischen nicht geöffnet war. Profile, die nur im Internet Archive liegen, sind ausgenommen.
 - Auto Fetch und Update versuchen Fehlschläge am Ende nach einer Minute Pause einmal erneut und fragen dann „Jetzt ins Tool übernehmen?“ (öffnet das Tool direkt).
 
-## Änderungen in 14.17 (Tool) – English → British
-- Nationalität „English“ wird zu „British“ zusammengelegt: vorhandene Einträge beim ersten Öffnen (wird gespeichert und synchronisiert), neue und aktualisierte Profile beim Übernehmen. Doppelte („British, English“) werden zu einem Wert. Die Zuordnung steht in `NAT_MERGE` in `app.js`.
+## Änderungen in 14.17 (Tool) – UK-Landesteile → British
+- Nationalitäten „English“, „Scottish“, „Welsh“ und „Northern Irish“ werden zu „British“ zusammengelegt (Babepedia nutzt British teils synonym; „Irish“ bleibt): vorhandene Einträge beim ersten Öffnen (wird gespeichert und synchronisiert), neue und aktualisierte Profile beim Übernehmen. Doppelte („British, English“) werden zu einem Wert. Die Zuordnung steht in `NAT_MERGE` in `app.js`.
 - Das Skript bleibt unverändert: alles, was ins Tool kommt, läuft durch dieselbe Umstellung, und „Aktualisierungen prüfen“ zeigt dadurch kein English → British als Änderung.
