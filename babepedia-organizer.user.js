@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.8
+// @version      14.9
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -1075,22 +1075,57 @@
         standingsRowsFrom(document).forEach(r => { r.li.style.opacity = isKnown(r, known) ? '0.35' : ''; });
     }
 
-    // ---- Advanced Search: Ergebnisse werden per AJAX nachgeladen ----
+    // ---- Kachel-Seiten (Top 100, Most Viewed, Advanced Search, fremde Listen …) ----
+    // Alle Seiten mit .thumbshot-Kacheln; Inhalte, die per AJAX nachkommen, werden über einen Beobachter erfasst.
     const isAdvSearch = () => /^\/advancedsearch/i.test(location.pathname);
-    function markKnownSearchResults() {
-        const known = getKnownSets();
-        document.querySelectorAll('#resultsPreview .thumbshot').forEach(el => {
+    const isOwnList = () => !!LIST_NAMES[getListContext()];
+    function thumbItems(root) {
+        return [...root.querySelectorAll('.thumbshot')].filter(el => !el.closest('.sidebar_block')).map(el => {
             const a = el.querySelector('a[href*="/babe/"]');
-            if (!a) return;
-            el.style.opacity = known.slugs.has(slugOfUrl(a.getAttribute('href'))) ? '0.35' : '';
-        });
+            return a ? { el, url: new URL(a.getAttribute('href'), 'https://www.babepedia.com').href.split('#')[0] } : null;
+        }).filter(Boolean);
     }
-    function watchSearchResults() {
-        markKnownSearchResults();
+    function markKnownThumbs() {
+        if (isOwnList()) return; // in den eigenen Listen wäre sonst alles grau
+        const known = getKnownSets();
+        thumbItems(document).forEach(t => { t.el.style.opacity = known.slugs.has(slugOfUrl(t.url)) ? '0.35' : ''; });
+    }
+    function watchThumbs() {
+        markKnownThumbs();
         let t = null;
-        new MutationObserver(() => { clearTimeout(t); t = setTimeout(markKnownSearchResults, 150); })
+        new MutationObserver(() => { clearTimeout(t); t = setTimeout(markKnownThumbs, 150); })
             .observe(document.body, { childList: true, subtree: true });
-        window.addEventListener('focus', markKnownSearchResults);
+        window.addEventListener('focus', markKnownThumbs);
+    }
+
+    async function copyThumbLinks(onlyNew, onProgress) {
+        let urls = thumbItems(document).map(t => t.url);
+        const total = getTotalPages(document);
+        const cur = parseInt(new URL(location.href).searchParams.get('page') || '1', 10);
+        // Advanced Search blättert per AJAX mit den Suchfiltern der Sitzung – dort nur die aktuelle Seite
+        if (!isAdvSearch() && total > cur) {
+            const ans = prompt(`Wie viele Seiten ab Seite ${cur} durchgehen? (1 = nur diese Seite, es gibt ${total})`, '1');
+            if (ans === null) return;
+            const n = Math.max(1, Math.min(total - cur + 1, parseInt(ans, 10) || 1));
+            const failed = [];
+            for (let p = cur + 1; p < cur + n; p++) {
+                if (onProgress) onProgress(`📄 Seite ${p - cur + 1}/${n}`);
+                try {
+                    const html = await fetchWithRetry(pageUrl(p), {}, 5, 2000);
+                    const found = thumbItems(new DOMParser().parseFromString(html, 'text/html'));
+                    if (!found.length) throw new Error('keine Profile');
+                    urls = urls.concat(found.map(t => t.url));
+                } catch (err) { failed.push(p); }
+                await new Promise(r => setTimeout(r, getRandomDelay(500, 900)));
+            }
+            if (failed.length) alert(`Diese Seiten konnten nicht geladen werden: ${failed.join(', ')}\nEs wird mit den übrigen weitergemacht.`);
+        }
+        urls = [...new Set(urls)];
+        const known = getKnownSets();
+        const out = onlyNew ? urls.filter(u => !known.slugs.has(slugOfUrl(u))) : urls;
+        if (!out.length) { alert(onlyNew ? `Alle ${urls.length} Profile sind schon bekannt – nichts zu kopieren.` : 'Keine Links gefunden.'); return; }
+        GM_setClipboard(out.join('\n'));
+        alert(`${out.length} Links kopiert` + (onlyNew ? ` (${urls.length - out.length} von ${urls.length} schon bekannt, ausgelassen).\n\nAbgleich mit: ${knownSummary()}` : '.'));
     }
 
     async function copyStandingsLinks(onlyNew, onProgress) {
@@ -1486,12 +1521,16 @@
         allLinksBtn.id = 'bp-alllinks-btn';
         allLinksBtn.className = 'bp-btn';
         allLinksBtn.innerHTML = '📋 Alle Links kopieren';
+        // Kachel-Seiten: alles außer eigenen Listen und Profilseiten, sobald Kacheln da sind (bzw. Advanced Search)
+        const isThumbPage = !isStandings() && !isOwnList() && getListContext() !== 'profil' &&
+            (isAdvSearch() || document.querySelector('.thumbshot a[href*="/babe/"]'));
         [[newLinksBtn, true], [allLinksBtn, false]].forEach(([btn, onlyNew]) => {
             const label = btn.innerHTML;
-            if (!isStandings()) btn.style.display = 'none';
+            if (!isStandings() && !(isThumbPage && onlyNew)) btn.style.display = 'none'; // „alle“ gibt es dort schon als „Copy Babe Links“
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
-                await copyStandingsLinks(onlyNew, (txt) => { btn.innerHTML = txt; });
+                if (isStandings()) await copyStandingsLinks(onlyNew, (txt) => { btn.innerHTML = txt; });
+                else await copyThumbLinks(onlyNew, (txt) => { btn.innerHTML = txt; });
                 btn.innerHTML = label;
                 btn.disabled = false;
             });
@@ -1505,8 +1544,8 @@
         if (isAdvSearch()) {
             autoFetchBtn.style.display = 'none';
             moveListBtn.style.display = 'none';
-            watchSearchResults();
         }
+        if (!isStandings()) watchThumbs();
 
         const ctxLabel = {
             neu: '📥 Liste NEU → wird nach GELISTET verschoben',
@@ -1516,8 +1555,8 @@
             andere: 'Keine deiner Listen erkannt'
         }[getListContext()];
         const status = document.createElement('div');
-        const knownLabel = () => `${isStandings() ? 'Battle-Standings' : 'Advanced Search'} · bekannt (ausgegraut): ${knownSummary()}`;
-        const withKnown = isStandings() || isAdvSearch();
+        const knownLabel = () => `Bekannt (ausgegraut): ${knownSummary()}`;
+        const withKnown = isStandings() || !!isThumbPage;
         status.textContent = withKnown ? knownLabel() : ctxLabel;
         if (withKnown) window.addEventListener('focus', () => { status.textContent = knownLabel(); });
         status.style.cssText = 'width:170px;font-size:11px;line-height:1.3;color:#fff;background:rgba(0,0,0,.65);padding:6px 8px;border-radius:6px;';
