@@ -199,8 +199,28 @@
   const looksLikeInches = (str) => { const p = parseMeas(str); return !!p && p[0] < 60 && p[2] < 70; };
 
   // Abgeleitete Felder immer aus den Rohdaten neu berechnen
+  // Nationalitäten zusammenlegen (gilt für vorhandene Einträge beim Laden und für alles, was neu reinkommt)
+  const NAT_MERGE = { english: ['🇬🇧', 'British'] };
+  let deriveChanged = false;
+  function mergeNationality(e) {
+    const raw = String(e.Nationality || '');
+    if (!raw || !Object.keys(NAT_MERGE).some(k => raw.toLowerCase().includes(k))) return;
+    const seen = new Set(), out = [];
+    for (const part of raw.split(/\s*,\s*/)) {
+      const name = part.replace(/^[^A-Za-z]+/, '').trim();
+      const m = NAT_MERGE[name.toLowerCase()];
+      const hasFlag = part.trim() !== name;
+      const tok = m ? (hasFlag ? `${m[0]} ${m[1]}` : m[1]) : part.trim();
+      const key = (m ? m[1] : name).toLowerCase();
+      if (!tok || seen.has(key)) continue;
+      seen.add(key); out.push(tok);
+    }
+    const next = out.join(', ');
+    if (next !== raw) { e.Nationality = next; deriveChanged = true; }
+  }
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    mergeNationality(e);
     e['Profession Category'] = professionCategories(e.Professions);
     if (looksLikeInches(e.Measurements)) e.Measurements = measToCm(e.Measurements, 'in');
     return e;
@@ -2823,6 +2843,8 @@
       await loadLocalImages().catch(() => {});
       await loadImgCheck();
       await loadPending();
+      // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
+      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Nationalitäten vereinheitlicht (English → British) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;

@@ -212,3 +212,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Neuer Knopf **🔁 Update (älteste)**: holt nur die N Profile neu, die im Tool am längsten nicht aktualisiert wurden (nach *Scraped At*; Anzahl wählbar, Standard 300, wird gemerkt). Listen werden dabei nicht verändert. So ist nach einigen Läufen alles einmal aktuell, ohne stundenlangen Komplett-Fetch.
 - Den Stand bekommt das Skript vom Tool (beim Öffnen und nach jeder Übernahme). Was das Skript selbst geholt hat, merkt es sich zusätzlich, damit zwei Läufe hintereinander nicht dieselben Profile holen – auch wenn das Tool dazwischen nicht geöffnet war. Profile, die nur im Internet Archive liegen, sind ausgenommen.
 - Auto Fetch und Update versuchen Fehlschläge am Ende nach einer Minute Pause einmal erneut und fragen dann „Jetzt ins Tool übernehmen?“ (öffnet das Tool direkt).
+
+## Änderungen in 14.17 (Tool) – English → British
+- Nationalität „English“ wird zu „British“ zusammengelegt: vorhandene Einträge beim ersten Öffnen (wird gespeichert und synchronisiert), neue und aktualisierte Profile beim Übernehmen. Doppelte („British, English“) werden zu einem Wert. Die Zuordnung steht in `NAT_MERGE` in `app.js`.
+- Das Skript bleibt unverändert: alles, was ins Tool kommt, läuft durch dieselbe Umstellung, und „Aktualisierungen prüfen“ zeigt dadurch kein English → British als Änderung.
