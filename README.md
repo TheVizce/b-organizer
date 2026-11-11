@@ -193,3 +193,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Nicht Entschiedenes bleibt offen (Knopf **⟳ Änderungen (n)** oben). Abgelehnte Werte werden gemerkt und erst wieder angeboten, wenn Babepedia etwas anderes liefert.
 - Rank, Highest Rank, Votes, Global Rating, Peakdays und Scraped At werden standardmäßig direkt übernommen (abschaltbar), eine bisher leere Babe ID immer; schon offene Änderungen an diesen Feldern werden beim Öffnen des Tools nachgetragen. Mit „Künftig nicht mehr fragen“ geht alles wieder direkt rein. Neue Einträge, Backups (JSON mit `_id`) und bestätigte Umbenennungen werden weiterhin direkt übernommen.
 - Speicher: zwei neue Schlüssel in der eigenen IndexedDB `bp-organizer` (`pending-updates`, `rejected-updates`), nur auf diesem Gerät, nicht im Sync.
+
+## Änderungen in 14.16 (Tool) – Ranker veraltet
+- Das Tool vergleicht bei verknüpften Einträgen die Eigenschaften, die du beim Senden pro Ranker-Reiter gewählt hast, mit den Werten im Image Ranker (nur lesend). Weichen sie ab, erscheint **⟳ Ranker** auf der Kachel und in der Detailansicht „Im Ranker veraltet: … – nochmal senden“ (Klick öffnet das Senden).
+- Filter **Ranker → ⟳ im Ranker veraltet** zeigt alle betroffenen; danach **🏆 An Ranker** für die ganze Liste. Nach dem Übernehmen im Ranker verschwindet die Markierung von selbst.
+- Funktioniert auf dem Gerät, auf dem der Image Ranker läuft und von dem aus gesendet wurde (dort liegt die Feldauswahl). Kein neuer Speicher.

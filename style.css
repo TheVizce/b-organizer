@@ -520,3 +520,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .pu-img img { width: 34px; height: 46px; object-fit: cover; border-radius: 4px; }
 .pu-img img.rem { opacity: .45; outline: 1px solid #f08a8a; }
 @media (max-width: 600px) { .pu-head { flex-wrap: wrap; } .pu-acts { width: 100%; } .pu-acts .btn { flex: 1; } .pu-row { grid-template-columns: 20px 1fr; } .pu-row .pu-v, .pu-row .pu-img { grid-column: 2; } }
+.rk-stale { background: rgba(224,166,74,.18); color: #f0bd6a; border: 1px solid rgba(224,166,74,.5); }
+button.chip.rk-stale { cursor: pointer; font: inherit; }
+.badge.rk-stale { background: rgba(30,20,0,.75); }

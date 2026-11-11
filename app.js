@@ -1148,7 +1148,8 @@
         else if (!miss.includes(mf)) return false;
       }
       // Ranker-Filter nur über die Verknüpfung mit dem Image Ranker (alte Werte tool/notool aus gespeicherten Filtern weiter verstehen)
-      if (rk) { const want = rk === 'true' || rk === 'tool'; if (!!e._ranker !== want) return false; }
+      if (rk === 'stale') { if (!rankerStale.has(e._id)) return false; }
+      else if (rk) { const want = rk === 'true' || rk === 'tool'; if (!!e._ranker !== want) return false; }
       if (rf) {
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
@@ -1328,6 +1329,7 @@
   }
 
   function render() {
+    if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
     $('#count').textContent = list.length === entries.length ? `${entries.length} Einträge` : `${list.length} von ${entries.length}`;
     $$('.seg button').forEach(b => b.classList.toggle('on', b.dataset.view === ui.view));
@@ -1386,7 +1388,7 @@
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
-            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}
+            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
           </div>
         </div>
         <div class="body">
@@ -1536,6 +1538,7 @@
 
   // Einzelnen Eintrag in der Liste aktualisieren, ohne alles neu aufzubauen (Scrollposition bleibt)
   function refreshItem(id) {
+    refreshStale(id);
     const e = byId(id); if (!e) return;
     const el = $(`#main [data-id="${CSS.escape(id)}"]`);
     if (el) el.outerHTML = ui.view === 'table' ? rowHTML(e) : cardHTML(e);
@@ -1724,6 +1727,7 @@
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
+            ${rankerStale.has(e._id) ? `<button class="chip rk-stale" data-action="to-ranker" data-id="${esc(e._id)}" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Im Ranker veraltet: ${esc([...new Set(rankerStale.get(e._id).map(x => x.name))].join(', '))} – nochmal senden</button>` : ''}
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
@@ -2754,11 +2758,16 @@
         if (!d.objectStoreNames.contains('images')) { d.close(); return res(null); }
         const out = [];
         const c = d.transaction('images').objectStore('images').openCursor();
-        c.onsuccess = () => { const k = c.result; if (!k) { d.close(); return res(out); } const im = k.value; out.push({ id: im.id, tab: im.tab, elo: im.elo, boId: im.boId }); k.continue(); };
+        c.onsuccess = () => { const k = c.result; if (!k) { d.close(); return res(out); } const im = k.value; out.push({ id: im.id, tab: im.tab, elo: im.elo, boId: im.boId, tags: im.boId ? im.tags : null }); k.continue(); };
         c.onerror = () => { d.close(); res(null); };
       };
     });
     if (!imgs || !imgs.length) return;
+    // Eigenschaften im Ranker merken (nur lesen), um veraltete Werte zu erkennen
+    rankerTags = new Map();
+    imgs.forEach(i => { if (i.boId) { if (!rankerTags.has(i.boId)) rankerTags.set(i.boId, []); rankerTags.get(i.boId).push({ tab: i.tab, tags: i.tags || {} }); } });
+    rankerStale = new Map();
+    for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); }
     const byTab = new Map();
     imgs.forEach(i => { if (!byTab.has(i.tab)) byTab.set(i.tab, []); byTab.get(i.tab).push(i); });
     const status = new Map();
@@ -2783,7 +2792,38 @@
       changed++;
     }
     if (changed) { saveQuiet(); refreshFilters(); render(); }
+    else if (staleSig() !== lastStaleSig) render();
+    lastStaleSig = staleSig();
   }
+  // ---------- Ranker veraltet ----------
+  // Vergleicht die Werte, die beim Senden als Eigenschaften gewählt wurden (Auswahl pro Reiter in
+  // 'bp-organizer-ranker'), mit dem, was im Image Ranker steht. Unterschiede = nochmal senden.
+  let rankerTags = new Map(), rankerStale = new Map(), lastStaleSig = '';
+  const staleSig = () => [...rankerStale.keys()].sort().join(',');
+  const rkNorm = (x) => { const t = String(x ?? '').trim().toLowerCase(); return t !== '' && !isNaN(Number(t)) ? String(Number(t)) : t; };
+  function computeStale(e) {
+    const list = rankerTags.get(e._id); if (!list) return [];
+    const prefs = rkPrefs(), out = [];
+    for (const { tab, tags } of list) {
+      const fields = prefs[tab] && prefs[tab].fields; if (!fields) continue;   // für diesen Reiter nie gesendet
+      for (const [f, spec] of Object.entries(fields)) {
+        const name = spec.name || f, type = spec.type;
+        const want = rkValues(e, f, type).map(rkNorm).filter(Boolean);
+        const t = tags[name];
+        const have = (t ? (type === 'multi' && Array.isArray(t.values) ? t.values : [t.value]) : []).map(rkNorm).filter(Boolean);
+        const same = type === 'multi' ? want.length === have.length && want.every(x => have.includes(x)) : (want[0] || '') === (have[0] || '');
+        if (!same) out.push({ tab, f, name, have: t ? (t.values ? t.values.join(', ') : t.value) : '', want: rkValues(e, f, type).join(', ') });
+      }
+    }
+    return out;
+  }
+  function refreshStale(id) {
+    if (!rankerTags.size) return;
+    const e = byId(id); if (!e) return;
+    const d = computeStale(e);
+    if (d.length) rankerStale.set(id, d); else rankerStale.delete(id);
+  }
+  const staleTitle = (d) => 'Im Ranker veraltet – nochmal senden:\n' + d.map(x => `${x.name}: ${x.have || '(leer)'} → ${x.want || '(leer)'}`).join('\n');
   if (transferChannel) transferChannel.onmessage = (ev) => { if (ev.data && ev.data.type === 'done' && ready) readRankerStatus().catch(() => {}); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ready) readRankerStatus().catch(() => {}); });
 
