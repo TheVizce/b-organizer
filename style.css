@@ -632,3 +632,7 @@ body.cards-s .card h3, body.cards-s .card .name { font-size: 12.5px; }
 body.cards-s .card .meta { font-size: 11px; }
 body.cards-top .card .img img { object-position: 50% 15%; }
 body.cards-noname .card .body { display: none; }
+/* Ansicht anpassen: lange Beschriftungen umbrechen statt überlappen */
+.cfg-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.cfg-grid .chk { white-space: normal; align-items: flex-start; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.cfg-grid .chk input { flex: none; margin-top: 2px; }

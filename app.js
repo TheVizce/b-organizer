@@ -1294,7 +1294,7 @@
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID'];
   const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
-    ['f-active', 'Aktiv'], ['f-rating', 'Bewertung'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
+    ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
