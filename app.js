@@ -2427,6 +2427,21 @@
     stage.addEventListener('touchstart', (ev) => { if (ev.touches.length === 1) { sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; } }, { passive: true });
     stage.addEventListener('touchend', (ev) => { const t = ev.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) raterImg(dx < 0 ? 1 : -1); });
   }
+  // Alle Kategorie-Bewertungen entfernen (Notizen, alte eigene Note und Babepedia-Werte bleiben)
+  async function clearScores() {
+    const hit = entries.filter(e => SCORE_CATS.some(c => v(e, c.f)) || v(e, 'Score') || v(e, 'My Rating'));
+    if (!hit.length) { toast('Es gibt keine Kategorie-Bewertungen.'); return; }
+    if (!confirm(`⚠︎ Kategorien-Bewertungen zurücksetzen?\n\nBei ${hit.length} Einträgen werden Gesicht, Body, Hot, Cute und Sympathie gelöscht – und damit auch die Tool-Note.\n\nNotizen, die alte eigene Note und deine Babepedia-Werte bleiben erhalten.\nDas lässt sich nicht rückgängig machen (außer über ein Backup).\n\nTipp: vorher unter „Daten → Backup exportieren“ sichern.`)) return;
+    if (!confirm(`Wirklich bei allen ${hit.length} Einträgen die Kategorien löschen?`)) return;
+    const now = Date.now();
+    for (const e of hit) {
+      for (const c of SCORE_CATS) e[c.f] = '';
+      e.Score = ''; e['My Rating'] = ''; e._updated = now;
+    }
+    refreshFilters(); render();
+    try { await save(); toast(`Kategorien-Bewertungen bei ${hit.length} Einträgen zurückgesetzt.`, 'ok'); }
+    catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+  }
   function openRaterFor(id) {
     const keep = ui.raterOnlyOpen; ui.raterOnlyOpen = false;
     closeModal(true);
@@ -2603,6 +2618,7 @@
         download(`babe-organizer-${entries.length}-profile.csv`, '﻿' + toCSV(entries), 'text/csv;charset=utf-8');
         break;
       case 'help': showHelp(); break;
+      case 'clear-scores': clearScores(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {
           entries = []; saveQuiet(); refreshFilters(); render(); toast('Alle Einträge gelöscht.');
