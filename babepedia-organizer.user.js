@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.22
+// @version      14.23
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -651,8 +651,9 @@
 
         if ((!data['Highest Rank'] || rankBroken) && !ARCHIVE) {
             const rankingGraphAnchor = doc.querySelector('.rating-rank a[href*="/rankinggraph/"]');
-            if (rankingGraphAnchor) {
-                let rankGraphHref = rankingGraphAnchor.getAttribute('href') || rankingGraphAnchor.href || '';
+            if (rankingGraphAnchor || (rankBroken && babeId)) {
+                // ohne Link auf der Seite (nur bei „Rank 0“): Ranking-Grafik direkt über die Babe ID
+                let rankGraphHref = rankingGraphAnchor ? (rankingGraphAnchor.getAttribute('href') || rankingGraphAnchor.href || '') : `/rankinggraph/${babeId}`;
                 if (rankGraphHref) {
                     const fullRankUrl = rankGraphHref.startsWith('/') ? `https://www.babepedia.com${rankGraphHref}` : rankGraphHref;
                     try {

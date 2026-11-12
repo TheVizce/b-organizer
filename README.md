@@ -272,5 +272,6 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Änderungen in 14.22 (Skript) / Tool – Archiv-Datum, Rank 0, Filter
 - Archiv-Einträge: „Zuletzt von Babepedia geholt“ ist das Datum der Archiv-Kopie (aus der Archiv-Adresse, z. B. `/web/20260706…` → 06.07.2026). Bestehende gelöschte Einträge mit Archiv-Adresse werden einmalig umgestellt.
 - „Rank 0“ ist ein Fehler auf Babepedia: Das Skript holt in dem Fall den aktuellen Rank aus der Ranking-Grafik (`/rankinggraph/<ID>`), sonst bleibt er leer. Das Tool entfernt gespeicherte Rank-/Highest-Rank-Werte „0“.
+- 14.23: Rank-Erkennung an den Aufbau der Ranking-Grafik angepasst („Current rank: #…“, „Highest rank: #…“); fehlt auf der Profilseite der Link dorthin, wird die Grafik bei „Rank 0“ über die Babe ID geholt.
 - Zusatzfilter Tool-Note und Babepedia Ø fassen die Werte in ganze Stufen zusammen (z. B. 8,0–8,9).
 - Sortierung nach Alter und Größe entfernt.
