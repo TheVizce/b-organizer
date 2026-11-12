@@ -249,3 +249,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **Daten → Kategorien-Bewertungen zurücksetzen…** löscht nach zweifacher Rückfrage Gesicht, Body, Hot, Cute, Sympathie und die Tool-Note bei allen Einträgen. Notizen, alte eigene Note und Babepedia-Werte bleiben.
 - Bewertungsmodus, Vergleich überarbeitet: Ziffern setzen den Wert und **bleiben in der Kategorie** (Weiterspringen per Häkchen „Ziffer springt weiter“). `+`/`−` ändern den Wert um eine Stufe. Der Vergleich zeigt drei Reihen – **▲ darüber · = gleich · ▼ darunter** – jeweils mit den nächstliegenden vergebenen Werten; Maus über einer Zahl zeigt die Vorschau für diesen Wert, Klick auf ▲/▼ setzt ihn.
 - Bild-Betrachter: Die Eintrag-Knöpfe sitzen rechts, der Bereich unten links bleibt für das ☁︎/⌂-Feld des Syncs frei (auch im Bewertungsmodus am Handy). Neu: **☆ Als Kachelbild** (oder Taste `K`) setzt das gerade gezeigte Bild als Cover.
+
+## Änderungen in 14.17 (Skript) / Tool – Weiterleitungen und Zusammenführen von Hand
+- Leitet eine Profiladresse beim Holen auf ein anderes Profil weiter (umbenannt oder von Babepedia zusammengelegt, auch mit anderer Babe ID), speichert das Skript die neue Adresse und schickt die alte mit. Das Tool führt den alten Eintrag dann mit dem neuen zusammen (Rückfrage, wenn beide existieren) bzw. stellt ihn auf die neue Adresse um. Das rollierende Update findet so nach und nach alle solchen Fälle.
+- Verschiedene Babe IDs schließen eine Weiterleitung nicht mehr aus (Erkennung beim Import und „Doppel-Einträge suchen“).
+- Detailansicht: **⇄ Zusammenführen** – anderen Eintrag suchen, wählen, welcher bleibt (ID, Ranker-Verknüpfung, eigene Angaben) und von welchem die Babepedia-Adresse/-Daten kommen.

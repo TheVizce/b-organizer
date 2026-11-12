@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.16
+// @version      14.17
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -1017,6 +1017,12 @@
             // Babepedia leitet gelöschte Profile teils auf eine andere Seite (Suche/Startseite) um
             if (lastFinalUrl && !/\/babe\//i.test(lastFinalUrl)) { const g = new Error('Profil leitet nicht mehr auf ein Profil weiter: ' + lastFinalUrl); g.gone = true; throw g; }
             const { profileData, babeId } = await parseProfileFromDoc(doc, url);
+            // Weiterleitung auf ein anderes Profil (umbenannt oder von Babepedia zusammengelegt):
+            // neue Adresse speichern und die alte mitschicken, damit das Tool beide Einträge zusammenführen kann
+            if (profileData && lastFinalUrl && /\/babe\//i.test(lastFinalUrl) && slugOfUrl(lastFinalUrl) && slugOfUrl(lastFinalUrl) !== slugOfUrl(url)) {
+                profileData['Profile URL'] = lastFinalUrl.replace(/^http:/, 'https:').replace(/[?#].*$/, '');
+                profileData.__fromUrl = url;
+            }
             if (!profileData || !profileData.Name) {
                 // z. B. Bot-Schutz-/Captcha-Seite statt Profil
                 throw new Error('Kein Profil auf der Seite gefunden (evtl. Bot-Schutz oder Login abgelaufen)');

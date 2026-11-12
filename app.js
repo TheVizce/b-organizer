@@ -643,7 +643,7 @@
     for (const n of names) {
       for (const e of ix.bySlug.get(n) || []) {
         if (normUrl(e['Profile URL']) === ownUrl) continue; // dieselbe Adresse = normaler Treffer
-        if (id && v(e, 'Babe ID') && v(e, 'Babe ID') !== id) continue; // beide haben IDs, aber verschiedene
+        // verschiedene Babe IDs schließen nichts aus: Babepedia legt Profile auch zusammen (alte Adresse leitet dann um)
         found.add(e);
       }
     }
@@ -651,7 +651,6 @@
     const base = baseSlugOf(item['Profile URL']), mx = typoMax(base.length);
     if (mx) for (const [b, e] of ix.byPrefix.get(base.slice(0, 3)) || []) {
       if (found.has(e) || b === base || normUrl(e['Profile URL']) === ownUrl) continue;
-      if (id && v(e, 'Babe ID') && v(e, 'Babe ID') !== id) continue;
       const bi = v(item, 'Born'), be = v(e, 'Born');
       if (bi && be && bi !== be) continue;   // anderes Geburtsdatum = andere Person, nicht erst bei Babepedia fragen
       if (typoDist(base, b, mx) <= mx) found.add(e);
@@ -718,11 +717,11 @@
   // oder die alte Adresse leitet heute auf die neue weiter.
   async function sameProfile(old, item) {
     const a = v(old, 'Babe ID'), b = v(item, 'Babe ID');
-    if (a && b) return a === b;
+    if (a && b && a === b) return true;
     const r = await resolveProfile(old['Profile URL']);
     if (!r || !r.ok) return false;
-    if (b && r.babeId) return r.babeId === b;
-    return normUrl(r.finalUrl) === normUrl(item['Profile URL']);
+    if (normUrl(r.finalUrl) === normUrl(item['Profile URL'])) return true;   // alte Adresse leitet hierher
+    return !!(b && r.babeId && r.babeId === b);
   }
 
   // ---- Vorhandene Doppel-Einträge finden (umbenannte Profile, die zweimal im Tool stehen) ----
@@ -748,7 +747,7 @@
       st.textContent = `Prüfe bei Babepedia… ${i + 1} / ${pairs.length}`;
       const ia = v(a, 'Babe ID'), ib = v(b, 'Babe ID');
       let ra = null, rb = null, same = false;
-      if (ia && ib) same = ia === ib;   // beide IDs bekannt: kein Abruf nötig
+      if (ia && ib && ia === ib) same = true;   // gleiche ID: kein Abruf nötig
       else {
         // erst eine Adresse abrufen – leitet sie auf die andere weiter, reicht das
         ra = await resolveProfile(a['Profile URL']);
@@ -791,6 +790,59 @@
       f.done = true;
       btn.closest('.dup-row').classList.add('done'); btn.replaceWith(Object.assign(document.createElement('span'), { className: 'ok', textContent: '✓ zusammengeführt' }));
       refreshFilters(); render(); await save().catch(() => {});
+    });
+  }
+
+  // ---- Von Hand zusammenführen (für Fälle, die Babepedia nicht belegt oder die Suche nicht findet) ----
+  function showMerge(id) {
+    const a = byId(id); if (!a) return;
+    openModal(`
+      <div class="modal-head"><h2>Zusammenführen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help merge">
+        <p>Mit welchem Eintrag ist <b>${esc(v(a, 'Name'))}</b> dasselbe Profil?</p>
+        <input type="search" id="mg-q" placeholder="Name, AKA oder Teil der Babepedia-Adresse …" autocomplete="off">
+        <div id="mg-list" class="mg-list"></div>
+        <div id="mg-pick"></div>
+      </div>`);
+    const q = $('#mg-q'), list = $('#mg-list');
+    const show = () => {
+      const t = plain(q.value);
+      const hits = t.length < 2 ? [] : entries.filter(x => x !== a && [v(x, 'Name'), v(x, 'AKA'), v(x, 'Profile URL')].some(s => plain(s).includes(t))).slice(0, 30);
+      list.innerHTML = hits.map(x => `<button class="mg-item" data-mg="${esc(x._id)}">${coverTag(x)}<span><b>${esc(v(x, 'Name'))}</b><br><span class="muted">${esc((v(x, 'Profile URL').split('/babe/')[1] || v(x, 'Profile URL')))}${v(x, 'Babe ID') ? ' · ID ' + esc(v(x, 'Babe ID')) : ''}${x._ranker ? ' · 🏆 im Ranker' : ''}${hasScore(x) ? ' · ♥ ' + esc(v(x, 'Score')) : ''}</span></span></button>`).join('') || (t.length >= 2 ? '<p class="muted">Kein Treffer.</p>' : '');
+    };
+    q.addEventListener('input', show); q.focus();
+    list.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-mg]'); if (!b) return;
+      const other = byId(b.dataset.mg); if (!other) return;
+      list.innerHTML = ''; q.hidden = true;
+      const pair = [a, other];
+      const defKeep = (other._ranker && !a._ranker) ? other : (a._ranker && !other._ranker) ? a : ((a._created || 0) <= (other._created || 0) ? a : other);
+      const defData = ((num(v(a, 'Babe ID')) || 0) >= (num(v(other, 'Babe ID')) || 0)) ? a : other;   // höhere Babe ID = neueres Profil
+      const opt = (name, x, def, extra) => `<label class="chk mg-opt"><input type="radio" name="${name}" value="${esc(x._id)}" ${x === def ? 'checked' : ''}> <span><b>${esc(v(x, 'Name'))}</b> <span class="muted">${esc(extra(x))}</span></span></label>`;
+      $('#mg-pick').innerHTML = `
+        <h3>Welcher Eintrag bleibt?</h3>
+        <p class="muted">Er behält seine ID (und damit die Image-Ranker-Verknüpfung), Favorit, Kategorien und Notizen. Fehlende eigene Angaben kommen vom anderen, Notizen werden zusammengefügt. Der andere Eintrag wird gelöscht.</p>
+        ${pair.map(x => opt('keep', x, defKeep, (y) => [y._ranker ? '🏆 im Ranker' : '', hasScore(y) ? '♥ ' + v(y, 'Score') : '', 'angelegt ' + new Date(y._created || 0).toLocaleDateString('de-DE')].filter(Boolean).join(' · '))).join('')}
+        <h3>Babepedia-Adresse und -Daten von</h3>
+        <p class="muted">Meist die aktuelle Adresse, auf die die alte weiterleitet.</p>
+        ${pair.map(x => opt('data', x, defData, (y) => (v(y, 'Profile URL').split('/babe/')[1] || v(y, 'Profile URL')) + (v(y, 'Babe ID') ? ' · ID ' + v(y, 'Babe ID') : ''))).join('')}
+        <p class="warn mg-warn" ${a._ranker && other._ranker ? '' : 'hidden'}>Beide sind im Image Ranker verknüpft – die Verknüpfung des gelöschten Eintrags geht verloren. Im Ranker danach prüfen.</p>
+        <div class="form-foot"><button class="btn" data-action="close">Abbrechen</button><button class="btn primary" id="mg-go">Zusammenführen</button></div>`;
+      $('#mg-go').addEventListener('click', async () => {
+        const keep = byId($('#mg-pick input[name="keep"]:checked').value);
+        const src = byId($('#mg-pick input[name="data"]:checked').value);
+        const drop = keep === a ? other : a;
+        if (drop._ranker && !keep._ranker && !confirm('Der Eintrag, der gelöscht wird, ist im Image Ranker verknüpft – diese Verknüpfung geht verloren. Trotzdem?')) return;
+        if (src !== keep) for (const k of FIELDS) keep[k] = src[k] ?? '';   // Babepedia-Daten komplett vom gewählten Eintrag
+        mergeOwn(keep, drop);
+        keep['Profile Deleted'] = isTrue(src['Profile Deleted']) ? 'true' : ''; keep['Deleted Since'] = src['Deleted Since'] || '';
+        keep._updated = Date.now(); derive(keep);
+        entries = entries.filter(x => x !== drop);
+        refreshFilters(); render();
+        try { await save(); } catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); return; }
+        closeModal(true); showDetail(keep._id);
+        toast(`Zusammengeführt – „${v(drop, 'Name')}“ ist jetzt Teil von „${v(keep, 'Name')}“.`, 'ok');
+      });
     });
   }
 
@@ -984,10 +1036,14 @@
       // Kandidaten (alter Name im AKA, andere Schreibweise, gleiche Babe ID) werden nur übernommen,
       // wenn Babepedia es belegt: gleiche Babe ID oder Weiterleitung der alten Adresse auf die neue.
       if (!raw._id && /\/babe\//.test(normUrl(item['Profile URL']))) {
-        if (!ix) ix = buildRenameIndex();
-        const cands = renameCandidates(item, existing, ix);
         let old = null;
-        for (const c of cands) { if (await sameProfile(c, item)) { old = c; break; } }
+        // Das Skript hat beim Holen eine Weiterleitung gesehen (alte Adresse → diese) – das ist Beleg genug
+        if (raw.__fromUrl) { const o = index.get(keyOf({ 'Profile URL': raw.__fromUrl })); if (o && o !== existing) old = o; }
+        if (!old) {
+          if (!ix) ix = buildRenameIndex();
+          const cands = renameCandidates(item, existing, ix);
+          for (const c of cands) { if (await sameProfile(c, item)) { old = c; break; } }
+        }
         if (old) {
           const msg = `„${old.Name}“ und „${existing && existing.Name}“ sind dasselbe Babepedia-Profil (umbenannt, von Babepedia bestätigt).\n\nZusammenführen? Der ältere Eintrag „${old.Name}“ bleibt erhalten (mit Notizen, Bewertungen, Ranker-Verknüpfung) und bekommt die neuen Daten; „${existing && existing.Name}“ wird entfernt.`;
           if (!existing || confirm(msg)) {
@@ -1966,6 +2022,7 @@
         <div class="actions">
           <button class="btn small" data-action="to-ranker" data-id="${esc(e._id)}" title="An Image Ranker senden">🏆 An Ranker</button>
           <button class="btn small" data-action="edit" data-id="${esc(e._id)}">Bearbeiten</button>
+          <button class="btn small" data-action="merge" data-id="${esc(e._id)}" title="Mit einem anderen Eintrag zusammenführen (doppelt angelegt, umbenannt …)">⇄ Zusammenführen</button>
           <button class="btn small danger" data-action="delete" data-id="${esc(e._id)}">Löschen</button>
           <button class="x" data-action="close" aria-label="Schließen">×</button>
         </div>
@@ -2640,6 +2697,7 @@
       case 'new': showForm(); break;
       case 'edit': showForm(el.dataset.id); break;
       case 'to-ranker': openRankerSend([byId(el.dataset.id)]); break;
+      case 'merge': showMerge(el.dataset.id); break;
       case 'cancel-edit': if (!dirty || confirm('Ungespeicherte Änderungen verwerfen?')) { dirty = false; showDetail(el.dataset.id); } break;
       case 'save': saveForm(); break;
       case 'close': closeModal(); break;
