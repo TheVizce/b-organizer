@@ -2352,6 +2352,7 @@
           <div class="rt-meta"></div>
           <div class="rt-cats"></div>
           <div class="rt-sum"></div>
+          <div class="rt-ref"></div>
           <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
           <p class="muted rt-help">1–5 setzt die markierte Kategorie · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
@@ -2368,6 +2369,10 @@
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
+      const rv = t.closest('[data-ref]'); if (rv) { rater.refVal = Number(rv.dataset.ref); raterRef(); return; }
+      const ro = t.closest('[data-ref-open]');
+      if (ro) { const x = byId(ro.dataset.refOpen); if (x) { const u = images(x)[0]; const im = $('.rt-stage img', rater.el); if (u) { rater.peek = x._id; im.src = R(u); $('.rt-imgc', rater.el).textContent = 'Vergleich: ' + v(x, 'Name') + ' – Bild antippen für zurück'; } } return; }
+      if (t.closest('.rt-stage img') && rater.peek) { rater.peek = null; raterImgShow(); return; }
       const row = t.closest('[data-sc-idx]'); if (row) { rater.cat = Number(row.dataset.scIdx); raterCats(); return; }
       if (t.closest('.rt-name')) { const id = rater.ids[rater.i]; closeRater(); showDetail(id); }
     });
@@ -2391,6 +2396,7 @@
   }
   function raterImgShow() {
     const e = raterEntry(), imgs = images(e), { el } = rater;
+    rater.peek = null;
     const img = $('.rt-stage img', el), err = $('.rt-stage .vw-err', el);
     err.hidden = true; img.hidden = !imgs.length;
     $('.rt-imgc', el).textContent = imgs.length > 1 ? `${rater.img + 1} / ${imgs.length}` : '';
@@ -2405,6 +2411,26 @@
     const e = raterEntry(), { el } = rater;
     $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
     $('.rt-sum', el).innerHTML = scoreSummary(e);
+    raterRef();
+  }
+  // Vergleich: welche anderen Einträge haben in der markierten Kategorie denselben Wert?
+  function raterRef() {
+    const e = raterEntry(), { el } = rater, c = SCORE_CATS[rater.cat];
+    const cur = num(e[c.f]);
+    if (rater.refFor !== c.f + '|' + e._id + '|' + cur) { rater.refVal = null; rater.refFor = c.f + '|' + e._id + '|' + cur; }
+    const counts = new Map();
+    for (const x of entries) { const n = num(x[c.f]); if (n != null && x._id !== e._id) counts.set(n, (counts.get(n) || 0) + 1); }
+    const box = $('.rt-ref', el);
+    if (!counts.size) { box.innerHTML = `<div class="muted rt-ref-empty">Vergleich: Sobald andere Einträge in „${esc(c.label)}“ bewertet sind, siehst du hier, wer denselben Wert hat.</div>`; return; }
+    const vals = [...counts.keys()].sort((a, b) => a - b);
+    const show = rater.refVal ?? (cur != null && counts.has(cur) ? cur : cur != null ? vals.reduce((a, b) => Math.abs(b - cur) < Math.abs(a - cur) ? b : a) : vals[vals.length - 1]);
+    const peers = entries.filter(x => x._id !== e._id && num(x[c.f]) === show)
+      .sort((a, b) => (imgState(a) === 'none') - (imgState(b) === 'none') || (num(b.Score) ?? 0) - (num(a.Score) ?? 0));
+    const lbl = (n) => String(n).replace('.5', '½');
+    box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">– wer hat</span>
+        ${vals.map(n => `<button class="rt-ref-v ${n === show ? 'on' : ''} ${n === cur ? 'cur' : ''}" data-ref="${n}" title="${counts.get(n)} Einträge">${lbl(n)}</button>`).join('')}</div>
+      <div class="rt-ref-grid">${peers.slice(0, 12).map(x => `<button class="rt-ref-item" data-ref-open="${esc(x._id)}" title="${esc(v(x, 'Name'))}${x.Score ? ' · ★ ' + esc(x.Score) : ''}">${coverTag(x)}<span>${esc(v(x, 'Name'))}</span></button>`).join('')}</div>
+      ${peers.length > 12 ? `<div class="muted rt-ref-more">+ ${peers.length - 12} weitere mit ${lbl(show)}</div>` : ''}`;
   }
   function raterSet(ci, val, advance) {
     const e = raterEntry(); if (!e || ci < 0) return;

@@ -606,3 +606,16 @@ button.chip.rk-stale { cursor: pointer; font: inherit; }
 .sc-bp b { font-size: 16px; }
 .sc-bp.diff { border-color: rgba(224,166,74,.6); }
 .sc-bp.diff b { color: #f0bd6a; }
+
+/* Vergleich im Bewertungsmodus */
+.rt-ref { border-top: 1px solid var(--border); padding-top: 8px; }
+.rt-ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; margin-bottom: 6px; }
+.rt-ref-v { min-width: 28px; height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.rt-ref-v.cur { border-color: var(--accent); color: var(--text); }
+.rt-ref-v.on { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent); }
+.rt-ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.rt-ref-item { display: flex; flex-direction: column; gap: 3px; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; text-align: center; min-width: 0; }
+.rt-ref-item img, .rt-ref-item .placeholder { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; background: var(--surface-3); display: grid; place-items: center; font-size: 14px; }
+.rt-ref-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-ref-item:hover img { outline: 2px solid var(--accent); }
+.rt-ref-more, .rt-ref-empty { font-size: 12px; margin-top: 4px; }
