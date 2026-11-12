@@ -244,7 +244,7 @@
   }
   // ---------- Bewertung nach Kategorien ----------
   // Gesamt = (2·Gesicht + 2·Body + max(Hot, Cute) + 0,1·min(Hot, Cute) + 1,5·Sympathie) / 6,5   (je 1–5)
-  // 10er-Wert = 7 + (Gesamt − 3) · 1,5  → 3 = typisch = 7 (wie bisher auf Babepedia), 5 = 10, 1 = 4
+  // 10er-Wert über scoreToTen (3 = typisch = 7 wie bisher auf Babepedia, ab 4,5 = 10, 1 = 1)
   const SCORE_CATS = [
     { f: 'Face Score', label: 'Gesicht', hint: 'inkl. Haare', half: true, key: 'G' },
     { f: 'Body Score', label: 'Body', half: true, key: 'B' },
@@ -255,6 +255,9 @@
   const SCORE_W = { face: 2, body: 2, hotcute: 1, minor: 0.1, sym: 1.5, div: 6.5, symDefault: 3 };
   const SYMPATHY_LABELS = { 5: 'kenne ich – extrem sympathisch', 4: 'kenne ich – sympathisch', 3: 'kenne ich nicht/kaum – wirkt eher sympathisch', 2: 'kenne ich nicht/kaum – wirkt eher unsympathisch', 1: 'kenne ich – unsympathisch' };
   const SCORE_ANCHORS = '1 = schwach für meine Liste · 3 = typisch · 5 = gehört zu den Besten';
+  // Gesamt (1–5) → 10er-Skala. Oberhalb von 3 (= typisch = 7) zählt jeder Punkt doppelt, darunter dreifach,
+  // damit die Enden erreichbar sind: 4,5 → 10 · 4 → 9 · 3,5 → 8 · 3 → 7 · 2,5 → 5,5 · 2 → 4 · 1,5 → 2,5 · 1 → 1
+  const scoreToTen = (t) => Math.max(1, Math.min(10, t >= 3 ? 7 + (t - 3) * 2 : 7 - (3 - t) * 3));
   function scoreOf(e) {
     const g = (f) => { const n = num(e[f]); return n == null || n < 1 || n > 5 ? null : n; };
     const F = g('Face Score'), B = g('Body Score'); let H = g('Hot Score'), C = g('Cute Score');
@@ -262,7 +265,7 @@
     if (H == null) H = C; if (C == null) C = H;
     const S = g('Sympathy Score') ?? SCORE_W.symDefault;
     const total = (SCORE_W.face * F + SCORE_W.body * B + SCORE_W.hotcute * Math.max(H, C) + SCORE_W.minor * Math.min(H, C) + SCORE_W.sym * S) / SCORE_W.div;
-    return { total, ten: Math.max(1, Math.min(10, 7 + (total - 3) * 1.5)), symAssumed: g('Sympathy Score') == null };
+    return { total, ten: scoreToTen(total), symAssumed: g('Sympathy Score') == null };
   }
   function applyScore(e) {
     const s = scoreOf(e);
