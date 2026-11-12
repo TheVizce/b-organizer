@@ -1014,6 +1014,7 @@
   async function importItems(items) {
     let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0, gone = 0;
     const pendingBefore = JSON.stringify(pendingUpdates);
+    if (items.length > 100) toast(`Übernehme ${items.length} Profile … bitte das Tool geöffnet lassen, bis die Bestätigung kommt.`);
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const byId = new Map(entries.map(e => [e._id, e]));
     let ix = null;
@@ -1039,7 +1040,10 @@
         let old = null;
         // Das Skript hat beim Holen eine Weiterleitung gesehen (alte Adresse → diese) – das ist Beleg genug
         if (raw.__fromUrl) { const o = index.get(keyOf({ 'Profile URL': raw.__fromUrl })); if (o && o !== existing) old = o; }
-        if (!old) {
+        // Namens-Kandidaten nur für NEUE Profile prüfen. Bei bekannten Adressen würde das für jedes Profil
+        // Abrufe bei Babepedia auslösen (2,5 s Abstand) und große Übernahmen stundenlang aufhalten –
+        // dafür gibt es „Doppel-Einträge suchen“ und die Weiterleitungs-Meldung des Skripts.
+        if (!old && !existing) {
           if (!ix) ix = buildRenameIndex();
           const cands = renameCandidates(item, existing, ix);
           for (const c of cands) { if (await sameProfile(c, item)) { old = c; break; } }
