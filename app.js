@@ -2660,6 +2660,96 @@
     try { await save(); toast(`Kategorien-Bewertungen bei ${hit.length} Einträgen zurückgesetzt.`, 'ok'); }
     catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
   }
+  // ---------- Babepedia-Note an die Tool-Note angleichen (über das Skript) ----------
+  // Ziel = gerundete Tool-Note (1–10). Nur Einträge mit Tool-Note, Babe ID und aktivem Profil.
+  function voteTarget(e) {
+    if (!hasScore(e) || isTrue(e['Profile Deleted'])) return null;
+    if (!/^\d+$/.test(v(e, 'Babe ID'))) return null;
+    const t = Math.round(num(v(e, 'My Rating')));
+    if (!(t >= 1 && t <= 10)) return null;
+    const cur = num(v(e, 'User Rating'));
+    return cur != null && Math.round(cur) === t ? null : t;
+  }
+  function votePing() {
+    return new Promise(res => {
+      const t = setTimeout(() => { window.removeEventListener('message', on); res(false); }, 1500);
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_ACK') { clearTimeout(t); window.removeEventListener('message', on); res(true); } }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_VOTE_PING' }, location.origin);
+    });
+  }
+  function voteRaw(k, x) {
+    const id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return new Promise(res => {
+      const t = setTimeout(() => { window.removeEventListener('message', on); res({ ok: false, status: 0, text: 'keine Antwort vom Skript' }); }, 25000);
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_RESULT' && ev.data.id === id) { clearTimeout(t); window.removeEventListener('message', on); res(ev.data); } }
+      window.addEventListener('message', on);
+      window.postMessage({ type: 'BP_VOTE', id, k: String(k), x: String(x) }, location.origin);
+    });
+  }
+  let voteRun = null;
+  async function showVoteSync() {
+    if (voteRun) { toast('Das Angleichen läuft schon.'); return; }
+    const shown = filtered();
+    const cand = shown.map(e => ({ e, t: voteTarget(e) })).filter(c => c.t != null);
+    const noId = shown.filter(e => hasScore(e) && !isTrue(e['Profile Deleted']) && !/^\d+$/.test(v(e, 'Babe ID'))).length;
+    if (!cand.length) { toast(`Keine Abweichungen: bei den angezeigten Einträgen stimmt die Babepedia-Note schon mit der Tool-Note überein${noId ? ` (${noId} ohne Babe ID übersprungen)` : ''}.`); return; }
+    const max = ui.voteMax || 30;
+    const row = (c) => `<tr><td>${esc(v(c.e, 'Name'))}</td><td class="num">${esc(v(c.e, 'User Rating') || '–')}</td><td class="num">→ <b>${c.t}</b></td><td class="num muted">${esc(v(c.e, 'Score'))}</td></tr>`;
+    openModal(`
+      <div class="modal-head"><h2>Babepedia-Noten angleichen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help vote-dlg">
+        <p>Bei <b>${cand.length}</b> der angezeigten Einträge weicht „Meine Babepedia-Note“ von der gerundeten Tool-Note ab. Das Skript trägt die Tool-Note auf Babepedia ein (mit deinem Login, ein Profil alle 3 s).${noId ? ` <span class="muted">${noId === 1 ? "1 Eintrag" : noId + " Einträge"} ohne Babe ID ${noId === 1 ? "wird" : "werden"} übersprungen.</span>` : ''}</p>
+        <p class="muted">Es zählt die aktuelle Auswahl und Sortierung – mit Filtern kannst du eingrenzen, was dran kommt.</p>
+        <label class="rk-limit">Höchstens <input type="number" id="vote-max" min="1" step="1" inputmode="numeric" value="${max}"> pro Lauf</label>
+        <div class="vote-list"><table class="vote-tbl"><thead><tr><th>Name</th><th class="num">jetzt</th><th class="num">neu</th><th class="num">Tool-Note</th></tr></thead><tbody>${cand.slice(0, 300).map(row).join('')}</tbody></table>${cand.length > 300 ? `<p class="muted">… und ${cand.length - 300} weitere</p>` : ''}</div>
+        <p id="vote-status" class="muted"></p>
+        <div class="vote-acts"><button class="btn primary" id="vote-go">Auf Babepedia eintragen</button> <button class="btn" id="vote-stop" hidden>Anhalten</button></div>
+        <pre id="vote-log" class="vote-log" hidden></pre>
+      </div>`);
+    $('#vote-go').addEventListener('click', async () => {
+      const n = Math.max(1, parseInt($('#vote-max').value, 10) || max);
+      ui.voteMax = n; saveUI();
+      if (!(await votePing())) { $('#vote-status').textContent = '⚠︎ Das Skript antwortet nicht. Ist es in Tampermonkey aktiv und auf Version 14.24 oder neuer?'; return; }
+      runVotes(cand.slice(0, n));
+    });
+  }
+  async function runVotes(list) {
+    voteRun = { stop: false };
+    const st = () => $('#vote-status'), logEl = () => $('#vote-log');
+    const log = (line) => { const l = logEl(); if (l) { l.hidden = false; l.textContent += line + '\n'; l.scrollTop = l.scrollHeight; } };
+    const go = $('#vote-go'), stop = $('#vote-stop');
+    if (go) go.disabled = true;
+    if (stop) { stop.hidden = false; stop.onclick = () => { voteRun.stop = true; stop.disabled = true; }; }
+    let ok = 0, fail = 0, first = true, blocked = false;
+    for (let i = 0; i < list.length; i++) {
+      if (voteRun.stop) break;
+      const { e, t } = list[i];
+      if (st()) st().textContent = `${i + 1} / ${list.length}: ${v(e, 'Name')} → ${t}`;
+      const r = await voteRaw(v(e, 'Babe ID'), t);
+      if (first) { log(`Antwort von Babepedia (zur Kontrolle): ${r.status} ${String(r.text || '').slice(0, 200)}`); first = false; }
+      if (r.ok) {
+        ok++;
+        e['User Rating'] = String(t); e._updated = Date.now();
+        log(`✓ ${v(e, 'Name')}: ${t}`);
+        if (ok % 10 === 0) save().catch(() => {});
+      } else {
+        fail++;
+        log(`✗ ${v(e, 'Name')}: ${r.status || ''} ${r.reason || String(r.text || '').slice(0, 120)}`);
+        if (r.status === 429 || r.status === 403 || r.status === 503) { blocked = true; break; }
+        if (fail >= 3 && ok === 0) break;   // klappt offenbar gar nicht – nicht weiter versuchen
+      }
+      if (i < list.length - 1) await new Promise(res => setTimeout(res, 3000));
+    }
+    const stopped = voteRun.stop; voteRun = null;
+    try { if (ok) await save(); } catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+    refreshFilters(); render();
+    const msg = `Babepedia-Noten: ${ok} eingetragen${fail ? `, ${fail} fehlgeschlagen` : ''}${blocked ? ' – Babepedia blockt gerade (zu viele Zugriffe), später weitermachen' : ''}${stopped ? ' (angehalten)' : ''}${!blocked && fail >= 3 && ok === 0 ? ' – abgebrochen, bitte eingeloggt sein und die Antwort im Protokoll prüfen' : ''}.`;
+    if (st()) st().textContent = msg;
+    const stop2 = $('#vote-stop'); if (stop2) stop2.hidden = true;
+    toast(msg, fail ? 'err' : 'ok');
+  }
+
   function openRaterFor(id) {
     const keep = ui.raterOnlyOpen; ui.raterOnlyOpen = false;
     closeModal(true);
@@ -2863,6 +2953,7 @@
         break;
       case 'help': showHelp(); break;
       case 'clear-scores': clearScores(); break;
+      case 'vote-sync': showVoteSync(); break;
       case 'upd-cfg': showUpdateSettings(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {

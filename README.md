@@ -275,3 +275,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - 14.23: Rank-Erkennung an den Aufbau der Ranking-Grafik angepasst („Current rank: #…“, „Highest rank: #…“); fehlt auf der Profilseite der Link dorthin, wird die Grafik bei „Rank 0“ über die Babe ID geholt.
 - Zusatzfilter Tool-Note und Babepedia Ø fassen die Werte in ganze Stufen zusammen (z. B. 8,0–8,9).
 - Sortierung nach Alter und Größe entfernt.
+
+## Änderungen in 14.24 (Skript) / Tool – Babepedia-Noten angleichen
+- **Daten → Babepedia-Noten angleichen…**: Für die angezeigten Einträge (Filter und Sortierung zählen), bei denen „Meine Babepedia-Note“ von der gerundeten Tool-Note abweicht, trägt das Skript die Tool-Note auf Babepedia ein (`ajax-vote-profile.php`, mit deinem Login, ein Profil alle 3 s, Limit pro Lauf). Vorher Vorschau „jetzt → neu“, währenddessen Protokoll und „Anhalten“. Nur Einträge mit Tool-Note, Babe ID und vorhandenem Profil.
+- Bei Sperre durch Babepedia (429/403/503) oder drei Fehlschlägen am Anfang wird abgebrochen. Erfolgreiche Noten übernimmt das Tool sofort als „Meine Babepedia-Note“.

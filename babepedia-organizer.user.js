@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.23
+// @version      14.24
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -112,6 +112,28 @@
                     reply({ ok: r.status >= 200 && r.status < 300 && hasProfile, status: r.status, finalUrl: r.finalUrl || u.href, babeId });
                 },
                 onerror: () => reply({ ok: false }), ontimeout: () => reply({ ok: false })
+            });
+        });
+
+        // Babepedia-Note eintragen (Tool → „Babepedia-Noten angleichen“): GET /ajax-vote-profile.php?x=<Note>&k=<Babe ID>
+        window.addEventListener('message', (ev) => {
+            if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
+            const d = ev.data;
+            if (d.type === 'BP_VOTE_PING') { window.postMessage({ type: 'BP_VOTE_ACK' }, location.origin); return; }
+            if (d.type !== 'BP_VOTE') return;
+            const reply = (x) => window.postMessage({ type: 'BP_VOTE_RESULT', id: d.id, ...x }, location.origin);
+            const k = String(d.k || ''), x = parseInt(d.x, 10);
+            if (!/^\d+$/.test(k) || !(x >= 1 && x <= 10)) { reply({ ok: false, status: 0, reason: 'ungültige Werte' }); return; }
+            GM_xmlhttpRequest({
+                method: 'GET', url: `https://www.babepedia.com/ajax-vote-profile.php?x=${x}&k=${k}`, timeout: 20000,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: 'https://www.babepedia.com/' },
+                onload: (r) => {
+                    const text = String(r.responseText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+                    const loginWall = /not logged|please log ?in|you must (be )?log|sign in to/i.test(text);
+                    reply({ ok: r.status >= 200 && r.status < 300 && !loginWall, status: r.status, text, reason: loginWall ? 'nicht eingeloggt?' : '' });
+                },
+                onerror: () => reply({ ok: false, status: 0, reason: 'Netzwerkfehler' }),
+                ontimeout: () => reply({ ok: false, status: 0, reason: 'Zeitüberschreitung' })
             });
         });
 

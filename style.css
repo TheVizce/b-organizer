@@ -687,3 +687,12 @@ body.cards-noname .card .body { display: none; }
 .upd-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 16px 10px; padding: 9px 14px; border: 1px solid rgba(0,131,143,.6); background: rgba(0,131,143,.14); border-radius: 10px; font-size: 13.5px; }
 .upd-banner[hidden] { display: none; }
 .upd-banner .upd-acts { display: flex; gap: 6px; margin-left: auto; }
+
+/* Babepedia-Noten angleichen */
+.vote-list { max-height: 45vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; }
+.vote-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.vote-tbl th, .vote-tbl td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,.06); text-align: left; }
+.vote-tbl .num { text-align: right; white-space: nowrap; }
+.vote-tbl thead th { position: sticky; top: 0; background: var(--surface); }
+.vote-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.vote-log { max-height: 30vh; overflow: auto; white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,.3); padding: 8px 10px; border-radius: 8px; margin-top: 10px; }
