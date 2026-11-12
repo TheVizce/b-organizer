@@ -1776,8 +1776,10 @@
     const s = scoreOf(e);
     if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Gesamtnote berechnet.</div>`;
     const site = num(e['User Rating']), old = num(e['My Rating (old)']);
+    const r = Math.round(s.ten);
+    const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit Babepedia überein ✓' : `auf Babepedia steht ${site} – ändern`;
     return `<div class="sc-sum"><b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Gesamt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie als 3 angenommen' : ''}</span>
-      ${site != null ? `<span class="sc-cmp">Babepedia ${site}${Math.round(s.ten) !== site ? ` <span class="warn">(${Math.round(s.ten) > site ? '+' : ''}${Math.round(s.ten) - site})</span>` : ' ✓'}</span>` : ''}${old != null ? `<span class="sc-cmp muted">vorher ${old}</span>` : ''}</div>`;
+      <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundeter Wert zum Eintragen auf Babepedia">Für Babepedia: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">vorher ${old}</span>` : ''}</div>`;
   }
   function scoreBox(e) {
     return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span></h3>

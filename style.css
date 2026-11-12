@@ -602,3 +602,7 @@ button.chip.rk-stale { cursor: pointer; font: inherit; }
   .rt-meta { display: none; }
 }
 @media (max-width: 800px) { .rt-cats .sc-row { grid-template-columns: 70px 1fr; } .rt-cats .sc-lbl { font-size: 12.5px; } }
+.sc-bp { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); }
+.sc-bp b { font-size: 16px; }
+.sc-bp.diff { border-color: rgba(224,166,74,.6); }
+.sc-bp.diff b { color: #f0bd6a; }
