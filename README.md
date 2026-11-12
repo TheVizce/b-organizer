@@ -268,3 +268,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Ein Profil aus dem Internet Archive bedeutet immer: Es gab ein Babepedia-Profil, und es ist gelöscht. Das Tool setzt beim Übernehmen deshalb automatisch „Auf Babepedia gelöscht“; Profil-Adresse ist die Original-Adresse auf Babepedia, die Archiv-Kopie steht unter „Archiv-Adresse“.
 - Der Status „nur im Internet Archive“ entfällt. Ältere Einträge mit Archiv-Adresse als Profil-Adresse werden einmalig umgestellt; Einträge mit Archiv-Adresse werden einmalig als gelöscht markiert (Status „gelöscht – Archiv vorhanden“).
 - Gelöschte Profile bleiben aus dem rollierenden Update draußen. Holt man so ein Profil doch wieder erfolgreich live von Babepedia, wird der Gelöscht-Haken wie bisher zurückgenommen.
+
+## Änderungen in 14.22 (Skript) / Tool – Archiv-Datum, Rank 0, Filter
+- Archiv-Einträge: „Zuletzt von Babepedia geholt“ ist das Datum der Archiv-Kopie (aus der Archiv-Adresse, z. B. `/web/20260706…` → 06.07.2026). Bestehende gelöschte Einträge mit Archiv-Adresse werden einmalig umgestellt.
+- „Rank 0“ ist ein Fehler auf Babepedia: Das Skript holt in dem Fall den aktuellen Rank aus der Ranking-Grafik (`/rankinggraph/<ID>`), sonst bleibt er leer. Das Tool entfernt gespeicherte Rank-/Highest-Rank-Werte „0“.
+- Zusatzfilter Tool-Note und Babepedia Ø fassen die Werte in ganze Stufen zusammen (z. B. 8,0–8,9).
+- Sortierung nach Alter und Größe entfernt.

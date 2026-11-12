@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.21
+// @version      14.22
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -631,13 +631,16 @@
             const match = rankEl.innerText.match(/(\d+)/);
             if (match) data['Rank'] = match[1];
         }
+        // Babepedia zeigt bei manchen Profilen „Rank 0“ (Fehler auf der Seite) → aus der Ranking-Grafik holen
+        const rankBroken = data['Rank'] === '0';
+        if (rankBroken) data['Rank'] = '';
 
         data['Highest Rank'] = '';
         data['Peakdays'] = '';
         const highestRankEl = doc.querySelector('.rating-rank small');
         if (highestRankEl && highestRankEl.innerText.trim() !== '') {
             const match = highestRankEl.innerText.match(/(\d+)/);
-            if (match) data['Highest Rank'] = match[1];
+            if (match && match[1] !== '0') data['Highest Rank'] = match[1];
 
             const peakLink = highestRankEl.querySelector('a[href*="numberonetop100"]');
             if (peakLink) {
@@ -646,7 +649,7 @@
             }
         }
 
-        if (!data['Highest Rank'] && !ARCHIVE) {
+        if ((!data['Highest Rank'] || rankBroken) && !ARCHIVE) {
             const rankingGraphAnchor = doc.querySelector('.rating-rank a[href*="/rankinggraph/"]');
             if (rankingGraphAnchor) {
                 let rankGraphHref = rankingGraphAnchor.getAttribute('href') || rankingGraphAnchor.href || '';
@@ -655,8 +658,13 @@
                     try {
                         const rankHtml = await fetchWithRetry(fullRankUrl, {}, 2);
                         const matchHighest = rankHtml.match(/Highest rank:\s*#?(\d+)/i);
-                        if (matchHighest) {
+                        if (matchHighest && matchHighest[1] !== '0' && !data['Highest Rank']) {
                             data['Highest Rank'] = matchHighest[1];
+                        }
+                        const matchCurrent = rankHtml.replace(/<[^>]+>/g, ' ').match(/Current rank\s*:?\s*#?\s*([\d.,]+)/i);
+                        if (rankBroken && matchCurrent) {
+                            const r = matchCurrent[1].replace(/[.,]/g, '');
+                            if (r && r !== '0') data['Rank'] = r;
                         }
                     } catch (e) {
                         console.warn(`[RankingGraph Fallback] Fehler bei ${fullRankUrl}:`, e);
@@ -815,6 +823,7 @@
             for (const k of ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL']) data[k] = toArchiveImg(data[k]);
             data['User Upload Image URLs'] = String(data['User Upload Image URLs'] || '').split(', ').filter(Boolean).map(toArchiveImg).join(', ');
             data['User Rating'] = ''; // eigene Bewertung ist in der Archiv-Kopie nicht enthalten
+            data['Scraped At'] = ARCHIVE.ts.slice(6, 8) + ARCHIVE.ts.slice(4, 6) + ARCHIVE.ts.slice(0, 4); // Stand = Datum der Archiv-Kopie
             data.__archive = true;    // Profil kommt aus dem Archiv → auf Babepedia gelöscht (Tool setzt den Status)
         }
         data['Babe ID'] = babeId || '';

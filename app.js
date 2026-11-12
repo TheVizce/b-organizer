@@ -235,7 +235,11 @@
     const m = t.match(/^([A-Z]{1,3})\s*\(/);          // „F (32F US / 70H JP)“, „D (old cup size: B)“
     return m ? m[1] : t;
   }
+  // Datum einer Archiv-Kopie (web.archive.org/web/YYYYMMDD…/) als DDMMYYYY
+  const archiveDate = (u) => { const m = String(u || '').match(/web\.archive\.org\/web\/(\d{4})(\d{2})(\d{2})/i); return m ? m[3] + m[2] + m[1] : ''; };
   function cleanValues(e) {
+    // „Rank 0“ ist ein Fehler auf Babepedia – lieber leer als 0
+    for (const f of ['Rank', 'Highest Rank']) if (String(e[f] || '').trim() === '0') { e[f] = ''; deriveChanged = true; }
     for (const [f, fn] of [['Measurements', cleanMeasurements], ['Bra/Cup', cleanCup]]) {
       if (!e[f]) continue;
       const nx = fn(e[f]);
@@ -1089,6 +1093,8 @@
       if (fromArchive) {
         // aus dem Internet Archive geholt: Original-Profil ist gelöscht – direkt übernehmen, nicht zur Prüfung
         raw = Object.assign({}, raw, { __direct: true });
+        const ad = archiveDate(v(raw, 'Archive URL'));
+        if (ad) item['Scraped At'] = ad;   // Stand = Datum der Archiv-Kopie
         if (existing && !isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = 'true'; existing._updated = now; }
       }
       if (existing && !raw._id && !fromArchive && isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = ''; existing['Deleted Since'] = ''; existing._updated = Date.now(); }
@@ -1401,7 +1407,7 @@
       if (statFilter && !statFilter.test(e)) return false;
       if (fav && !isTrue(e.Favorite)) return false;
       for (const [f, want] of xf) {
-        const vals = fieldValues(e, f);
+        const vals = xfValues(e, f);
         if (want === '__empty' ? vals.length : !vals.includes(want)) return false;
       }
       if (cf && !catList(e).includes(cf)) return false;
@@ -1534,13 +1540,22 @@
       if (hide) { if (el.type === 'checkbox') el.checked = false; else el.value = ''; }
     }
   }
+  // Zusatzfilter: Kommazahlen-Noten in ganze Stufen zusammenfassen (9,0–9,9 statt jeder Einzelwert)
+  const XF_BUCKET = { 'Score': 1, 'Global Rating': 2 };
+  function xfValues(e, f) {
+    const vals = fieldValues(e, f);
+    if (!(f in XF_BUCKET) || !vals.length) return vals;
+    const x = num(vals[0]); if (x == null) return vals;
+    const n = Math.floor(x + 1e-9), d = XF_BUCKET[f];
+    return [n >= 10 ? '10' : `${n},${'0'.repeat(d)}–${n},${'9'.repeat(d)}`];
+  }
   function renderExtraFilters() {
     const box = $('#xf'); if (!box) return;
     for (const k of Object.keys(xfVals)) if (!ui.extraFilters.includes(k)) delete xfVals[k];
     box.innerHTML = ui.extraFilters.map(f => {
       const counts = new Map(); let empty = 0;
-      for (const e of entries) { const vals = fieldValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
-      const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating'].includes(f) || / Score$/.test(f);
+      for (const e of entries) { const vals = xfValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
+      const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating', 'Score', 'Global Rating'].includes(f) || / Score$/.test(f);
       const keys = [...counts.keys()].sort((a, b) => isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
       return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
@@ -3018,7 +3033,8 @@
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
   applyFilterVisibility();
   applyCardLook();
-  if (ui.sort === 'mine') ui.sort = 'score';   // „Meine Bewertung“ ist jetzt die Tool-Note
+  if (ui.sort === 'mine') ui.sort = 'score';
+  if (['young', 'old', 'height'].includes(ui.sort)) ui.sort = 'name';   // Sortierung nach Alter/Größe entfernt   // „Meine Bewertung“ ist jetzt die Tool-Note
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-status').value = ''; $('#f-fav').checked = false;
@@ -3552,6 +3568,14 @@
         if (!localStorage.getItem('bp-organizer-archmig1')) {
           for (const e of entries) if (v(e, 'Archive URL') && !isTrue(e['Profile Deleted'])) { e['Profile Deleted'] = 'true'; e._updated = Date.now(); deriveChanged = true; }
           localStorage.setItem('bp-organizer-archmig1', '1');
+        }
+        // Einmalig: bei Archiv-Einträgen ist „Zuletzt geholt“ das Datum der Archiv-Kopie
+        if (!localStorage.getItem('bp-organizer-archmig2')) {
+          for (const e of entries) {
+            const ad = isTrue(e['Profile Deleted']) && archiveDate(v(e, 'Archive URL'));
+            if (ad && v(e, 'Scraped At') !== ad) { e['Scraped At'] = ad; e._updated = Date.now(); deriveChanged = true; }
+          }
+          localStorage.setItem('bp-organizer-archmig2', '1');
         }
       } catch (_) {}
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
