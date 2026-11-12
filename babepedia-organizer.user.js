@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.17
+// @version      14.18
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -961,11 +961,17 @@
         if (!org || !Array.isArray(org.stale) || !org.stale.length) return null;
         const recent = getFetchedRecent();
         const inBatch = new Set(getStoredData().map(i => slugOfUrl(i['Profile URL'])));
+        const failed = new Set(getFailed().map(f => slugOfUrl(f.url || f)));
         const list = org.stale.map(([url, ts]) => {
             const k = slugOfUrl(url);
-            return { url, ts: Math.max(ts || 0, recent[k] || 0, inBatch.has(k) ? Date.now() : 0) };
+            return { url, toolTs: ts || 0, ts: Math.max(ts || 0, recent[k] || 0, inBatch.has(k) ? Date.now() : 0), k };
         }).sort((a, b) => a.ts - b.ts);
-        return { picked: list.slice(0, n), total: list.length, at: org.at };
+        // Profile, die im Tool älter sind als das, was jetzt drankommt, aber zurückgestellt wurden – mit Grund
+        const head = list.slice(0, n), lastTs = head.length ? head[head.length - 1].ts : 0;
+        const deferred = list.filter(x => x.toolTs < x.ts && x.toolTs < lastTs);
+        const why = { failed: 0, batch: 0, notImported: 0 };
+        for (const x of deferred) { if (inBatch.has(x.k)) why.batch++; else if (failed.has(x.k)) why.failed++; else why.notImported++; }
+        return { picked: head, total: list.length, at: org.at, deferred: deferred.length, why, oldestTool: list.reduce((m, x) => Math.min(m, x.toolTs), Infinity) };
     }
 
     // Am Ende eines Laufs: Fehlschläge einmal nachholen, dann anbieten, das Tool zu öffnen
@@ -994,7 +1000,13 @@
         const peek = pickOldest(1);
         if (!peek) { alert('Das Skript kennt den Stand des Tools noch nicht.\n\nBitte das Tool einmal öffnen (🗂️ Tool öffnen) und danach hier erneut starten.'); return; }
         const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('de-DE') : 'nie';
-        const ans = prompt(`Rollierendes Update: Wie viele Profile holen?\n\nDie am längsten nicht aktualisierten zuerst (ältestes: ${fmt(peek.picked[0].ts)}).\n${peek.total} Profile im Tool · Stand vom ${new Date(peek.at).toLocaleString('de-DE')}`, String(def));
+        const full = pickOldest(def);
+        const w = full.why, notes = [];
+        if (w.failed) notes.push(`${w.failed} zuletzt fehlgeschlagen → „↻ Fehlgeschlagene“`);
+        if (w.batch) notes.push(`${w.batch} schon geholt, warten auf Übernahme → „🗂️ Tool öffnen“`);
+        if (w.notImported) notes.push(`${w.notImported} kürzlich geholt, im Tool aber noch nicht aktualisiert → Tool öffnen`);
+        const ans = prompt(`Rollierendes Update: Wie viele Profile holen?\n\nDie am längsten nicht aktualisierten zuerst (als Nächstes dran: Stand ${fmt(peek.picked[0].ts)}).\n${peek.total} Profile im Tool · Stand vom ${new Date(peek.at).toLocaleString('de-DE')}` +
+            (full.deferred ? `\n\nZurückgestellt (im Tool älter, ältestes ${fmt(full.oldestTool)}):\n• ${notes.join('\n• ')}` : ''), String(def));
         if (ans === null) return;
         const n = Math.max(1, Math.min(peek.total, Math.floor(Number(ans)) || def));
         GM_setValue('bp_update_n', n);
