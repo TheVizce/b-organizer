@@ -224,3 +224,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Measurements mit unbekannten Teilen („?–68.6–81.3 cm (B–W–H) · WHR 0.84“) werden als „?-69-81“ gespeichert; nur „?“ ergibt ein leeres Feld.
 - Bra/Cup mit Zusatz in Klammern („F (32F US / 70H JP)“, „D (old cup size: B)“) wird auf den Cup gekürzt.
 - Vorhandene Einträge stellt das Tool beim nächsten Öffnen um und speichert sie.
+
+## Änderungen in 14.19 (Tool) – Weltkarte
+- In der **📊 Statistik** oben eine Weltkarte: Länder nach Häufigkeit eingefärbt, umschaltbar **Nationalität / Geburtsland** (Land aus „Stadt, Region, Land“ der Birthplace) und Ausschnitte Welt, Europa, Nord-/Südamerika, Afrika, Asien. Kleine Länder als Punkt. Land antippen → Anzahl und „Liste zeigen“ (filtert die Liste). Gilt wie die übrige Statistik für die gefilterte Liste.
+- Kartendaten: `world.json` (Natural Earth 1:50m, gemeinfrei, vorab vereinfacht, ~180 KB, wird erst beim Öffnen der Statistik geladen). Keine externen Bibliotheken.

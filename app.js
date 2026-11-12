@@ -1377,7 +1377,7 @@
     }
     renderStatChip();
     if (!list.length) { main.innerHTML = `<div class="empty"><h2>Keine Treffer</h2><p>Passe Suche oder Filter an.</p></div>`; return; }
-    if (ui.view === 'stats') { main.innerHTML = statsHTML(list); return; }
+    if (ui.view === 'stats') { main.innerHTML = statsHTML(list); drawWorldMap(list); return; }
 
     shown = list; shownCount = 0;
     if (ui.view === 'table') {
@@ -1466,6 +1466,110 @@
       ${opts.emptyRow ? `<div class="st-empty">${bar(opts.emptyRow)}</div>` : ''}
     </section>`;
   }
+  // ---------- Weltkarte (Statistik) ----------
+  // Kartendaten: world.json im Repo (Natural Earth 1:50m, gemeinfrei; Equal-Earth-Projektion, vorab vereinfacht).
+  const COUNTRY_ALIASES = {
+    'usa': 'US', 'us': 'US', 'u.s.': 'US', 'u.s.a.': 'US', 'america': 'US', 'uk': 'GB', 'great britain': 'GB', 'britain': 'GB',
+    'england': 'GB', 'scotland': 'GB', 'wales': 'GB', 'northern ireland': 'GB', 'russian federation': 'RU', 'russia': 'RU', 'ussr': 'RU', 'soviet union': 'RU',
+    'czech republic': 'CZ', 'czechoslovakia': 'CZ', 'korea, republic of': 'KR', 'republic of korea': 'KR', 'korea': 'KR', 'south korea': 'KR',
+    "korea, democratic people's republic of": 'KP', 'north korea': 'KP', 'iran, islamic republic of': 'IR', 'moldova, republic of': 'MD',
+    'macedonia, the former yugoslav republic of': 'MK', 'macedonia': 'MK', 'tanzania, united republic of': 'TZ', 'congo, the democratic republic of the': 'CD',
+    'syrian arab republic': 'SY', 'syria': 'SY', 'bosnia and herzegowina': 'BA', 'bosnia': 'BA', 'viet nam': 'VN', "lao people's democratic republic": 'LA',
+    'libyan arab jamahiriya': 'LY', 'brunei darussalam': 'BN', 'holland': 'NL', 'the netherlands': 'NL', 'ivory coast': 'CI', "cote d'ivoire": 'CI',
+    'swaziland': 'SZ', 'burma': 'MM', 'yugoslavia': 'RS', 'serbia and montenegro': 'RS', 'east germany': 'DE', 'west germany': 'DE',
+    'taiwan, province of china': 'TW', 'hong kong sar': 'HK', 'macau': 'MO', 'macao': 'MO', 'cape verde': 'CV', 'east timor': 'TL',
+    'united states minor outlying islands': 'US', 'virgin islands (u.s.)': 'VI', 'virgin islands (british)': 'VG', 'turkiye': 'TR', 'türkiye': 'TR',
+    'gibraltar': 'GB', 'reunion': 'FR', 'réunion': 'FR', 'guadeloupe': 'FR', 'martinique': 'FR', 'french guiana': 'FR', 'mayotte': 'FR',
+    "lao, people's democratic republic": 'LA', 'laos': 'LA', 'congo, the republic of the': 'CG', 'republic of the congo': 'CG'
+  };
+  // US-Bundesstaaten und kanadische Provinzen, falls das Land fehlt
+  const REGION_COUNTRY = Object.assign(
+    Object.fromEntries('alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming'.split(' ').map(s => [s, 'US'])),
+    { 'new hampshire': 'US', 'new jersey': 'US', 'new mexico': 'US', 'new york': 'US', 'north carolina': 'US', 'north dakota': 'US', 'rhode island': 'US', 'south carolina': 'US', 'south dakota': 'US', 'west virginia': 'US',
+      'ontario': 'CA', 'quebec': 'CA', 'québec': 'CA', 'british columbia': 'CA', 'alberta': 'CA', 'manitoba': 'CA', 'saskatchewan': 'CA', 'nova scotia': 'CA', 'new brunswick': 'CA' });
+  let countryIndex = null;
+  function countryIso(name, world) {
+    if (!countryIndex) {
+      countryIndex = new Map();
+      for (const c of world.c) for (const n of c.names) countryIndex.set(n, c.iso);
+    }
+    const n = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!n) return '';
+    const plain = n.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+    return COUNTRY_ALIASES[n] || countryIndex.get(n) || COUNTRY_ALIASES[plain] || countryIndex.get(plain) || REGION_COUNTRY[plain] || '';
+  }
+  // Geburtsland aus „Stadt, Region, Land“ (Babepedia schreibt z. B. „Seoul, Korea, Republic of“)
+  function birthIso(e, world) {
+    const parts = String(v(e, 'Birthplace')).split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.length || /^n\/?a$/i.test(parts[0])) return '';
+    for (let k = Math.min(3, parts.length); k >= 1; k--) {
+      const iso = countryIso(parts.slice(-k).join(', '), world);
+      if (iso) return iso;
+    }
+    return '';
+  }
+  // Gebiete ohne eigene Fläche auf der Karte dem Mutterland zuordnen
+  const MAP_PARENT = { GF: 'FR', GP: 'FR', MQ: 'FR', RE: 'FR', YT: 'FR', GI: 'GB', SJ: 'NO', BV: 'NO', CX: 'AU', CC: 'AU', TK: 'NZ' };
+  function natIsos(e) {
+    return [...new Set(natNames(e).map(n => { let c = NATIONALITY_CODES[n.toLowerCase()] || ''; if (c.startsWith('GB-')) c = 'GB'; return MAP_PARENT[c] || c; }).filter(Boolean))];
+  }
+
+  let worldData = null;
+  const loadWorld = () => worldData ? Promise.resolve(worldData) : fetch('world.json').then(r => { if (!r.ok) throw new Error('world.json ' + r.status); return r.json(); }).then(d => (worldData = d));
+  const MAP_VIEWS = { world: null, eu: '436 17 178 103', na: '29 12 382 213', sa: '240 188 195 249', af: '444 107 208 267', as: '552 42 360 246' };
+  if (!ui.mapMode) ui.mapMode = 'nat';
+  if (!ui.mapView) ui.mapView = 'world';
+  function mapSectionHTML() {
+    const b = (k, v, l) => `<button class="${ui[k] === v ? 'on' : ''}" data-map-${k === 'mapMode' ? 'mode' : 'view'}="${v}">${l}</button>`;
+    return `<section class="st-card wide st-map">
+      <div class="st-map-head">
+        <h3>Weltkarte</h3>
+        <div class="seg small">${b('mapMode', 'nat', 'Nationalität')}${b('mapMode', 'birth', 'Geburtsland')}</div>
+        <div class="seg small">${b('mapView', 'world', 'Welt')}${b('mapView', 'eu', 'Europa')}${b('mapView', 'na', 'N-Amerika')}${b('mapView', 'sa', 'S-Amerika')}${b('mapView', 'af', 'Afrika')}${b('mapView', 'as', 'Asien')}</div>
+      </div>
+      <div class="map-box" id="map-box"><p class="muted">Karte wird geladen…</p></div>
+      <div class="map-info" id="map-info"><span class="muted">Land antippen für Details.</span></div>
+    </section>`;
+  }
+  async function drawWorldMap(list) {
+    const box = $('#map-box'); if (!box) return;
+    let world;
+    try { world = await loadWorld(); } catch (err) { box.innerHTML = `<p class="muted">Karte konnte nicht geladen werden (${esc(err.message || err)}).</p>`; return; }
+    if (!document.body.contains(box)) return;
+    const isosOf = ui.mapMode === 'birth' ? (e => { const i = birthIso(e, world); return i ? [MAP_PARENT[i] || i] : []; }) : natIsos;
+    const counts = new Map(); let none = 0;
+    for (const e of list) { const is = isosOf(e); if (!is.length) none++; is.forEach(i => counts.set(i, (counts.get(i) || 0) + 1)); }
+    const max = Math.max(1, ...counts.values());
+    const lmax = Math.log(max + 1);
+    const pct = (n) => Math.round(18 + 82 * Math.log(n + 1) / lmax);
+    const vb = MAP_VIEWS[ui.mapView] || `0 0 ${world.w} ${world.h}`;
+    const dotR = (Number(vb.split(' ')[2]) / 400).toFixed(2);   // Punkte für kleine Länder passend zum Ausschnitt
+    const shapes = world.c.map(c => {
+      const n = counts.get(c.iso) || 0;
+      const fill = n ? `color-mix(in srgb, var(--accent) ${pct(n)}%, var(--surface-3))` : '';
+      const label = `${flagFor(c.n) || isoFlag(c.iso)} ${c.de}: ${n}`;
+      return `<path d="${c.p}" data-iso="${c.iso}" class="${n ? 'has' : ''}" ${fill ? `style="fill:${fill}"` : ''}><title>${esc(label)}</title></path>` +
+        (c.small && n ? `<circle cx="${c.c[0]}" cy="${c.c[1]}" r="${dotR}" data-iso="${c.iso}" class="has dot" style="fill:${fill}"><title>${esc(label)}</title></circle>` : '');
+    }).join('');
+    const known = new Set(world.c.map(c => c.iso));
+    const offMap = [...counts.keys()].filter(i => !known.has(i)).reduce((a, i) => a + counts.get(i), 0);
+    box.innerHTML = `<svg viewBox="${vb}" class="world" role="img" aria-label="Weltkarte">${shapes}</svg>
+      <div class="map-legend"><span>1</span><i></i><span>${max}</span><span class="muted">${ui.mapMode === 'birth' ? 'nach Geburtsland' : 'nach Nationalität (Mehrfache zählen je Land)'} · ${counts.size} Länder${none ? ` · ${none} ohne Zuordnung` : ''}${offMap ? ` · ${offMap} ohne Fläche auf der Karte` : ''}</span></div>`;
+    box.dataset.mode = ui.mapMode;
+    mapCounts = { counts, world, isosOf };
+  }
+  let mapCounts = null;
+  const isoFlag = (iso) => /^[A-Z]{2}$/.test(iso) ? [...iso].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('') : '';
+  function mapPick(iso) {
+    if (!mapCounts) return;
+    const c = mapCounts.world.c.find(x => x.iso === iso); if (!c) return;
+    const n = mapCounts.counts.get(iso) || 0;
+    $$('#map-box [data-iso].sel').forEach(x => x.classList.remove('sel'));
+    $$(`#map-box [data-iso="${iso}"]`).forEach(x => x.classList.add('sel'));
+    const i = statRefs.push({ label: `${ui.mapMode === 'birth' ? 'Geburtsland' : 'Nationalität'}: ${c.de}`, test: (e) => mapCounts.isosOf(e).includes(iso) }) - 1;
+    $('#map-info').innerHTML = `<b>${isoFlag(iso)} ${esc(c.de)}</b> · ${n} Eintr${n === 1 ? 'ag' : 'äge'}` + (n ? ` <button class="btn small" data-sf="${i}">Liste zeigen</button>` : '');
+  }
+
   function statsHTML(list) {
     statRefs = [];
     const total = list.length;
@@ -1535,6 +1639,7 @@
     return `<div class="stats">
       <div class="st-tiles">${tiles}</div>
       <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile filtert die Liste danach.</p>
+      ${mapSectionHTML()}
       <div class="st-grid">
         ${cats.join('')}
         ${statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })}
@@ -2331,6 +2436,19 @@
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; if (ui.view !== 'stats') ui.lastListView = ui.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
   $('#main').addEventListener('click', (ev) => {
+    if (ui.view === 'stats') {
+      const mm = ev.target.closest('[data-map-mode]'), mv = ev.target.closest('[data-map-view]'), cty = ev.target.closest('#map-box [data-iso]');
+      if (mm || mv) {
+        if (mm) ui.mapMode = mm.dataset.mapMode; else ui.mapView = mv.dataset.mapView;
+        saveUI();
+        $$('[data-map-mode]').forEach(x => x.classList.toggle('on', x.dataset.mapMode === ui.mapMode));
+        $$('[data-map-view]').forEach(x => x.classList.toggle('on', x.dataset.mapView === ui.mapView));
+        $('#map-info').innerHTML = '<span class="muted">Land antippen für Details.</span>';
+        drawWorldMap(filtered());
+        return;
+      }
+      if (cty) { mapPick(cty.dataset.iso); return; }
+    }
     const b = ev.target.closest('[data-sf]'); if (!b || ui.view !== 'stats') return;
     const r = statRefs[Number(b.dataset.sf)]; if (!r || !r.test) return;
     statFilter = { label: r.flabel || r.label, test: r.test };

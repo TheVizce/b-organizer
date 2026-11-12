@@ -523,3 +523,20 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .rk-stale { background: rgba(224,166,74,.18); color: #f0bd6a; border: 1px solid rgba(224,166,74,.5); }
 button.chip.rk-stale { cursor: pointer; font: inherit; }
 .badge.rk-stale { background: rgba(30,20,0,.75); }
+
+/* Weltkarte */
+.st-map { margin-bottom: 12px; }
+.st-map-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.st-map-head h3 { margin: 0 auto 0 0 !important; }
+.seg.small button { padding: 4px 9px; font-size: 12.5px; }
+.map-box svg.world { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+.map-box svg.world path { fill: var(--surface-2); stroke: var(--border); stroke-width: .3; vector-effect: non-scaling-stroke; }
+.map-box svg.world path.has, .map-box svg.world circle.dot { cursor: pointer; }
+.map-box svg.world circle.dot { stroke: var(--bg); stroke-width: .4; vector-effect: non-scaling-stroke; }
+.map-box svg.world .has:hover, .map-box svg.world .sel { stroke: #fff; stroke-width: 1.2; }
+.map-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+.map-legend i { width: 140px; height: 9px; border-radius: 5px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 18%, var(--surface-3)), var(--accent)); }
+.map-info { margin-top: 8px; min-height: 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+.map-box svg.world { max-height: 72vh; }
+.st-map-head .seg { flex-wrap: wrap; max-width: 100%; height: auto; }
+.st-map-head .seg button { white-space: nowrap; }
