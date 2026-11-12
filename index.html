@@ -62,6 +62,9 @@
       <option value="site-only">nur auf Babepedia bewertet</option>
       <option value="mine-only">nur hier bewertet</option>
       <option value="none">gar nicht bewertet</option>
+      <option value="scored">★ nach Kategorien bewertet</option>
+      <option value="unscored">noch nicht nach Kategorien bewertet</option>
+      <option value="sc-diff">★ Kategorien-Note ≠ Babepedia</option>
     </select>
     <select id="f-ranker">
       <option value="">Ranker: egal</option>
@@ -99,6 +102,7 @@
       <option value="updated">Zuletzt geändert</option>
       <option value="global">Global Rating ↓</option>
       <option value="mine">Meine Bewertung ↓</option>
+      <option value="score">★ Score ↓ (Kategorien)</option>
       <option value="site">User Rating (Babepedia) ↓</option>
       <option value="diff">Größte Abweichung zuerst</option>
       <option value="rank">Rank ↑</option>
@@ -116,6 +120,7 @@
       <button data-view="stats" title="Statistik">📊</button>
     </div>
     <button class="btn" id="btn-to-ranker" title="Alle angezeigten Einträge an den Image Ranker senden">🏆 An Ranker</button>
+    <button class="btn ghost" id="btn-rate" title="Einträge der aktuellen Liste nach Kategorien bewerten (R)">⭐ Bewerten</button>
     <button class="btn ghost" id="btn-random" title="Zufälliger Eintrag aus der gefilterten Liste (Z)">🎲 Zufall</button>
     <button class="btn ghost" id="btn-browse" title="Bilder der aktuellen Liste durchblättern">🖼 Blättern</button>
     <button class="btn ghost" id="btn-view-cfg" title="Kacheln und Filter anpassen">⚙︎ Ansicht</button>

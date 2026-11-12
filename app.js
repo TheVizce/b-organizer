@@ -15,14 +15,15 @@
     'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
-  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover'];
+  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover',
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
+    { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
@@ -36,12 +37,13 @@
     'Boobs': ['', 'Real/Natural', 'Fake/Enhanced', 'Real (Removed implants)', 'Unknown'],
     'Height': 'num', 'Weight': 'num', 'Global Rating': 'num', 'Votes': 'num', 'User Rating': 'num',
     'Rank': 'num', 'Highest Rank': 'num', 'Peakdays': 'num', 'Years active': 'num', 'Active till': 'num',
-    'My Rating': 'num',
+    'My Rating': 'num', 'My Rating (old)': 'num', 'Score': 'num',
+    'Face Score': 'score', 'Body Score': 'score', 'Hot Score': 'score', 'Cute Score': 'score', 'Sympathy Score': 'score',
     'User Upload Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area'
   };
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
-    'Tags': 'kommagetrennt', 'My Rating': '1–10, Vergleich mit „User Rating“', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
+    'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5 (siehe Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
@@ -240,8 +242,47 @@
       if (nx !== e[f]) { e[f] = nx; deriveChanged = true; }
     }
   }
+  // ---------- Bewertung nach Kategorien ----------
+  // Gesamt = (2·Gesicht + 2·Body + max(Hot, Cute) + 0,1·min(Hot, Cute) + 1,5·Sympathie) / 6,5   (je 1–5)
+  // 10er-Wert = 7 + (Gesamt − 3) · 1,5  → 3 = typisch = 7 (wie bisher auf Babepedia), 5 = 10, 1 = 4
+  const SCORE_CATS = [
+    { f: 'Face Score', label: 'Gesicht', hint: 'inkl. Haare', half: true, key: 'G' },
+    { f: 'Body Score', label: 'Body', half: true, key: 'B' },
+    { f: 'Hot Score', label: 'Hot', half: true, key: 'H' },
+    { f: 'Cute Score', label: 'Cute', half: true, key: 'C' },
+    { f: 'Sympathy Score', label: 'Sympathie', half: false, key: 'S' }
+  ];
+  const SCORE_W = { face: 2, body: 2, hotcute: 1, minor: 0.1, sym: 1.5, div: 6.5, symDefault: 3 };
+  const SYMPATHY_LABELS = { 5: 'kenne ich – extrem sympathisch', 4: 'kenne ich – sympathisch', 3: 'kenne ich nicht/kaum – wirkt eher sympathisch', 2: 'kenne ich nicht/kaum – wirkt eher unsympathisch', 1: 'kenne ich – unsympathisch' };
+  const SCORE_ANCHORS = '1 = schwach für meine Liste · 3 = typisch · 5 = gehört zu den Besten';
+  function scoreOf(e) {
+    const g = (f) => { const n = num(e[f]); return n == null || n < 1 || n > 5 ? null : n; };
+    const F = g('Face Score'), B = g('Body Score'); let H = g('Hot Score'), C = g('Cute Score');
+    if (F == null || B == null || (H == null && C == null)) return null;
+    if (H == null) H = C; if (C == null) C = H;
+    const S = g('Sympathy Score') ?? SCORE_W.symDefault;
+    const total = (SCORE_W.face * F + SCORE_W.body * B + SCORE_W.hotcute * Math.max(H, C) + SCORE_W.minor * Math.min(H, C) + SCORE_W.sym * S) / SCORE_W.div;
+    return { total, ten: Math.max(1, Math.min(10, 7 + (total - 3) * 1.5)), symAssumed: g('Sympathy Score') == null };
+  }
+  function applyScore(e) {
+    const s = scoreOf(e);
+    if (!s) { if (e.Score) e.Score = ''; return; }
+    const ten = (Math.round(s.ten * 10) / 10).toFixed(1);
+    const first = !v(e, 'Score');
+    e.Score = ten;
+    const r = String(Math.round(s.ten));
+    if (v(e, 'My Rating') !== r) {
+      // alte Bewertung beim ersten Berechnen aufheben
+      if (first && v(e, 'My Rating') && !v(e, 'My Rating (old)')) e['My Rating (old)'] = v(e, 'My Rating');
+      e['My Rating'] = r;
+    }
+  }
+  const hasScore = (e) => !!v(e, 'Score');
+  const fmtScoreVal = (x) => x == null || x === '' ? '–' : String(x).replace('.5', '½').replace('.', ',');
+
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    applyScore(e);
     mergeNationality(e);
     cleanValues(e);
     e['Profession Category'] = professionCategories(e.Professions);
@@ -1189,6 +1230,9 @@
         if (rf === 'site-only' && st !== 'site-only') return false;
         if (rf === 'mine-only' && st !== 'mine-only') return false;
         if (rf === 'none' && st !== 'none') return false;
+        if (rf === 'scored' && !hasScore(e)) return false;
+        if (rf === 'unscored' && hasScore(e)) return false;
+        if (rf === 'sc-diff' && !(hasScore(e) && num(e['User Rating']) != null && Number(v(e, 'My Rating')) !== num(e['User Rating']))) return false;
       }
       if (act && String(v(e, 'Active') || 'false') !== act) return false;
       for (const [f, val] of Object.entries(fv)) {
@@ -1209,6 +1253,7 @@
       updated: (e) => -(e._updated || 0),
       global: (e) => -(num(e['Global Rating']) ?? -1),
       mine: (e) => -(num(e['My Rating']) ?? -1),
+      score: (e) => -(num(e.Score) ?? -1),
       rank: (e) => num(e.Rank) ?? 1e9,
       young: (e) => age(e) ?? 999,
       old: (e) => -(age(e) ?? -1),
@@ -1229,12 +1274,13 @@
   const DERIVED = ['Alter', 'Geburtsjahr'];
   const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
-    'Global Rating', 'Votes', 'User Rating', 'My Rating', 'Rank', 'Highest Rank', 'Babe ID'];
+    'Global Rating', 'Votes', 'User Rating', 'My Rating', 'Score', 'Rank', 'Highest Rank', 'Babe ID'];
   const CARD_BADGES = [['global', '★ Global Rating'], ['rank', '# Rank'], ['rating', '♥ Meine Bewertung'], ['ranker', '🏆 Ranker']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Bewertung'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
-    'Measurements', 'Weight', 'Years active', 'Tags', 'My Rating', 'User Rating', 'Exact Birthdate', 'Favorite'];
+    'Measurements', 'Weight', 'Years active', 'Tags', 'My Rating', 'User Rating', 'Exact Birthdate', 'Favorite',
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
   if (!Array.isArray(ui.cardFields)) ui.cardFields = ['Nationality', 'Alter', 'Height'];
   if (!Array.isArray(ui.cardBadges)) ui.cardBadges = CARD_BADGES.map(b => b[0]);
@@ -1259,6 +1305,8 @@
     if (f === 'Born') return fmtDate(v(e, 'Born'), isTrue(e['Exact Birthdate']));
     if (f === 'Nationality') return natDisplay(e);
     if (f === 'Global Rating' || f === 'User Rating' || f === 'My Rating') return v(e, f) ? `${f.replace(' Rating', '')} ${v(e, f)}` : '';
+    if (f === 'Score') return v(e, f) ? `★ ${v(e, f).replace('.', ',')}` : '';
+    if (/ Score$/.test(f)) return v(e, f) ? `${f.replace(' Score', '')} ${fmtScoreVal(v(e, f))}` : '';
     if (f === 'Rank' || f === 'Highest Rank') return v(e, f) ? `${f === 'Rank' ? '#' : 'max #'}${v(e, f)}` : '';
     if (f === 'Tattoos' || f === 'Piercings') { const x = v(e, f); return x && x !== 'n/a' ? `${f}: ${x}` : ''; }
     const val = v(e, f);
@@ -1287,7 +1335,7 @@
     box.innerHTML = ui.extraFilters.map(f => {
       const counts = new Map(); let empty = 0;
       for (const e of entries) { const vals = fieldValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
-      const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating'].includes(f);
+      const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating'].includes(f) || / Score$/.test(f);
       const keys = [...counts.keys()].sort((a, b) => isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
       return `<select data-xf="${esc(f)}" title="${esc(f)}"><option value="">${esc(f)}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(f)}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
@@ -1447,7 +1495,8 @@
   }
   const STAT_NUMS = [
     ['Alter', 'Alter', 5, ' J.'], ['Geburtsjahr', 'Geburtsjahrzehnt', 10, 'er'], ['Height', 'Größe', 5, ' cm'], ['Weight', 'Gewicht', 5, ' kg'],
-    ['Global Rating', 'Global Rating', 0.5, ''], ['User Rating', 'User Rating (Babepedia)', 1, ''], ['My Rating', 'Meine Bewertung', 1, '']];
+    ['Global Rating', 'Global Rating', 0.5, ''], ['User Rating', 'User Rating (Babepedia)', 1, ''], ['My Rating', 'Meine Bewertung', 1, ''],
+    ['Score', 'Score (Kategorien, 1–10)', 0.5, ''], ['Face Score', 'Gesicht', 0.5, ''], ['Body Score', 'Body', 0.5, ''], ['Hot Score', 'Hot', 0.5, ''], ['Cute Score', 'Cute', 0.5, ''], ['Sympathy Score', 'Sympathie', 1, '']];
   const CUP_ORDER = 'AA A B C D DD DDD E F FF G GG H HH I J K L M N'.split(' ');
   function statSection(title, rows, total, empty, opts = {}) {
     if (!rows.length) return '';
@@ -1626,6 +1675,11 @@
     // Image Ranker: Tiers
     const tiers = new Map();
     list.forEach(e => { if (e._ranker && e._ranker.tier) tiers.set(e._ranker.tier, (tiers.get(e._ranker.tier) || 0) + 1); });
+    // Kategorien-Note gegen Babepedia-Bewertung
+    const dTest = (lo, hi) => (e) => { if (!hasScore(e) || num(e['User Rating']) == null) return false; const d = Math.round(num(e.Score)) - num(e['User Rating']); return d >= lo && d <= hi; };
+    const cmpDefs = [['≤ −2 (Kategorien niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (Kategorien höher)', 2, 99]];
+    const cmpRows = cmpDefs.map(([label, lo, hi]) => ({ label, n: list.filter(dTest(lo, hi)).length, flabel: `Kategorien vs. Babepedia: ${label}`, test: dTest(lo, hi) })).filter(r => r.n);
+    const cmpN = list.filter(e => hasScore(e) && num(e['User Rating']) != null).length;
     const tierRows = RK_TIERS.map(([, t]) => t).filter(t => tiers.has(t)).map(t => ({ label: t, n: tiers.get(t), flabel: `Ranker-Tier: ${t}`,
       html: `<span class="badge rk-tier" style="--rk:${rkColor(t)}">${esc(t)}</span>`, test: e => e._ranker && e._ranker.tier === t }));
 
@@ -1643,6 +1697,7 @@
       <div class="st-grid">
         ${cats.join('')}
         ${statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })}
+        ${statSection(`★ Kategorien-Note vs. Babepedia (${cmpN})`, cmpRows, cmpN, 0, { limit: 10 })}
         ${nums.join('')}
         ${statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })}
       </div>
@@ -1710,7 +1765,35 @@
     return f.replace(/ URL$/, '');
   }
 
+  function scoreRow(e, c, idx, active) {
+    const cur = num(e[c.f]);
+    const vals = c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5];
+    const btns = vals.map(n => `<button class="sc-btn ${cur === n ? 'on' : ''} ${n % 1 ? 'half' : ''}" data-score="${c.f}" data-val="${n}" data-id="${esc(e._id)}" title="${esc(c.f === 'Sympathy Score' ? SYMPATHY_LABELS[n] : String(n).replace('.', ','))}">${n % 1 ? (cur === n ? Math.floor(n) + '½' : '½') : n}</button>`).join('');
+    const extra = c.f === 'Sympathy Score' ? `<span class="sc-note">${cur ? esc(SYMPATHY_LABELS[cur]) : 'nicht gesetzt – zählt als 3'}</span>` : (c.hint ? `<span class="sc-note">${esc(c.hint)}</span>` : '');
+    return `<div class="sc-row ${active ? 'active' : ''}" data-sc-idx="${idx}"><span class="sc-lbl">${esc(c.label)}</span><span class="sc-btns">${btns}${cur != null ? `<button class="sc-clear" data-score="${c.f}" data-val="" data-id="${esc(e._id)}" title="entfernen">✕</button>` : ''}</span>${extra}</div>`;
+  }
+  function scoreSummary(e) {
+    const s = scoreOf(e);
+    if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Gesamtnote berechnet.</div>`;
+    const site = num(e['User Rating']), old = num(e['My Rating (old)']);
+    return `<div class="sc-sum"><b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Gesamt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie als 3 angenommen' : ''}</span>
+      ${site != null ? `<span class="sc-cmp">Babepedia ${site}${Math.round(s.ten) !== site ? ` <span class="warn">(${Math.round(s.ten) > site ? '+' : ''}${Math.round(s.ten) - site})</span>` : ' ✓'}</span>` : ''}${old != null ? `<span class="sc-cmp muted">vorher ${old}</span>` : ''}</div>`;
+  }
+  function scoreBox(e) {
+    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span></h3>
+      ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
+      ${scoreSummary(e)}</div>`;
+  }
+  function setScore(id, f, val) {
+    const e = byId(id); if (!e) return;
+    e[f] = val === '' ? '' : String(val);
+    e._updated = Date.now();
+    derive(e);
+    saveQuiet(); refreshItem(id);
+  }
+
   function ratingBox(e) {
+    if (hasScore(e)) return '';   // Note kommt aus den Kategorien
     const r = ratingDiff(e);
     const mine = num(e['My Rating']);
     const btns = Array.from({ length: 10 }, (_, i) => i + 1).map(n =>
@@ -1723,7 +1806,7 @@
     else cmp = `<span class="muted">Noch nicht bewertet</span>`;
     const take = r.state === 'site-only' || r.state === 'diff'
       ? `<button class="btn small" data-rate="${r.site}" data-id="${esc(e._id)}">Babepedia-Wert übernehmen</button>` : '';
-    return `<div class="sec rating-box"><h3>Meine Bewertung</h3>
+    return `<div class="sec rating-box"><h3>Meine Bewertung <span class="muted">(direkt, ohne Kategorien)</span></h3>
       <div class="rate-row">${btns}${mine !== null ? `<button class="rate-clear" data-rate="" data-id="${esc(e._id)}" title="Bewertung entfernen">✕</button>` : ''}</div>
       <div class="rate-cmp">${cmp} ${take}</div></div>`;
   }
@@ -1755,6 +1838,7 @@
           <div><dt><kbd>Z</kbd></dt><dd>🎲 zufälliger Eintrag (aus der gefilterten Liste)</dd></div>
           <div><dt><kbd>B</kbd></dt><dd>🖼 Bilder der Liste durchblättern</dd></div>
           <div><dt><kbd>N</kbd></dt><dd>neuer Eintrag</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd>⭐ Bewertungsmodus (Kategorien)</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>diese Übersicht</dd></div>
         </dl>
         <h3>Detailansicht</h3>
@@ -1781,6 +1865,7 @@
 
   function setRating(id, val) {
     const e = byId(id); if (!e) return;
+    if (hasScore(e)) { toast('Die Note wird aus den Kategorien berechnet – dort ändern.'); return; }
     e['My Rating'] = val === '' ? '' : String(val);
     e._updated = Date.now();
     saveQuiet(); refreshItem(id); showDetail(id);
@@ -1870,6 +1955,7 @@
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
+          ${scoreBox(e)}
           ${ratingBox(e)}
           ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
           ${sec('Allgemein', GROUPS[0].fields)}
@@ -1927,7 +2013,9 @@
     } else if (t === 'date') {
       input = `<input type="date" ${name} value="${esc(ddToIso(val))}">`;
     } else if (t === 'num') {
-      input = `<input type="number" ${f === 'My Rating' ? 'min="1" max="10" step="1"' : 'step="any"'} ${name} value="${esc(val)}">`;
+      input = `<input type="number" ${f === 'My Rating' ? 'min="1" max="10" step="1"' : 'step="any"'} ${name} value="${esc(val)}" ${f === 'Score' ? 'readonly' : ''}>`;
+    } else if (t === 'score') {
+      input = `<input type="number" min="1" max="5" step="${f === 'Sympathy Score' ? 1 : 0.5}" ${name} value="${esc(val)}">`;
     } else if (t === 'area') {
       input = `<textarea ${name}>${esc(val)}</textarea>`;
     } else {
@@ -2237,6 +2325,130 @@
     openViewer(shown[0]._id, 0);
   }
 
+  // ---------- ⭐ Bewertungsmodus ----------
+  // Eintrag für Eintrag: Bild groß, Kategorien per Ziffer. Tasten: 1–5 = Wert für die markierte Kategorie
+  // (springt weiter), . oder , = +½ auf den zuletzt gesetzten Wert, ↑/↓ bzw. G B H C S = Kategorie wählen,
+  // ←/→ = Bild, Enter = nächster Eintrag, Rücktaste = vorheriger, Esc = beenden.
+  let rater = null;
+  function openRater() {
+    const onlyOpen = ui.raterOnlyOpen !== false;
+    const ids = shown.filter(e => !onlyOpen || !hasScore(e)).map(e => e._id);
+    if (!ids.length) { toast(onlyOpen ? 'In der aktuellen Liste ist schon alles nach Kategorien bewertet.' : 'Keine Einträge in der Liste.'); return; }
+    const el = document.createElement('div');
+    el.className = 'rater';
+    el.innerHTML = `
+      <div class="rt-top">
+        <button class="rt-name" title="Details öffnen"></button>
+        <span class="rt-count"></span>
+        <label class="chk rt-only"><input type="checkbox" ${onlyOpen ? 'checked' : ''}> nur unbewertete</label>
+        <button class="vw-x" aria-label="Beenden">×</button>
+      </div>
+      <div class="rt-body">
+        <div class="rt-stage"><img alt="" referrerpolicy="no-referrer" draggable="false"><div class="vw-err" hidden>Bild lässt sich nicht laden</div>
+          <button class="vw-arrow prev" aria-label="Vorheriges Bild">‹</button><button class="vw-arrow next" aria-label="Nächstes Bild">›</button><span class="rt-imgc"></span></div>
+        <div class="rt-panel">
+          <div class="rt-meta"></div>
+          <div class="rt-cats"></div>
+          <div class="rt-sum"></div>
+          <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
+          <p class="muted rt-help">1–5 setzt die markierte Kategorie · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    rater = { el, ids, i: 0, img: 0, cat: 0, last: null, done: 0 };
+    raterShow();
+    el.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t.closest('.vw-x')) return closeRater();
+      if (t.closest('.vw-arrow.prev')) return raterImg(-1);
+      if (t.closest('.vw-arrow.next')) return raterImg(1);
+      const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
+      const sc = t.closest('[data-score]');
+      if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
+      const row = t.closest('[data-sc-idx]'); if (row) { rater.cat = Number(row.dataset.scIdx); raterCats(); return; }
+      if (t.closest('.rt-name')) { const id = rater.ids[rater.i]; closeRater(); showDetail(id); }
+    });
+    $('.rt-only input', el).addEventListener('change', (ev) => { ui.raterOnlyOpen = ev.target.checked; saveUI(); toast('Gilt beim nächsten Start des Bewertungsmodus.'); });
+    // Wischen auf dem Bild: Bilder wechseln
+    let sx = 0, sy = 0;
+    const stage = $('.rt-stage', el);
+    stage.addEventListener('touchstart', (ev) => { if (ev.touches.length === 1) { sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; } }, { passive: true });
+    stage.addEventListener('touchend', (ev) => { const t = ev.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) raterImg(dx < 0 ? 1 : -1); });
+  }
+  function raterEntry() { return rater && byId(rater.ids[rater.i]); }
+  function raterShow() {
+    const e = raterEntry(); if (!e) return;
+    const { el } = rater;
+    $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
+    $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
+    $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `Babepedia ${v(e, 'User Rating')}` : '', v(e, 'My Rating (old)') ? `vorher ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
+    rater.img = 0;
+    raterImgShow(); raterCats();
+    const nx = byId(rater.ids[rater.i + 1]); if (nx) { const u = images(nx)[0]; if (u) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); } }
+  }
+  function raterImgShow() {
+    const e = raterEntry(), imgs = images(e), { el } = rater;
+    const img = $('.rt-stage img', el), err = $('.rt-stage .vw-err', el);
+    err.hidden = true; img.hidden = !imgs.length;
+    $('.rt-imgc', el).textContent = imgs.length > 1 ? `${rater.img + 1} / ${imgs.length}` : '';
+    if (!imgs.length) { err.hidden = false; err.textContent = 'Keine Bilder'; return; }
+    const full = R(imgs[rater.img]), alts = [full, thumbUrl(full)].filter((x, i, a) => x && a.indexOf(x) === i);
+    let k = 0;
+    img.onerror = () => { if (++k < alts.length) img.src = alts[k]; else { img.hidden = true; err.hidden = false; err.textContent = 'Bild lässt sich nicht laden'; } };
+    img.src = alts[0];
+  }
+  function raterImg(d) { const n = images(raterEntry()).length; if (n < 2) return; rater.img = (rater.img + d + n) % n; raterImgShow(); }
+  function raterCats() {
+    const e = raterEntry(), { el } = rater;
+    $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
+    $('.rt-sum', el).innerHTML = scoreSummary(e);
+  }
+  function raterSet(ci, val, advance) {
+    const e = raterEntry(); if (!e || ci < 0) return;
+    const c = SCORE_CATS[ci];
+    const before = hasScore(e);
+    setScore(e._id, c.f, val);
+    if (!before && hasScore(e)) rater.done++;
+    rater.last = ci;
+    if (advance) rater.cat = Math.min(SCORE_CATS.length - 1, ci + 1);
+    else rater.cat = ci;
+    raterCats();
+    $('.rt-count', rater.el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
+  }
+  function raterStep(d) {
+    const n = rater.i + d;
+    if (n < 0) return;
+    if (n >= rater.ids.length) { toast(`Fertig – ${rater.done} Einträge bewertet.`, 'ok'); closeRater(); return; }
+    rater.i = n; rater.cat = 0; rater.last = null; raterShow();
+  }
+  function raterKey(ev) {
+    const k = ev.key;
+    if (k === 'Escape') { closeRater(); return; }
+    if (/^[1-5]$/.test(k)) { raterSet(rater.cat, Number(k), true); return; }
+    if ((k === '.' || k === ',') && rater.last != null) {
+      const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
+      if (c.half && cur != null && cur < 5 && cur % 1 === 0) raterSet(rater.last, cur + 0.5, false);
+      rater.cat = Math.min(SCORE_CATS.length - 1, rater.last + 1); raterCats();
+      return;
+    }
+    if (k === 'ArrowDown' || k === 'Tab') { ev.preventDefault(); rater.cat = (rater.cat + (ev.shiftKey && k === 'Tab' ? SCORE_CATS.length - 1 : 1)) % SCORE_CATS.length; raterCats(); return; }
+    if (k === 'ArrowUp') { ev.preventDefault(); rater.cat = (rater.cat + SCORE_CATS.length - 1) % SCORE_CATS.length; raterCats(); return; }
+    const ck = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
+    if (ck >= 0 && k.length === 1) { rater.cat = ck; raterCats(); return; }
+    if (k === 'ArrowRight') { ev.preventDefault(); raterImg(1); return; }
+    if (k === 'ArrowLeft') { ev.preventDefault(); raterImg(-1); return; }
+    if (k === 'Enter' || k === ' ') { ev.preventDefault(); raterStep(1); return; }
+    if (k === 'Backspace') { ev.preventDefault(); raterStep(-1); return; }
+    if (k === 'Delete') { raterSet(rater.cat, '', false); return; }
+  }
+  function closeRater() {
+    if (!rater) return;
+    rater.el.remove(); rater = null;
+    if (overlay.hidden) document.body.style.overflow = '';
+    render();
+  }
+
   function lightbox(src) {
     const lb = document.createElement('div');
     lb.className = 'lightbox';
@@ -2318,6 +2530,13 @@
     if (t.closest('#btn-menu')) { menu.hidden = !menu.hidden; return; }
     if (!t.closest('#menu')) menu.hidden = true;
 
+    const sc = t.closest('[data-score]');
+    if (sc && !t.closest('.rater')) {
+      setScore(sc.dataset.id, sc.dataset.score, sc.dataset.val);
+      const box = t.closest('.score-box');
+      if (box) { const e = byId(sc.dataset.id); box.outerHTML = scoreBox(e); const rb = $('.rating-box', modal); if (rb) rb.outerHTML = ratingBox(e) || ''; }
+      return;
+    }
     const rate = t.closest('[data-rate]');
     if (rate) { setRating(rate.dataset.id, rate.dataset.rate); return; }
     const fav = t.closest('[data-fav]');
@@ -2359,6 +2578,7 @@
   });
 
   document.addEventListener('keydown', (ev) => {
+    if (rater) { raterKey(ev); return; }
     if (viewer) {
       const k = ev.key;
       if (k === 'Escape') { closeViewer(); return; }
@@ -2388,6 +2608,7 @@
         if (k === 'z' || k === 'Z') { randomEntry(); return; }
         if (k === 'b' || k === 'B') { browseImages(); return; }
         if (k === 'n' || k === 'N') { ev.preventDefault(); showForm(); return; }
+        if (k === 'r' || k === 'R') { ev.preventDefault(); openRater(); return; }
         if (k === '?') { showShortcuts(); return; }
       }
     }
@@ -2406,6 +2627,7 @@
   $('#btn-browse').addEventListener('click', browseImages);
   $('#btn-pending').addEventListener('click', showPending);
   $('#btn-random').addEventListener('click', randomEntry);
+  $('#btn-rate').addEventListener('click', openRater);
   // „Zufällig“ in der Sortierung: bei jeder erneuten Wahl neu mischen
   $('#sort').addEventListener('change', () => { if (ui.sort === 'random') { shuffleSeed = Math.floor(Math.random() * 2 ** 31); render(); } });
   {
@@ -2534,11 +2756,11 @@
 
   // Felder, die als Ranker-Eigenschaften in Frage kommen, mit vorgeschlagenem Typ
   const RK_MULTI = new Set(['Professions', 'Profession Category', 'Tags', 'AKA']);
-  const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Favorite', 'Tags', 'Global Rating', 'User Rating', 'Alter']
+  const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Favorite', 'Tags', 'Global Rating', 'User Rating', 'Alter']
     .filter((f, i, a) => a.indexOf(f) === i && !['Name', 'Exact Birthdate'].includes(f))
     .flatMap(f => f === 'Born' ? ['Born', 'Geburtsjahr'] : [f]);      // „Geburtsjahr“ = nur die Jahreszahl aus Born
   const RK_NUMBERS = new Set(['Alter', 'Geburtsjahr']);
-  const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (RK_NUMBERS.has(f) || TYPES[f] === 'num') ? 'number' : 'exact';
+  const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (RK_NUMBERS.has(f) || TYPES[f] === 'num' || TYPES[f] === 'score') ? 'number' : 'exact';
   function rkValues(e, f, type) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
     if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
