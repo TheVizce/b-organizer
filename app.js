@@ -2673,18 +2673,18 @@
   function votePing() {
     return new Promise(res => {
       const t = setTimeout(() => { window.removeEventListener('message', on); res(false); }, 1500);
-      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_ACK') { clearTimeout(t); window.removeEventListener('message', on); res(true); } }
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_ACK') { clearTimeout(t); window.removeEventListener('message', on); res((ev.data.v || 1) >= 2); } }
       window.addEventListener('message', on);
       window.postMessage({ type: 'BP_VOTE_PING' }, location.origin);
     });
   }
-  function voteRaw(k, x) {
+  function voteRaw(k, x, url, verify) {
     const id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     return new Promise(res => {
-      const t = setTimeout(() => { window.removeEventListener('message', on); res({ ok: false, status: 0, text: 'keine Antwort vom Skript' }); }, 25000);
+      const t = setTimeout(() => { window.removeEventListener('message', on); res({ ok: false, status: 0, text: 'keine Antwort vom Skript' }); }, 60000);
       function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_RESULT' && ev.data.id === id) { clearTimeout(t); window.removeEventListener('message', on); res(ev.data); } }
       window.addEventListener('message', on);
-      window.postMessage({ type: 'BP_VOTE', id, k: String(k), x: String(x) }, location.origin);
+      window.postMessage({ type: 'BP_VOTE', id, k: String(k), x: String(x), url: url || '', verify: !!verify }, location.origin);
     });
   }
   let voteRun = null;
@@ -2699,7 +2699,7 @@
     openModal(`
       <div class="modal-head"><h2>Babepedia-Noten angleichen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
       <div class="help vote-dlg">
-        <p>Bei <b>${cand.length}</b> der angezeigten Einträge weicht „Meine Babepedia-Note“ von der gerundeten Tool-Note ab. Das Skript trägt die Tool-Note auf Babepedia ein (mit deinem Login, ein Profil alle 3 s).${noId ? ` <span class="muted">${noId === 1 ? "1 Eintrag" : noId + " Einträge"} ohne Babe ID ${noId === 1 ? "wird" : "werden"} übersprungen.</span>` : ''}</p>
+        <p>Bei <b>${cand.length}</b> der angezeigten Einträge weicht „Meine Babepedia-Note“ von der gerundeten Tool-Note ab. Das Skript trägt die Tool-Note auf Babepedia ein – dafür öffnet sich kurz ein Babepedia-Tab im Hintergrund (du musst dort eingeloggt sein), ein Profil alle 3 s. Die ersten drei und dann jedes zehnte werden auf Babepedia nachgeprüft.${noId ? ` <span class="muted">${noId === 1 ? "1 Eintrag" : noId + " Einträge"} ohne Babe ID ${noId === 1 ? "wird" : "werden"} übersprungen.</span>` : ''}</p>
         <p class="muted">Es zählt die aktuelle Auswahl und Sortierung – mit Filtern kannst du eingrenzen, was dran kommt.</p>
         <label class="rk-limit">Höchstens <input type="number" id="vote-max" min="1" step="1" inputmode="numeric" value="${max}"> pro Lauf</label>
         <div class="vote-list"><table class="vote-tbl"><thead><tr><th>Name</th><th class="num">jetzt</th><th class="num">neu</th><th class="num">Tool-Note</th></tr></thead><tbody>${cand.slice(0, 300).map(row).join('')}</tbody></table>${cand.length > 300 ? `<p class="muted">… und ${cand.length - 300} weitere</p>` : ''}</div>
@@ -2710,7 +2710,7 @@
     $('#vote-go').addEventListener('click', async () => {
       const n = Math.max(1, parseInt($('#vote-max').value, 10) || max);
       ui.voteMax = n; saveUI();
-      if (!(await votePing())) { $('#vote-status').textContent = '⚠︎ Das Skript antwortet nicht. Ist es in Tampermonkey aktiv und auf Version 14.24 oder neuer?'; return; }
+      if (!(await votePing())) { $('#vote-status').textContent = '⚠︎ Das Skript antwortet nicht. Ist es in Tampermonkey aktiv und auf Version 14.25 oder neuer?'; return; }
       runVotes(cand.slice(0, n));
     });
   }
@@ -2726,12 +2726,14 @@
       if (voteRun.stop) break;
       const { e, t } = list[i];
       if (st()) st().textContent = `${i + 1} / ${list.length}: ${v(e, 'Name')} → ${t}`;
-      const r = await voteRaw(v(e, 'Babe ID'), t);
-      if (first) { log(`Antwort von Babepedia (zur Kontrolle): ${r.status} ${String(r.text || '').slice(0, 200)}`); first = false; }
+      // Kontrolle: die ersten drei und danach jedes zehnte Profil auf Babepedia nachlesen
+      const verify = i < 3 || i % 10 === 0;
+      const r = await voteRaw(v(e, 'Babe ID'), t, v(e, 'Profile URL'), verify);
+      if (first) { log(`Antwort von Babepedia: ${r.status}${r.text ? ' ' + String(r.text).slice(0, 200) : ''}`); first = false; }
       if (r.ok) {
         ok++;
         e['User Rating'] = String(t); e._updated = Date.now();
-        log(`✓ ${v(e, 'Name')}: ${t}`);
+        log(`✓ ${v(e, 'Name')}: ${t}${r.seen ? ' (auf Babepedia geprüft)' : ''}`);
         if (ok % 10 === 0) save().catch(() => {});
       } else {
         fail++;
@@ -2741,6 +2743,7 @@
       }
       if (i < list.length - 1) await new Promise(res => setTimeout(res, 3000));
     }
+    window.postMessage({ type: 'BP_VOTE_END' }, location.origin);   // Babepedia-Tab schließen
     const stopped = voteRun.stop; voteRun = null;
     try { if (ok) await save(); } catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
     refreshFilters(); render();

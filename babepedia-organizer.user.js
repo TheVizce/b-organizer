@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.24
+// @version      14.25
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -115,26 +115,38 @@
             });
         });
 
-        // Babepedia-Note eintragen (Tool → „Babepedia-Noten angleichen“): GET /ajax-vote-profile.php?x=<Note>&k=<Babe ID>
-        window.addEventListener('message', (ev) => {
+        // Babepedia-Note eintragen (Tool → „Babepedia-Noten angleichen“).
+        // Von hier (github.io) aus nimmt Babepedia die Stimme nicht an → die Anfrage läuft in einem
+        // Babepedia-Tab im Hintergrund (?bpvote=1), der wie die Seite selbst abstimmt. Austausch über GM-Speicher.
+        let voteTab = null;
+        const voteWorkerAlive = () => Date.now() - (GM_getValue('bp_vote_alive', 0) || 0) < 3000;
+        window.addEventListener('message', async (ev) => {
             if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
             const d = ev.data;
-            if (d.type === 'BP_VOTE_PING') { window.postMessage({ type: 'BP_VOTE_ACK' }, location.origin); return; }
+            if (d.type === 'BP_VOTE_PING') { window.postMessage({ type: 'BP_VOTE_ACK', v: 2 }, location.origin); return; }
+            if (d.type === 'BP_VOTE_END') {
+                GM_setValue('bp_vote_end', Date.now());
+                try { if (voteTab && !voteTab.closed) voteTab.close(); } catch (e) {}
+                voteTab = null; return;
+            }
             if (d.type !== 'BP_VOTE') return;
             const reply = (x) => window.postMessage({ type: 'BP_VOTE_RESULT', id: d.id, ...x }, location.origin);
             const k = String(d.k || ''), x = parseInt(d.x, 10);
             if (!/^\d+$/.test(k) || !(x >= 1 && x <= 10)) { reply({ ok: false, status: 0, reason: 'ungültige Werte' }); return; }
-            GM_xmlhttpRequest({
-                method: 'GET', url: `https://www.babepedia.com/ajax-vote-profile.php?x=${x}&k=${k}`, timeout: 20000,
-                headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: 'https://www.babepedia.com/' },
-                onload: (r) => {
-                    const text = String(r.responseText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
-                    const loginWall = /not logged|please log ?in|you must (be )?log|sign in to/i.test(text);
-                    reply({ ok: r.status >= 200 && r.status < 300 && !loginWall, status: r.status, text, reason: loginWall ? 'nicht eingeloggt?' : '' });
-                },
-                onerror: () => reply({ ok: false, status: 0, reason: 'Netzwerkfehler' }),
-                ontimeout: () => reply({ ok: false, status: 0, reason: 'Zeitüberschreitung' })
-            });
+            const url = /^https:\/\/www\.babepedia\.com\/babe\//.test(String(d.url || '')) ? d.url : '';
+            GM_setValue('bp_vote_res', null);
+            GM_setValue('bp_vote_req', { id: d.id, k, x, url, verify: !!d.verify, at: Date.now() });
+            if (!voteWorkerAlive()) {
+                GM_setValue('bp_vote_end', 0);
+                voteTab = GM_openInTab('https://www.babepedia.com/?bpvote=1', { active: false, insert: true, setParent: true });
+            }
+            const t0 = Date.now();
+            while (Date.now() - t0 < 45000) {
+                await new Promise(r => setTimeout(r, 300));
+                const res = GM_getValue('bp_vote_res', null);
+                if (res && res.id === d.id) { reply(res); return; }
+            }
+            reply({ ok: false, status: 0, reason: 'Babepedia-Tab antwortet nicht' });
         });
 
         // Falls das Tool schon geladen ist: anpingen
@@ -153,6 +165,49 @@
         return m ? { ts: m[1], url: 'https://www.babepedia.com' + m[2].replace(/\/$/, '') } : false;
     })();
     if (ARCHIVE === false) return; // andere Archiv-Seite -> nichts tun
+
+    // Hintergrund-Tab zum Eintragen von Noten (vom Tool aus geöffnet): stimmt wie die Seite selbst ab
+    if (!ARCHIVE && /[?&]bpvote=1\b/.test(location.search)) {
+        document.title = '⭐ Noten eintragen … (Babe Organizer)';
+        let lastId = GM_getValue('bp_vote_req', null)?.id || null, idle = Date.now(), busy = false;
+        // Eine Anfrage, die vor dem Öffnen dieses Tabs gestellt wurde, gleich bearbeiten
+        const pre = GM_getValue('bp_vote_req', null);
+        if (pre && Date.now() - (pre.at || 0) < 40000) lastId = null;
+        const readRating = (html) => {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const el = doc.querySelector('#rating-score');
+            const m = el && el.textContent.match(/(\d+(?:\.\d+)?)/);
+            return m ? m[1] : '';
+        };
+        const tick = setInterval(async () => {
+            GM_setValue('bp_vote_alive', Date.now());
+            if ((GM_getValue('bp_vote_end', 0) || 0) > 0 || Date.now() - idle > 120000) { clearInterval(tick); window.close(); return; }
+            if (busy) return;
+            const req = GM_getValue('bp_vote_req', null);
+            if (!req || req.id === lastId) return;
+            lastId = req.id; busy = true; idle = Date.now();
+            let res;
+            try {
+                const r = await fetch(`/ajax-vote-profile.php?x=${encodeURIComponent(req.x)}&k=${encodeURIComponent(req.k)}`, {
+                    credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' }, referrer: req.url || location.href
+                });
+                const text = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+                res = { id: req.id, ok: r.ok, status: r.status, text };
+                if (r.ok && req.verify && req.url) {
+                    await new Promise(z => setTimeout(z, 1200));
+                    const p = await fetch(req.url, { credentials: 'include', cache: 'no-store' });
+                    const seen = p.ok ? readRating(await p.text()) : '';
+                    res.seen = seen;
+                    if (String(parseInt(seen, 10)) !== String(req.x)) { res.ok = false; res.reason = `auf Babepedia steht danach ${seen || 'keine Note'} statt ${req.x}`; }
+                }
+            } catch (e) {
+                res = { id: req.id, ok: false, status: 0, reason: 'Fehler: ' + (e && e.message || e) };
+            }
+            GM_setValue('bp_vote_res', res);
+            busy = false; idle = Date.now();
+        }, 400);
+        return;
+    }
     const unwrapArchive = (u) => String(u || '').replace(/^https?:\/\/web\.archive\.org\/web\/\d+[a-z_]*\//i, '');
     const toArchiveImg = (u) => u ? `https://web.archive.org/web/${ARCHIVE.ts}im_/${unwrapArchive(u)}` : '';
 
