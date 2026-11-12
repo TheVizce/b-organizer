@@ -645,3 +645,16 @@ body.cards-noname .card .body { display: none; }
 .score-box h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
 .score-box .sc-open { margin-left: auto; }
 @media (max-width: 800px) { .rt-notes textarea { min-height: 44px; } }
+
+/* Vergleich: gleich / darüber / darunter */
+.rt-ref-row { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px dashed var(--border); }
+.rt-ref-row.same { background: var(--accent-bg); border-radius: 8px; padding: 6px 4px; border-top-color: transparent; }
+.rt-ref-row.empty { align-items: center; font-size: 12.5px; }
+.rt-ref-lbl { display: flex; align-items: baseline; gap: 5px; background: none; border: 0; padding: 4px 2px; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.rt-ref-lbl b { color: var(--text); font-size: 15px; }
+.rt-ref-lbl:hover b { color: var(--accent-2); }
+.rt-ref-strip { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
+.rt-ref-strip .rt-ref-item { width: 54px; }
+.rt-ref-more { align-self: center; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.rt-ref-dist { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 800px) { .rt-adv { display: none; } .rt-ref-strip .rt-ref-item { width: 46px; } .rt-ref-row { grid-template-columns: 54px 1fr; } }

@@ -2374,6 +2374,7 @@
       <div class="rt-top">
         <button class="rt-name" title="Details öffnen"></button>
         <span class="rt-count"></span>
+        <label class="chk rt-adv" title="Nach einer Ziffer automatisch zur nächsten Kategorie springen"><input type="checkbox" ${ui.raterAdvance ? 'checked' : ''}> Ziffer springt weiter</label>
         <label class="chk rt-only"><input type="checkbox" ${onlyOpen ? 'checked' : ''}> nur unbewertete</label>
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
@@ -2384,10 +2385,10 @@
           <div class="rt-meta"></div>
           <div class="rt-cats"></div>
           <div class="rt-sum"></div>
-          <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
           <div class="rt-ref"></div>
+          <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
           <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
-          <p class="muted rt-help">1–5 setzt die markierte Kategorie · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
+          <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -2402,7 +2403,8 @@
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
-      const rv = t.closest('[data-ref]'); if (rv) { rater.refVal = Number(rv.dataset.ref); raterRef(); return; }
+      const rs = t.closest('[data-ref-set]'); if (rs) { rater.preview = null; raterSet(rater.cat, Number(rs.dataset.refSet), false); return; }
+      const rmo = t.closest('[data-ref-more]'); if (rmo) { rater.refOpen = Object.assign({}, rater.refOpen, { [rmo.dataset.refMore]: true }); raterRef(); return; }
       const ro = t.closest('[data-ref-open]');
       if (ro) { const x = byId(ro.dataset.refOpen); if (x) { const u = images(x)[0]; const im = $('.rt-stage img', rater.el); if (u) { rater.peek = x._id; im.src = R(u); $('.rt-imgc', rater.el).textContent = 'Vergleich: ' + v(x, 'Name') + ' – Bild antippen für zurück'; } } return; }
       if (t.closest('.rt-stage img') && rater.peek) { rater.peek = null; raterImgShow(); return; }
@@ -2420,6 +2422,20 @@
     ta.addEventListener('input', () => { clearTimeout(noteTimer); noteTimer = setTimeout(saveNote, 600); });
     ta.addEventListener('blur', saveNote);
     rater.saveNote = saveNote;
+    el.addEventListener('mouseover', (ev) => {
+      const b = ev.target.closest('.rt-cats [data-score]');
+      if (!b || b.dataset.val === '') return;
+      const ci = SCORE_CATS.findIndex(c => c.f === b.dataset.score);
+      const val = Number(b.dataset.val);
+      if (rater.preview && rater.preview.cat === ci && rater.preview.val === val) return;
+      rater.preview = { cat: ci, val }; raterRef();
+    });
+    el.addEventListener('mouseout', (ev) => {
+      if (!rater.preview || !ev.target.closest('.rt-cats [data-score]')) return;
+      if (ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest('.rt-cats [data-score]')) return;
+      rater.preview = null; raterRef();
+    });
+    $('.rt-adv input', el).addEventListener('change', (ev) => { ui.raterAdvance = ev.target.checked; saveUI(); });
     $('.rt-only input', el).addEventListener('change', (ev) => { ui.raterOnlyOpen = ev.target.checked; saveUI(); toast('Gilt beim nächsten Start des Bewertungsmodus.'); });
     // Wischen auf dem Bild: Bilder wechseln
     let sx = 0, sy = 0;
@@ -2456,7 +2472,7 @@
     $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
     $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
     $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
-    rater.img = 0;
+    rater.img = 0; rater.refOpen = {}; rater.preview = null;
     const ta = $('.rt-notes textarea', el); ta.value = e.Notes || ''; ta.dataset.eid = e._id;
     raterImgShow(); raterCats();
     const nx = byId(rater.ids[rater.i + 1]); if (nx) { const u = images(nx)[0]; if (u) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); } }
@@ -2480,24 +2496,39 @@
     $('.rt-sum', el).innerHTML = scoreSummary(e);
     raterRef();
   }
-  // Vergleich: welche anderen Einträge haben in der markierten Kategorie denselben Wert?
+  // Vergleich: wer liegt in der markierten Kategorie gleich, eine Stufe darüber und darunter?
+  // Zeigt den gesetzten Wert – oder (Maus) den Wert, über dem der Zeiger gerade steht.
   function raterRef() {
-    const e = raterEntry(), { el } = rater, c = SCORE_CATS[rater.cat];
+    const e = raterEntry(), { el } = rater;
+    const ci = rater.preview ? rater.preview.cat : rater.cat, c = SCORE_CATS[ci];
     const cur = num(e[c.f]);
-    if (rater.refFor !== c.f + '|' + e._id + '|' + cur) { rater.refVal = null; rater.refFor = c.f + '|' + e._id + '|' + cur; }
-    const counts = new Map();
-    for (const x of entries) { const n = num(x[c.f]); if (n != null && x._id !== e._id) counts.set(n, (counts.get(n) || 0) + 1); }
+    const center = rater.preview ? rater.preview.val : cur;
     const box = $('.rt-ref', el);
-    if (!counts.size) { box.innerHTML = `<div class="muted rt-ref-empty">Vergleich: Sobald andere Einträge in „${esc(c.label)}“ bewertet sind, siehst du hier, wer denselben Wert hat.</div>`; return; }
-    const vals = [...counts.keys()].sort((a, b) => a - b);
-    const show = rater.refVal ?? (cur != null && counts.has(cur) ? cur : cur != null ? vals.reduce((a, b) => Math.abs(b - cur) < Math.abs(a - cur) ? b : a) : vals[vals.length - 1]);
-    const peers = entries.filter(x => x._id !== e._id && num(x[c.f]) === show)
-      .sort((a, b) => (imgState(a) === 'none') - (imgState(b) === 'none') || (num(b.Score) ?? 0) - (num(a.Score) ?? 0));
+    const byVal = new Map();
+    for (const x of entries) { const n = num(x[c.f]); if (n != null && x._id !== e._id) (byVal.get(n) || byVal.set(n, []).get(n)).push(x); }
+    if (!byVal.size) { box.innerHTML = `<div class="muted rt-ref-empty">Vergleich: Sobald andere Einträge in „${esc(c.label)}“ bewertet sind, siehst du hier, wer gleich, darüber und darunter liegt.</div>`; return; }
     const lbl = (n) => String(n).replace('.5', '½');
-    box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">– wer hat</span>
-        ${vals.map(n => `<button class="rt-ref-v ${n === show ? 'on' : ''} ${n === cur ? 'cur' : ''}" data-ref="${n}" title="${counts.get(n)} Einträge">${lbl(n)}</button>`).join('')}</div>
-      <div class="rt-ref-grid">${peers.slice(0, 12).map(x => `<button class="rt-ref-item" data-ref-open="${esc(x._id)}" title="${esc(v(x, 'Name'))}${x.Score ? ' · ★ ' + esc(x.Score) : ''}">${coverTag(x)}<span>${esc(v(x, 'Name'))}</span></button>`).join('')}</div>
-      ${peers.length > 12 ? `<div class="muted rt-ref-more">+ ${peers.length - 12} weitere mit ${lbl(show)}</div>` : ''}`;
+    if (center == null) {
+      box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">– Wert wählen (oder mit der Maus über eine Zahl fahren), dann siehst du, wer gleich, darüber und darunter liegt.</span></div>
+        <div class="rt-ref-dist">${[...byVal.keys()].sort((a, b) => b - a).map(n => `<span>${lbl(n)}: ${byVal.get(n).length}</span>`).join('')}</div>`;
+      return;
+    }
+    const vals = [...byVal.keys()].sort((a, b) => a - b);
+    const above = vals.find(n => n > center), below = [...vals].reverse().find(n => n < center);
+    const sortPeers = (list) => list.slice().sort((a, b) => (imgState(a) === 'none') - (imgState(b) === 'none') || (num(b.Score) ?? 0) - (num(a.Score) ?? 0));
+    const open = rater.refOpen || {};
+    const row = (n, kind) => {
+      if (n == null) return `<div class="rt-ref-row empty"><span class="rt-ref-lbl">${kind === 'up' ? '▲ darüber' : '▼ darunter'}</span><span class="muted">– noch niemand</span></div>`;
+      const peers = sortPeers(byVal.get(n) || []);
+      const lim = open[n] ? 24 : 6;
+      return `<div class="rt-ref-row ${kind}">
+        <button class="rt-ref-lbl" data-ref-set="${n}" title="Diesen Wert setzen">${kind === 'up' ? '▲' : kind === 'down' ? '▼' : '='} <b>${lbl(n)}</b> <span class="muted">${peers.length}</span></button>
+        <div class="rt-ref-strip">${peers.slice(0, lim).map(x => `<button class="rt-ref-item" data-ref-open="${esc(x._id)}" title="${esc(v(x, 'Name'))}${x.Score ? ' · ♥ ' + esc(String(x.Score).replace('.', ',')) : ''}">${coverTag(x)}<span>${esc(v(x, 'Name'))}</span></button>`).join('')}
+          ${peers.length > lim ? `<button class="rt-ref-more" data-ref-more="${n}">+${peers.length - lim}</button>` : ''}${!peers.length ? '<span class="muted">– noch niemand</span>' : ''}</div>
+      </div>`;
+    };
+    box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">${rater.preview ? 'Vorschau für ' + lbl(center) : 'Vergleich zu ' + lbl(center)} – Klick auf ein Bild zeigt es groß, auf den Wert setzt ihn</span></div>
+      ${row(above, 'up')}${row(center, 'same')}${row(below, 'down')}`;
   }
   function raterSet(ci, val, advance) {
     const e = raterEntry(); if (!e || ci < 0) return;
@@ -2524,13 +2555,23 @@
     if (ev.target && ev.target.closest && ev.target.closest('.rt-notes')) { if (k === 'Escape') { ev.preventDefault(); rater.saveNote(); ev.target.blur(); } return; }
     if (k === 'Escape') { closeRater(); return; }
     if (k === 'n' || k === 'N') { ev.preventDefault(); $('.rt-notes textarea', rater.el).focus(); return; }
-    if (/^[1-5]$/.test(k)) { raterSet(rater.cat, Number(k), true); return; }
+    if (/^[1-5]$/.test(k)) { rater.preview = null; raterSet(rater.cat, Number(k), !!ui.raterAdvance); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
       if (cur != null && cur % 1 === 0 && (c.vals ? c.vals.includes(cur + 0.5) : c.half && cur < 5)) raterSet(rater.last, cur + 0.5, false);
-      rater.cat = Math.min(SCORE_CATS.length - 1, rater.last + 1); raterCats();
+      if (ui.raterAdvance) { rater.cat = Math.min(SCORE_CATS.length - 1, rater.last + 1); raterCats(); }
       return;
     }
+    // + / − : Wert der markierten Kategorie um eine (halbe) Stufe ändern – der Vergleich geht mit
+    if (k === '+' || k === '-' || k === '*' || k === '_') {
+      const c = SCORE_CATS[rater.cat], vals = c.vals || (c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5]);
+      const cur = num(raterEntry()[c.f]);
+      const i = cur == null ? vals.indexOf(3) : vals.indexOf(cur);
+      const ni = Math.max(0, Math.min(vals.length - 1, i + ((k === '+' || k === '*') ? 1 : -1)));
+      rater.preview = null; raterSet(rater.cat, vals[ni], false);
+      return;
+    }
+    if (k === 'ArrowDown' || k === 'Tab' || k === 'ArrowUp') rater.preview = null;
     if (k === 'ArrowDown' || k === 'Tab') { ev.preventDefault(); rater.cat = (rater.cat + (ev.shiftKey && k === 'Tab' ? SCORE_CATS.length - 1 : 1)) % SCORE_CATS.length; raterCats(); return; }
     if (k === 'ArrowUp') { ev.preventDefault(); rater.cat = (rater.cat + SCORE_CATS.length - 1) % SCORE_CATS.length; raterCats(); return; }
     const ck = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
