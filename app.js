@@ -1897,6 +1897,7 @@
           <div><dt><kbd>↑</kbd> <kbd>↓</kbd> / nach oben wischen</dt><dd>Eintrag zurück / weiter</dd></div>
           <div><dt><kbd>Z</kbd></dt><dd>zufälliger Eintrag</dd></div>
           <div><dt><kbd>F</kbd></dt><dd>Favorit an/aus</dd></div>
+          <div><dt><kbd>K</kbd></dt><dd>aktuelles Bild als Kachelbild</dd></div>
           <div><dt>Doppelklick / Doppeltipp</dt><dd>Zoom</dd></div>
           <div><dt><kbd>Esc</kbd> / nach unten wischen</dt><dd>schließen</dd></div>
         </dl>
@@ -2230,15 +2231,16 @@
       <div class="vw-top">
         <button class="vw-name" title="Details anzeigen"></button>
         <span class="vw-count"></span>
+        <button class="vw-cover" title="Dieses Bild als Kachelbild (Cover) verwenden (K)">★ Als Kachelbild</button>
         <button class="vw-x" aria-label="Schließen">×</button>
       </div>
       <div class="vw-stage"><img alt="" referrerpolicy="no-referrer" draggable="false"><div class="vw-err" hidden>Bild lässt sich nicht laden</div></div>
       <button class="vw-arrow prev" aria-label="Vorheriges Bild">‹</button>
       <button class="vw-arrow next" aria-label="Nächstes Bild">›</button>
       <div class="vw-bottom">
-        <button class="btn small" data-vwe="-1">⏮ Eintrag</button>
+        <button class="btn small" data-vwe="-1" title="Vorheriger Eintrag (↑)">⏮<span class="lbl"> Eintrag</span></button>
         <div class="vw-dots"></div>
-        <button class="btn small" data-vwe="1">Eintrag ⏭</button>
+        <button class="btn small" data-vwe="1" title="Nächster Eintrag (↓)"><span class="lbl">Eintrag </span>⏭</button>
       </div>`;
     document.body.appendChild(el);
     document.body.style.overflow = 'hidden';
@@ -2248,6 +2250,7 @@
     el.addEventListener('click', (ev) => {
       const t = ev.target;
       if (t.closest('.vw-x')) return closeViewer();
+      if (t.closest('.vw-cover')) return viewerSetCover();
       if (t.closest('.vw-arrow.prev')) return viewerStep(-1);
       if (t.closest('.vw-arrow.next')) return viewerStep(1);
       const eb = t.closest('[data-vwe]'); if (eb) return viewerEntry(Number(eb.dataset.vwe));
@@ -2327,10 +2330,24 @@
       // Nachbarn vorladen
       [imgs[ii + 1], imgs[ii - 1]].filter(Boolean).forEach(u => { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); });
     }
+    const cb = $('.vw-cover', el), isCover = imgs.length && imgs[ii] === imgs[0];
+    cb.hidden = !imgs.length;
+    cb.classList.toggle('on', !!isCover);
+    cb.textContent = isCover ? '★ Kachelbild' : '☆ Als Kachelbild';
     $('.vw-dots', el).innerHTML = imgs.length > 1 && imgs.length <= 30 ? imgs.map((_, i) => `<button data-dot="${i}" class="${i === ii ? 'on' : ''}" aria-label="Bild ${i + 1}"></button>`).join('') : '';
     const last = ids.length === 1 && ii === imgs.length - 1, first = ids.length === 1 && ii === 0;
     $('.vw-arrow.prev', el).disabled = first; $('.vw-arrow.next', el).disabled = last;
     $$('[data-vwe]', el).forEach(b => { b.hidden = ids.length < 2; b.disabled = (b.dataset.vwe === '-1' ? ei === 0 : ei === ids.length - 1); });
+  }
+  function viewerSetCover() {
+    if (!viewer) return;
+    const e = byId(viewer.ids[viewer.ei]), u = viewer.imgs[viewer.ii];
+    if (!e || !u || u === viewer.imgs[0]) return;
+    e.Cover = u; e._updated = Date.now();
+    saveQuiet(); refreshItem(e._id);
+    viewer.imgs = images(e); viewer.ii = Math.max(0, viewer.imgs.indexOf(u));   // Cover steht jetzt vorne
+    viewerShow();
+    toast('Kachelbild gesetzt.', 'ok');
   }
   function viewerStep(dir) {
     if (!viewer) return;
@@ -2732,6 +2749,7 @@
       if (k === 'ArrowUp' || k === 'PageUp') { ev.preventDefault(); viewerEntry(-1); return; }
       if ((k === 'z' || k === 'Z') && viewer.ids.length > 1) { viewer.ei = Math.floor(Math.random() * viewer.ids.length); viewer.dir = 1; viewerLoad(false); return; }
       if (k === 'f' || k === 'F') { toggleFav(viewer.ids[viewer.ei]); viewerShow(); return; }
+      if (k === 'k' || k === 'K') { viewerSetCover(); return; }
       return;
     }
     const tag = ((document.activeElement || {}).tagName || '');

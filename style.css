@@ -658,3 +658,18 @@ body.cards-noname .card .body { display: none; }
 .rt-ref-more { align-self: center; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 .rt-ref-dist { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
 @media (max-width: 800px) { .rt-adv { display: none; } .rt-ref-strip .rt-ref-item { width: 46px; } .rt-ref-row { grid-template-columns: 54px 1fr; } }
+
+/* Bild-Betrachter: unten links liegt das ☁︎/⌂-Feld des Syncs → Knöpfe nach rechts, Platz links frei */
+.vw-bottom { justify-content: flex-end; padding-left: calc(190px + env(safe-area-inset-left)); }
+.vw-bottom .vw-dots { order: -1; }
+@media (max-width: 600px) {
+  .vw-bottom { flex-wrap: wrap; padding-left: calc(150px + env(safe-area-inset-left)); }
+  .vw-bottom .vw-dots { flex-basis: 100%; }
+  .vw-bottom .btn .lbl { display: none; }
+  .vw-bottom .btn { min-width: 52px; justify-content: center; font-size: 18px; }
+}
+.vw-cover { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); color: #fff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.vw-cover.on { background: var(--accent); border-color: var(--accent); cursor: default; }
+@media (max-width: 600px) { .vw-top { flex-wrap: wrap; } .vw-count { order: 3; width: 100%; margin-left: 0; } }
+/* Bewertungsmodus am Handy: Navigation nicht unter dem Sync-Feld */
+@media (max-width: 800px) { .rt-nav { padding-left: calc(176px + env(safe-area-inset-left)); } }
