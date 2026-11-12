@@ -43,7 +43,7 @@
   };
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
-    'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5 (siehe Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
+    'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
@@ -250,10 +250,12 @@
     { f: 'Body Score', label: 'Body', half: true, key: 'B' },
     { f: 'Hot Score', label: 'Hot', half: true, key: 'H' },
     { f: 'Cute Score', label: 'Cute', half: true, key: 'C' },
-    { f: 'Sympathy Score', label: 'Sympathie', half: false, key: 'S' }
+    { f: 'Sympathy Score', label: 'Sympathie', vals: [1, 2, 2.5, 3, 4, 5], key: 'S' }
   ];
-  const SCORE_W = { face: 2, body: 2, hotcute: 1, minor: 0.1, sym: 1.5, div: 6.5, symDefault: 3 };
-  const SYMPATHY_LABELS = { 5: 'kenne ich – extrem sympathisch', 4: 'kenne ich – sympathisch', 3: 'kenne ich nicht/kaum – wirkt eher sympathisch', 2: 'kenne ich nicht/kaum – wirkt eher unsympathisch', 1: 'kenne ich – unsympathisch' };
+  const SCORE_W = { face: 2, body: 2, hotcute: 1, minor: 0.1, sym: 1.5, div: 6.5, symDefault: 2.5 };
+  // Leitfaden (nur Beschriftung): Bekannte nutzen 1–5, bei Unbekannten bewegt der Eindruck nur zwischen 2 und 3
+  const SYMPATHY_LABELS = { 5: 'Bekannt: sehr sympathisch', 4: 'Bekannt: eher sympathisch', 3: 'Bekannt: durchschnittlich sympathisch · Unbekannt: wirkt eher sympathisch',
+    2.5: 'Unbekannt: wirkt durchschnittlich sympathisch', 2: 'Bekannt: eher unsympathisch · Unbekannt: wirkt eher unsympathisch', 1: 'Bekannt: sehr unsympathisch' };
   const SCORE_ANCHORS = '1 = schwach für meine Liste · 3 = typisch · 5 = gehört zu den Besten';
   // Gesamt (1–5) → 10er-Skala. Oberhalb von 3 (= typisch = 7) zählt jeder Punkt doppelt, darunter dreifach,
   // damit die Enden erreichbar sind: 4,5 → 10 · 4 → 9 · 3,5 → 8 · 3 → 7 · 2,5 → 5,5 · 2 → 4 · 1,5 → 2,5 · 1 → 1
@@ -1770,9 +1772,9 @@
 
   function scoreRow(e, c, idx, active) {
     const cur = num(e[c.f]);
-    const vals = c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5];
+    const vals = c.vals || (c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5]);
     const btns = vals.map(n => `<button class="sc-btn ${cur === n ? 'on' : ''} ${n % 1 ? 'half' : ''}" data-score="${c.f}" data-val="${n}" data-id="${esc(e._id)}" title="${esc(c.f === 'Sympathy Score' ? SYMPATHY_LABELS[n] : String(n).replace('.', ','))}">${n % 1 ? (cur === n ? Math.floor(n) + '½' : '½') : n}</button>`).join('');
-    const extra = c.f === 'Sympathy Score' ? `<span class="sc-note">${cur ? esc(SYMPATHY_LABELS[cur]) : 'nicht gesetzt – zählt als 3'}</span>` : (c.hint ? `<span class="sc-note">${esc(c.hint)}</span>` : '');
+    const extra = c.f === 'Sympathy Score' ? `<span class="sc-note">${cur ? esc(SYMPATHY_LABELS[cur]) : `nicht gesetzt – zählt als ${String(SCORE_W.symDefault).replace('.', ',')} (wirkt durchschnittlich)`}</span>` : (c.hint ? `<span class="sc-note">${esc(c.hint)}</span>` : '');
     return `<div class="sc-row ${active ? 'active' : ''}" data-sc-idx="${idx}"><span class="sc-lbl">${esc(c.label)}</span><span class="sc-btns">${btns}${cur != null ? `<button class="sc-clear" data-score="${c.f}" data-val="" data-id="${esc(e._id)}" title="entfernen">✕</button>` : ''}</span>${extra}</div>`;
   }
   function scoreSummary(e) {
@@ -1781,7 +1783,7 @@
     const site = num(e['User Rating']), old = num(e['My Rating (old)']);
     const r = Math.round(s.ten);
     const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit Babepedia überein ✓' : `auf Babepedia steht ${site} – ändern`;
-    return `<div class="sc-sum"><b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Gesamt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie als 3 angenommen' : ''}</span>
+    return `<div class="sc-sum"><b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Gesamt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''}</span>
       <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundeter Wert zum Eintragen auf Babepedia">Für Babepedia: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">vorher ${old}</span>` : ''}</div>`;
   }
   function scoreBox(e) {
@@ -2459,7 +2461,7 @@
     if (/^[1-5]$/.test(k)) { raterSet(rater.cat, Number(k), true); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
-      if (c.half && cur != null && cur < 5 && cur % 1 === 0) raterSet(rater.last, cur + 0.5, false);
+      if (cur != null && cur % 1 === 0 && (c.vals ? c.vals.includes(cur + 0.5) : c.half && cur < 5)) raterSet(rater.last, cur + 0.5, false);
       rater.cat = Math.min(SCORE_CATS.length - 1, rater.last + 1); raterCats();
       return;
     }
