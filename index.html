@@ -55,16 +55,15 @@
       <option value="false">nur inaktiv</option>
     </select>
     <select id="f-rating">
-      <option value="">Bewertung: alle</option>
-      <option value="diff">≠ abweichend von Babepedia</option>
-      <option value="same">= gleich wie Babepedia</option>
-      <option value="missing">nur auf einer Seite bewertet</option>
-      <option value="site-only">nur auf Babepedia bewertet</option>
-      <option value="mine-only">nur hier bewertet</option>
-      <option value="none">gar nicht bewertet</option>
-      <option value="scored">★ nach Kategorien bewertet</option>
-      <option value="unscored">noch nicht nach Kategorien bewertet</option>
-      <option value="sc-diff">★ Kategorien-Note ≠ Babepedia</option>
+      <option value="">Noten: alle</option>
+      <option value="diff">Tool-Note ≠ meine Babepedia-Note</option>
+      <option value="same">Tool-Note = meine Babepedia-Note</option>
+      <option value="missing">nur eine der beiden Noten vorhanden</option>
+      <option value="site-only">nur Babepedia-Note (noch keine Tool-Note)</option>
+      <option value="mine-only">nur Tool-Note (auf Babepedia noch offen)</option>
+      <option value="none">weder Tool- noch Babepedia-Note</option>
+      <option value="scored">♥ Tool-Note vorhanden</option>
+      <option value="unscored">noch keine Tool-Note</option>
     </select>
     <select id="f-ranker">
       <option value="">Ranker: egal</option>
@@ -100,17 +99,16 @@
       <option value="name">Sortierung: Name A–Z</option>
       <option value="created">Zuletzt hinzugefügt</option>
       <option value="updated">Zuletzt geändert</option>
-      <option value="global">Global Rating ↓</option>
-      <option value="mine">Meine Bewertung ↓</option>
-      <option value="score">★ Score ↓ (Kategorien)</option>
-      <option value="site">User Rating (Babepedia) ↓</option>
-      <option value="diff">Größte Abweichung zuerst</option>
+      <option value="global">Babepedia Ø ↓</option>
+      <option value="score">♥ Tool-Note ↓</option>
+      <option value="site">Meine Babepedia-Note ↓</option>
+      <option value="diff">Tool- vs. Babepedia-Note: größte Abweichung</option>
       <option value="rank">Rank ↑</option>
       <option value="young">Alter ↑ (jüngste zuerst)</option>
       <option value="old">Alter ↓ (älteste zuerst)</option>
       <option value="height">Größe ↓</option>
       <option value="random">🎲 Zufällige Reihenfolge</option>
-      <option value="ranker">Image-Ranker-Score ↓</option>
+      <option value="ranker">🏆 Ranker-Score ↓</option>
     </select>
     <span id="xf" class="xf"></span>
     <span id="sf" class="xf"></span>

@@ -235,3 +235,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Detailansicht: Knopfreihen pro Kategorie mit Ergebnis und Vergleich zu Babepedia. **⭐ Bewerten** (Taste `R`): Eintrag für Eintrag mit großem Bild; `1`–`5` setzt die markierte Kategorie und springt weiter, `.` = +½, `↑`/`↓` oder `G B H C S` = Kategorie, `←`/`→` = Bild, `Enter` = nächster Eintrag.
 - Filter „Bewertung“: nach Kategorien bewertet / noch nicht / Note ≠ Babepedia. Sortierung „★ Score“. Statistik: Verteilungen je Kategorie und Vergleich mit Babepedia. Die Kategorien lassen sich auch als Kachel-Angabe, Zusatzfilter und Ranker-Eigenschaft wählen.
 - Bewertungsmodus mit **Vergleich**: Unter den Kategorien stehen die Einträge, die in der markierten Kategorie denselben Wert haben (Knöpfe für die anderen vergebenen Werte, bis zu 12 Vorschaubilder). Antippen zeigt deren Bild groß; erneutes Antippen des Bildes zurück.
+
+## Änderungen in 14.21 (Tool) – Noten klar benannt, Kacheln
+- Vier Noten mit festen Namen: **Babepedia Ø** (Durchschnitt aller Nutzer, Feld `Global Rating`), **Meine Babepedia-Note** (`User Rating`), **🏆 Ranker-Score** (aus dem Image Ranker) und **♥ Tool-Note** (aus den Kategorien, Feld `Score`; gerundet in `My Rating`). Die Feldnamen in den Daten bleiben englisch.
+- Die direkte Bewertung 1–10 ohne Kategorien ist entfernt. Vorhandene direkte Werte wurden als „Alte eigene Note“ (`My Rating (old)`) aufgehoben. In der Detailansicht öffnet `R` den Bewertungsmodus für den Eintrag.
+- ⚙︎ Ansicht: Kategorien einzeln oder kompakt („G4½ B4 H4 C3 S2½“) als Kachel-Angabe, Kachelgröße klein/mittel/groß, Bildausschnitt oben, „nur Bilder“.

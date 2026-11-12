@@ -619,3 +619,16 @@ button.chip.rk-stale { cursor: pointer; font: inherit; }
 .rt-ref-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-ref-item:hover img { outline: 2px solid var(--accent); }
 .rt-ref-more, .rt-ref-empty { font-size: 12px; margin-top: 4px; }
+
+/* Kachel-Größe und -Darstellung (⚙︎ Ansicht) */
+body.cards-s .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+body.cards-l .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+@media (max-width: 600px) {
+  body.cards-s .grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  body.cards-l .grid { grid-template-columns: 1fr; }
+}
+body.cards-s .card .body { padding: 6px 8px; }
+body.cards-s .card h3, body.cards-s .card .name { font-size: 12.5px; }
+body.cards-s .card .meta { font-size: 11px; }
+body.cards-top .card .img img { object-position: 50% 15%; }
+body.cards-noname .card .body { display: none; }

@@ -23,7 +23,7 @@
   const GROUPS = [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'My Rating', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
+    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
@@ -271,7 +271,12 @@
   }
   function applyScore(e) {
     const s = scoreOf(e);
-    if (!s) { if (e.Score) e.Score = ''; return; }
+    if (!s) {
+      if (e.Score) e.Score = '';
+      // direkte Bewertung gibt es nicht mehr: alten Wert aufheben
+      if (v(e, 'My Rating')) { if (!v(e, 'My Rating (old)')) e['My Rating (old)'] = v(e, 'My Rating'); e['My Rating'] = ''; deriveChanged = true; }
+      return;
+    }
     const ten = (Math.round(s.ten * 10) / 10).toFixed(1);
     const first = !v(e, 'Score');
     e.Score = ten;
@@ -1277,14 +1282,21 @@
   // ---------- Ansicht anpassen: Kachel-Inhalte und Filter ----------
   // Einstellungen liegen in ui (localStorage 'bp-organizer-ui', klein, pro Gerät)
   const DERIVED = ['Alter', 'Geburtsjahr'];
+  // Anzeige-Namen (die Feldnamen in den Daten bleiben englisch)
+  const FIELD_LABELS = {
+    'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
+    'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
+    '__cats': 'Kategorien kompakt (G B H C S)'
+  };
+  const lab = (f) => FIELD_LABELS[f] || f;
   const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
-    'Global Rating', 'Votes', 'User Rating', 'My Rating', 'Score', 'Rank', 'Highest Rank', 'Babe ID'];
-  const CARD_BADGES = [['global', '★ Global Rating'], ['rank', '# Rank'], ['rating', '♥ Meine Bewertung'], ['ranker', '🏆 Ranker']];
+    'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID'];
+  const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Bewertung'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
-    'Measurements', 'Weight', 'Years active', 'Tags', 'My Rating', 'User Rating', 'Exact Birthdate', 'Favorite',
+    'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
   if (!Array.isArray(ui.cardFields)) ui.cardFields = ['Nationality', 'Alter', 'Height'];
@@ -1309,9 +1321,11 @@
     if (f === 'Geburtsjahr') return fieldValues(e, f)[0] || '';
     if (f === 'Born') return fmtDate(v(e, 'Born'), isTrue(e['Exact Birthdate']));
     if (f === 'Nationality') return natDisplay(e);
-    if (f === 'Global Rating' || f === 'User Rating' || f === 'My Rating') return v(e, f) ? `${f.replace(' Rating', '')} ${v(e, f)}` : '';
-    if (f === 'Score') return v(e, f) ? `★ ${v(e, f).replace('.', ',')}` : '';
-    if (/ Score$/.test(f)) return v(e, f) ? `${f.replace(' Score', '')} ${fmtScoreVal(v(e, f))}` : '';
+    if (f === 'Global Rating') return v(e, f) ? `BP Ø ${v(e, f).replace('.', ',')}` : '';
+    if (f === 'User Rating') return v(e, f) ? `Meine BP ${v(e, f)}` : '';
+    if (f === 'My Rating' || f === 'Score') return v(e, 'Score') ? `♥ ${v(e, 'Score').replace('.', ',')}` : '';
+    if (f === '__cats') { const t = SCORE_CATS.map(c => v(e, c.f) ? c.key + fmtScoreVal(v(e, c.f)) : '').filter(Boolean).join(' '); return t; }
+    if (/ Score$/.test(f)) return v(e, f) ? `${lab(f)} ${fmtScoreVal(v(e, f))}` : '';
     if (f === 'Rank' || f === 'Highest Rank') return v(e, f) ? `${f === 'Rank' ? '#' : 'max #'}${v(e, f)}` : '';
     if (f === 'Tattoos' || f === 'Piercings') { const x = v(e, f); return x && x !== 'n/a' ? `${f}: ${x}` : ''; }
     const val = v(e, f);
@@ -1343,10 +1357,15 @@
       const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating'].includes(f) || / Score$/.test(f);
       const keys = [...counts.keys()].sort((a, b) => isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
-      return `<select data-xf="${esc(f)}" title="${esc(f)}"><option value="">${esc(f)}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(f)}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
+      return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
     }).join('');
   }
 
+  function applyCardLook() {
+    const b = document.body;
+    b.classList.toggle('cards-s', ui.cardSize === 's'); b.classList.toggle('cards-l', ui.cardSize === 'l');
+    b.classList.toggle('cards-top', !!ui.cardImgTop); b.classList.toggle('cards-noname', !!ui.cardNoName);
+  }
   function showViewSettings() {
     const chk = (name, val, on, label) => `<label class="chk"><input type="checkbox" name="${name}" value="${esc(val)}" ${on ? 'checked' : ''}> ${esc(label)}</label>`;
     openModal(`
@@ -1354,15 +1373,21 @@
       <form class="help view-cfg" id="view-cfg">
         <h3>Angaben auf den Kacheln</h3>
         <p class="muted">Erscheinen unter dem Namen in der gewählten Reihenfolge (Reihenfolge = Klick-Reihenfolge; zuerst gewählt steht vorne).</p>
-        <div class="cfg-grid" id="cfg-card">${CARD_FIELD_CHOICES.map(f => chk('card', f, ui.cardFields.includes(f), f)).join('')}</div>
+        <div class="cfg-grid" id="cfg-card">${CARD_FIELD_CHOICES.map(f => chk('card', f, ui.cardFields.includes(f), lab(f))).join('')}</div>
         <p class="muted" id="cfg-order"></p>
+        <h3>Kacheln</h3>
+        <div class="cfg-grid">
+          ${[['s', 'klein'], ['m', 'mittel'], ['l', 'groß']].map(([k, l]) => `<label class="chk"><input type="radio" name="size" value="${k}" ${(ui.cardSize || 'm') === k ? 'checked' : ''}> ${l}</label>`).join('')}
+          <label class="chk"><input type="checkbox" name="imgtop" ${ui.cardImgTop ? 'checked' : ''}> Bildausschnitt oben (Gesicht)</label>
+          <label class="chk"><input type="checkbox" name="noname" ${ui.cardNoName ? 'checked' : ''}> nur Bilder (ohne Name und Angaben)</label>
+        </div>
         <h3>Abzeichen auf dem Bild</h3>
         <div class="cfg-grid">${CARD_BADGES.map(([k, l]) => chk('badge', k, ui.cardBadges.includes(k), l)).join('')}</div>
         <h3>Filter in der Leiste</h3>
         <div class="cfg-grid">${BUILTIN_FILTERS.map(([id, l]) => chk('filter', id, !ui.hiddenFilters[id], l)).join('')}</div>
         <h3>Zusätzliche Filter</h3>
         <p class="muted">Auswahl mit allen vorkommenden Werten (und „leer“).</p>
-        <div class="cfg-grid">${EXTRA_FILTER_CHOICES.map(f => chk('extra', f, ui.extraFilters.includes(f), f)).join('')}</div>
+        <div class="cfg-grid">${EXTRA_FILTER_CHOICES.map(f => chk('extra', f, ui.extraFilters.includes(f), lab(f))).join('')}</div>
       </form>
       <div class="form-foot">
         <button class="btn ghost" id="cfg-default">Standard</button>
@@ -1371,7 +1396,7 @@
       </div>`);
     const form = $('#view-cfg');
     let order = ui.cardFields.slice();
-    const showOrder = () => { $('#cfg-order').textContent = order.length ? 'Reihenfolge: ' + order.join(' · ') : 'Keine Angaben ausgewählt.'; };
+    const showOrder = () => { $('#cfg-order').textContent = order.length ? 'Reihenfolge: ' + order.map(lab).join(' · ') : 'Keine Angaben ausgewählt.'; };
     showOrder();
     form.addEventListener('change', (ev) => {
       if (ev.target.name === 'card') {
@@ -1382,12 +1407,17 @@
     });
     $('#cfg-default').addEventListener('click', () => {
       ui.cardFields = ['Nationality', 'Alter', 'Height']; ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
+      ui.cardSize = 'm'; ui.cardImgTop = false; ui.cardNoName = false; applyCardLook();
       saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
     });
     $('#cfg-save').addEventListener('click', () => {
       const vals = (n) => [...form.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value);
       ui.cardFields = order;
       ui.cardBadges = vals('badge');
+      ui.cardSize = (form.querySelector('input[name="size"]:checked') || {}).value || 'm';
+      ui.cardImgTop = form.querySelector('input[name="imgtop"]').checked;
+      ui.cardNoName = form.querySelector('input[name="noname"]').checked;
+      applyCardLook();
       const shown = new Set(vals('filter'));
       ui.hiddenFilters = Object.fromEntries(BUILTIN_FILTERS.filter(([id]) => !shown.has(id)).map(([id]) => [id, true]));
       ui.extraFilters = vals('extra');
@@ -1398,10 +1428,11 @@
 
   function ratingBadge(e) {
     const r = ratingDiff(e);
-    if (r.state === 'same') return `<span class="badge mine" title="Meine Bewertung = Babepedia">♥ ${esc(v(e, 'My Rating'))} ✓</span>`;
-    if (r.state === 'diff') return `<span class="badge diff" title="Meine Bewertung ${r.mine} / Babepedia ${r.site}">♥ ${r.mine} ≠ ${r.site}</span>`;
-    if (r.state === 'mine-only') return `<span class="badge mine" title="Auf Babepedia noch nicht bewertet">♥ ${r.mine}</span>`;
-    if (r.state === 'site-only') return `<span class="badge site" title="Nur auf Babepedia bewertet">BP ${r.site}</span>`;
+    const tn = v(e, 'Score').replace('.', ',');
+    if (r.state === 'same') return `<span class="badge mine" title="Tool-Note ${tn} – gerundet gleich meiner Babepedia-Note">♥ ${tn} ✓</span>`;
+    if (r.state === 'diff') return `<span class="badge diff" title="Tool-Note ${tn} (gerundet ${r.mine}) – meine Babepedia-Note ${r.site}">♥ ${tn} · BP ${r.site}</span>`;
+    if (r.state === 'mine-only') return `<span class="badge mine" title="Tool-Note – auf Babepedia noch nicht bewertet">♥ ${tn}</span>`;
+    if (r.state === 'site-only') return `<span class="badge site" title="Nur meine Babepedia-Note, noch keine Tool-Note">BP ${r.site}</span>`;
     return '';
   }
 
@@ -1435,7 +1466,7 @@
     shown = list; shownCount = 0;
     if (ui.view === 'table') {
       main.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>Global Rating</th><th>Rank</th><th>User Rating</th><th>My Rating</th><th>Δ</th><th>🏆</th><th>★</th>
+        <th></th><th>Name</th><th>Nationality</th><th>Profession Category</th><th>Alter</th><th>Height</th><th>Hair color</th><th>Measurements</th><th>BP Ø</th><th>Rank</th><th>Meine BP</th><th>Tool-Note</th><th>Δ</th><th>🏆</th><th>★</th>
         </tr></thead><tbody></tbody></table></div><div class="more" id="more"></div>`;
     } else {
       main.innerHTML = `<div class="grid"></div><div class="more" id="more"></div>`;
@@ -1457,7 +1488,7 @@
           <td class="num">${esc(v(e, 'Global Rating'))}</td>
           <td class="num">${esc(v(e, 'Rank'))}</td>
           <td class="num">${esc(v(e, 'User Rating'))}</td>
-          <td class="num">${esc(v(e, 'My Rating'))}</td>
+          <td class="num">${esc(v(e, 'Score').replace('.', ','))}</td>
           <td class="num">${diffCell(e)}</td>
           <td>${e._ranker ? '🏆' : ''}</td>
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
@@ -1469,7 +1500,7 @@
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
         <div class="img">${coverTag(e)}
           <div class="badges">
-            ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating">★ ${esc(v(e, 'Global Rating'))}</span>` : ''}
+            ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
             ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
@@ -1500,8 +1531,8 @@
   }
   const STAT_NUMS = [
     ['Alter', 'Alter', 5, ' J.'], ['Geburtsjahr', 'Geburtsjahrzehnt', 10, 'er'], ['Height', 'Größe', 5, ' cm'], ['Weight', 'Gewicht', 5, ' kg'],
-    ['Global Rating', 'Global Rating', 0.5, ''], ['User Rating', 'User Rating (Babepedia)', 1, ''], ['My Rating', 'Meine Bewertung', 1, ''],
-    ['Score', 'Score (Kategorien, 1–10)', 0.5, ''], ['Face Score', 'Gesicht', 0.5, ''], ['Body Score', 'Body', 0.5, ''], ['Hot Score', 'Hot', 0.5, ''], ['Cute Score', 'Cute', 0.5, ''], ['Sympathy Score', 'Sympathie', 1, '']];
+    ['Global Rating', 'Babepedia Ø (alle Nutzer)', 0.5, ''], ['User Rating', 'Meine Babepedia-Note', 1, ''],
+    ['Score', 'Tool-Note (aus Kategorien)', 0.5, ''], ['Face Score', 'Gesicht', 0.5, ''], ['Body Score', 'Body', 0.5, ''], ['Hot Score', 'Hot', 0.5, ''], ['Cute Score', 'Cute', 0.5, ''], ['Sympathy Score', 'Sympathie', 1, '']];
   const CUP_ORDER = 'AA A B C D DD DDD E F FF G GG H HH I J K L M N'.split(' ');
   function statSection(title, rows, total, empty, opts = {}) {
     if (!rows.length) return '';
@@ -1632,7 +1663,7 @@
     const f1 = (x, d = 1) => x == null ? '–' : x.toLocaleString('de-DE', { maximumFractionDigits: d });
     const pct = (n) => total ? Math.round(n / total * 100) + ' %' : '–';
     const ages = list.map(age).filter(x => x != null), hs = list.map(e => num(v(e, 'Height'))).filter(x => x > 100 && x < 230);
-    const gr = list.map(e => num(v(e, 'Global Rating'))).filter(x => x != null), mr = list.map(e => num(v(e, 'My Rating'))).filter(x => x != null);
+    const gr = list.map(e => num(v(e, 'Global Rating'))).filter(x => x != null), mr = list.map(e => num(v(e, 'Score'))).filter(x => x != null);
     const fav = list.filter(e => isTrue(e.Favorite)).length, rk = list.filter(e => e._ranker).length, act = list.filter(e => isTrue(e.Active)).length;
     const tile = (big, small, test, label) => {
       const i = test ? statRefs.push({ label, test }) - 1 : -1;
@@ -1645,8 +1676,8 @@
       tile(`${act} <small>${pct(act)}</small>`, 'aktiv', e => isTrue(e.Active), 'aktiv'),
       tile(f1(mean(ages)), `Ø Alter · Median ${f1(median(ages), 0)}`),
       tile(f1(mean(hs), 0) + ' cm', `Ø Größe · ${hs.length ? Math.min(...hs) + '–' + Math.max(...hs) : '–'}`),
-      tile(f1(mean(gr), 2), `Ø Global Rating · ${gr.length} bewertet`),
-      tile(f1(mean(mr), 1), `Ø meine Bewertung · ${mr.length} bewertet`, e => num(v(e, 'My Rating')) != null, 'selbst bewertet'),
+      tile(f1(mean(gr), 2), `Babepedia Ø im Mittel · ${gr.length} mit Wert`),
+      tile(f1(mean(mr), 1), `Tool-Note im Mittel · ${mr.length} bewertet`, e => hasScore(e), 'Tool-Note vorhanden'),
     ].join('');
 
     // Kategorien: Werte zählen (Mehrfachfelder einzeln)
@@ -1682,8 +1713,8 @@
     list.forEach(e => { if (e._ranker && e._ranker.tier) tiers.set(e._ranker.tier, (tiers.get(e._ranker.tier) || 0) + 1); });
     // Kategorien-Note gegen Babepedia-Bewertung
     const dTest = (lo, hi) => (e) => { if (!hasScore(e) || num(e['User Rating']) == null) return false; const d = Math.round(num(e.Score)) - num(e['User Rating']); return d >= lo && d <= hi; };
-    const cmpDefs = [['≤ −2 (Kategorien niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (Kategorien höher)', 2, 99]];
-    const cmpRows = cmpDefs.map(([label, lo, hi]) => ({ label, n: list.filter(dTest(lo, hi)).length, flabel: `Kategorien vs. Babepedia: ${label}`, test: dTest(lo, hi) })).filter(r => r.n);
+    const cmpDefs = [['≤ −2 (Tool-Note niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (Tool-Note höher)', 2, 99]];
+    const cmpRows = cmpDefs.map(([label, lo, hi]) => ({ label, n: list.filter(dTest(lo, hi)).length, flabel: `Tool-Note vs. Babepedia-Note: ${label}`, test: dTest(lo, hi) })).filter(r => r.n);
     const cmpN = list.filter(e => hasScore(e) && num(e['User Rating']) != null).length;
     const tierRows = RK_TIERS.map(([, t]) => t).filter(t => tiers.has(t)).map(t => ({ label: t, n: tiers.get(t), flabel: `Ranker-Tier: ${t}`,
       html: `<span class="badge rk-tier" style="--rk:${rkColor(t)}">${esc(t)}</span>`, test: e => e._ranker && e._ranker.tier === t }));
@@ -1702,7 +1733,7 @@
       <div class="st-grid">
         ${cats.join('')}
         ${statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })}
-        ${statSection(`★ Kategorien-Note vs. Babepedia (${cmpN})`, cmpRows, cmpN, 0, { limit: 10 })}
+        ${statSection(`♥ Tool-Note vs. meine Babepedia-Note (${cmpN})`, cmpRows, cmpN, 0, { limit: 10 })}
         ${nums.join('')}
         ${statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })}
       </div>
@@ -1779,12 +1810,12 @@
   }
   function scoreSummary(e) {
     const s = scoreOf(e);
-    if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Gesamtnote berechnet.</div>`;
+    if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Tool-Note berechnet.</div>`;
     const site = num(e['User Rating']), old = num(e['My Rating (old)']);
     const r = Math.round(s.ten);
-    const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit Babepedia überein ✓' : `auf Babepedia steht ${site} – ändern`;
-    return `<div class="sc-sum"><b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Gesamt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''}</span>
-      <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundeter Wert zum Eintragen auf Babepedia">Für Babepedia: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">vorher ${old}</span>` : ''}</div>`;
+    const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit meiner Babepedia-Note überein ✓' : `meine Babepedia-Note ist ${site} – ändern`;
+    return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''}</span>
+      <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundete Tool-Note zum Eintragen auf Babepedia">Auf Babepedia eintragen: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
   }
   function scoreBox(e) {
     return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span></h3>
@@ -1799,24 +1830,7 @@
     saveQuiet(); refreshItem(id);
   }
 
-  function ratingBox(e) {
-    if (hasScore(e)) return '';   // Note kommt aus den Kategorien
-    const r = ratingDiff(e);
-    const mine = num(e['My Rating']);
-    const btns = Array.from({ length: 10 }, (_, i) => i + 1).map(n =>
-      `<button class="rate-btn ${mine !== null && n <= mine ? 'on' : ''} ${num(e['User Rating']) === n ? 'site' : ''}" data-rate="${n}" data-id="${esc(e._id)}" title="${n}/10">${n}</button>`).join('');
-    let cmp;
-    if (r.state === 'same') cmp = `<span class="ok">✓ stimmt mit Babepedia überein (${r.site})</span>`;
-    else if (r.state === 'diff') cmp = `<span class="warn">Babepedia: ${r.site} · Abweichung ${fmtDiff(r.d)}</span>`;
-    else if (r.state === 'mine-only') cmp = `<span class="muted">Auf Babepedia noch nicht bewertet</span>`;
-    else if (r.state === 'site-only') cmp = `<span class="muted">Babepedia: ${r.site} – hier noch nicht bewertet</span>`;
-    else cmp = `<span class="muted">Noch nicht bewertet</span>`;
-    const take = r.state === 'site-only' || r.state === 'diff'
-      ? `<button class="btn small" data-rate="${r.site}" data-id="${esc(e._id)}">Babepedia-Wert übernehmen</button>` : '';
-    return `<div class="sec rating-box"><h3>Meine Bewertung <span class="muted">(direkt, ohne Kategorien)</span></h3>
-      <div class="rate-row">${btns}${mine !== null ? `<button class="rate-clear" data-rate="" data-id="${esc(e._id)}" title="Bewertung entfernen">✕</button>` : ''}</div>
-      <div class="rate-cmp">${cmp} ${take}</div></div>`;
-  }
+
 
   // Zufällige Reihenfolge: fest pro „Mischen“, damit Blättern/Nachladen stabil bleibt
   let shuffleSeed = Math.floor(Math.random() * 2 ** 31);
@@ -1854,7 +1868,7 @@
           <div><dt><kbd>Z</kbd></dt><dd>noch ein zufälliger Eintrag</dd></div>
           <div><dt><kbd>Leertaste</kbd> / <kbd>B</kbd></dt><dd>Bilder groß ansehen</dd></div>
           <div><dt><kbd>F</kbd></dt><dd>Favorit an/aus</dd></div>
-          <div><dt><kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd></dt><dd>eigene Bewertung 1–9, 10 (<kbd>Entf</kbd> löscht sie)</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd>diesen Eintrag im Bewertungsmodus bewerten</dd></div>
           <div><dt><kbd>E</kbd></dt><dd>bearbeiten</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>schließen</dd></div>
         </dl>
@@ -1870,13 +1884,7 @@
       </div>`);
   }
 
-  function setRating(id, val) {
-    const e = byId(id); if (!e) return;
-    if (hasScore(e)) { toast('Die Note wird aus den Kategorien berechnet – dort ändern.'); return; }
-    e['My Rating'] = val === '' ? '' : String(val);
-    e._updated = Date.now();
-    saveQuiet(); refreshItem(id); showDetail(id);
-  }
+
 
   // Bild für den Image Ranker austauschen: der Ranker öffnet den Eintrag mit #e=<id>&pick=<Ranker-Bild>&tab=<Reiter>
   let rankerPick = null;   // { id: Ranker-Bild, tab, boId }
@@ -1919,7 +1927,7 @@
     const sec = (title, fields) => {
       const rows = fields.filter(f => !skip.has(f)).map(f => [f, fmtValue(e, f)]).filter(([, x]) => x !== '');
       if (!rows.length) return '';
-      return `<div class="sec"><h3>${title}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(f)}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
+      return `<div class="sec"><h3>${title}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
     };
     const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
     const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
@@ -1951,7 +1959,7 @@
           ${v(e, 'AKA') ? `<div class="d-aka">auch: ${esc(v(e, 'AKA'))}</div>` : ''}
           <div class="chips">
             <button class="chip accent" data-fav="${esc(e._id)}" style="cursor:pointer">${isTrue(e.Favorite) ? '♥ Favorit' : '♡ Als Favorit'}</button>
-            ${v(e, 'Global Rating') ? `<span class="chip">★ ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Votes)` : ''}</span>` : ''}
+            ${v(e, 'Global Rating') ? `<span class="chip" title="Durchschnitt aller Nutzer auf Babepedia">Babepedia Ø ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Stimmen)` : ''}</span>` : ''}
             ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
             ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
             ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
@@ -1963,7 +1971,6 @@
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${scoreBox(e)}
-          ${ratingBox(e)}
           ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
@@ -2011,7 +2018,7 @@
     const name = `name="${esc(f)}" id="${id}"`;
     const hint = HINTS[f] ? `<span class="hint">${esc(HINTS[f])}</span>` : '';
     if (t === 'bool') {
-      return `<div class="field check"><input type="checkbox" ${name} ${isTrue(val) ? 'checked' : ''}><label for="${id}">${esc(f)}</label>${hint}</div>`;
+      return `<div class="field check"><input type="checkbox" ${name} ${isTrue(val) ? 'checked' : ''}><label for="${id}">${esc(lab(f))}</label>${hint}</div>`;
     }
     let input;
     if (Array.isArray(t)) {
@@ -2033,7 +2040,7 @@
     if (IMAGE_FIELDS.includes(f)) {
       return `<div class="field${wide}"><label for="${id}">${esc(f)}</label>${input}${hint}<div class="img-prev" data-prev-for="${esc(f)}">${previewHTML(val)}</div></div>`;
     }
-    return `<div class="field${wide}"><label for="${id}">${esc(f)}${f === 'Name' ? ' *' : ''}</label>${input}${hint}</div>`;
+    return `<div class="field${wide}"><label for="${id}">${esc(lab(f))}${f === 'Name' ? ' *' : ''}</label>${input}${hint}</div>`;
   }
 
   function showForm(id) {
@@ -2162,7 +2169,7 @@
           <li>Auf einer Profilseite auf <strong>➕ Add</strong> klicken, auf einer Listenseite auf <strong>🚀 Auto Fetch All</strong>.</li>
           <li>Dieses Tool öffnen (Button <strong>🗂️ Tool öffnen</strong>) – gesammelte Profile werden automatisch übernommen.</li>
         </ol>
-        <p>Bereits vorhandene Einträge werden anhand der Profil-URL erkannt und aktualisiert. Deine eigenen Felder (Favorite, My Rating, Tags, Notes) bleiben dabei erhalten.</p>
+        <p>Bereits vorhandene Einträge werden anhand der Profil-URL erkannt und aktualisiert. Deine eigenen Felder (Favorit, Kategorien-Bewertung, Tags, Notizen) bleiben dabei erhalten.</p>
         <h3>Ohne Userscript</h3>
         <p>Über <em>Daten → Importieren</em> kannst du die CSV-Datei deines alten Skripts oder ein JSON-Backup einlesen.</p>
         <h3>Wo liegen die Daten?</h3>
@@ -2388,13 +2395,21 @@
     stage.addEventListener('touchstart', (ev) => { if (ev.touches.length === 1) { sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; } }, { passive: true });
     stage.addEventListener('touchend', (ev) => { const t = ev.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) raterImg(dx < 0 ? 1 : -1); });
   }
+  function openRaterFor(id) {
+    const keep = ui.raterOnlyOpen; ui.raterOnlyOpen = false;
+    closeModal(true);
+    const all = shown.map(e => e._id);
+    openRater();
+    ui.raterOnlyOpen = keep;
+    if (rater) { const i = rater.ids.indexOf(id); if (i >= 0) { rater.i = i; raterShow(); } else { rater.ids.unshift(id); rater.i = 0; raterShow(); } }
+  }
   function raterEntry() { return rater && byId(rater.ids[rater.i]); }
   function raterShow() {
     const e = raterEntry(); if (!e) return;
     const { el } = rater;
     $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
     $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
-    $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `Babepedia ${v(e, 'User Rating')}` : '', v(e, 'My Rating (old)') ? `vorher ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
+    $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
     rater.img = 0;
     raterImgShow(); raterCats();
     const nx = byId(rater.ids[rater.i + 1]); if (nx) { const u = images(nx)[0]; if (u) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); } }
@@ -2567,11 +2582,9 @@
     if (sc && !t.closest('.rater')) {
       setScore(sc.dataset.id, sc.dataset.score, sc.dataset.val);
       const box = t.closest('.score-box');
-      if (box) { const e = byId(sc.dataset.id); box.outerHTML = scoreBox(e); const rb = $('.rating-box', modal); if (rb) rb.outerHTML = ratingBox(e) || ''; }
+      if (box) { const e = byId(sc.dataset.id); box.outerHTML = scoreBox(e); }
       return;
     }
-    const rate = t.closest('[data-rate]');
-    if (rate) { setRating(rate.dataset.id, rate.dataset.rate); return; }
     const fav = t.closest('[data-fav]');
     if (fav) { ev.stopPropagation(); toggleFav(fav.dataset.fav); return; }
     const act = t.closest('[data-action]');
@@ -2634,8 +2647,7 @@
         if (k === ' ' || k === 'b' || k === 'B') { ev.preventDefault(); openViewer(id, 0); return; }
         if (k === 'f' || k === 'F') { toggleFav(id); return; }
         if (k === 'e' || k === 'E') { ev.preventDefault(); showForm(id); return; }
-        if (/^[0-9]$/.test(k)) { setRating(id, k === '0' ? 10 : Number(k)); return; }
-        if (k === 'Delete' || k === 'Backspace') { setRating(id, ''); return; }
+        if (k === 'r' || k === 'R') { ev.preventDefault(); openRaterFor(id); return; }
       } else if (overlay.hidden) {
         if (k === '/') { ev.preventDefault(); $('#q').focus(); return; }
         if (k === 'z' || k === 'Z') { randomEntry(); return; }
@@ -2717,6 +2729,8 @@
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
   applyFilterVisibility();
+  applyCardLook();
+  if (ui.sort === 'mine') ui.sort = 'score';   // „Meine Bewertung“ ist jetzt die Tool-Note
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false;
@@ -2943,7 +2957,7 @@
       const sel = (prefs[t] && prefs[t].fields) || {};
       return RK_FIELDS.map(f => {
         const s = sel[f], type = (s && s.type) || rkType(f);
-        return `<div class="rk-f"><label class="chk"><input type="checkbox" data-rk-f="${esc(f)}" ${s ? 'checked' : ''}> ${esc(f)}</label>
+        return `<div class="rk-f"><label class="chk"><input type="checkbox" data-rk-f="${esc(f)}" ${s ? 'checked' : ''}> ${esc(lab(f))}</label>
           <input type="text" data-rk-name="${esc(f)}" value="${esc((s && s.name) || f)}" title="Name der Eigenschaft im Ranker">
           <select data-rk-type="${esc(f)}">${['exact', 'multi', 'number'].map(x => `<option value="${x}" ${x === type ? 'selected' : ''}>${{ exact: 'exakt', multi: 'mehrfach', number: 'Zahl' }[x]}</option>`).join('')}</select></div>`;
       }).join('');
@@ -3246,7 +3260,7 @@
       await loadImgCheck();
       await loadPending();
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
-      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Werte vereinheitlicht (Nationalität, Measurements, Bra/Cup) und gespeichert.', 'ok')).catch(() => {}); }, 2500);
+      if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Gespeicherte Werte vereinheitlicht und gespeichert.', 'ok')).catch(() => {}); }, 2500);
     } catch (e) {
       $('#main').innerHTML = `<div class="empty"><h2>Speicher nicht verfügbar</h2><p>${esc(e && e.message || e)}</p></div>`;
       return;
