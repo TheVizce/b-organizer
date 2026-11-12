@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.26
+// @version      14.27
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -145,7 +145,8 @@
             GM_setValue('bp_vote_stop', '');
             GM_setValue('bp_vote_job', { id: d.id, items, at: Date.now() });
             GM_setValue('bp_vote_prog', { id: d.id, total: items.length, results: [], finished: false, current: '' });
-            GM_openInTab('https://www.babepedia.com/?bpvote=1', { active: true, insert: true, setParent: true });
+            GM_setValue('bp_vote_launch', Date.now());
+            setTimeout(() => GM_openInTab('https://www.babepedia.com/?bpvote=1', { active: true, insert: true, setParent: true }), 400);
             voteWatch();
         });
 
@@ -167,11 +168,34 @@
     if (ARCHIVE === false) return; // andere Archiv-Seite -> nichts tun
 
     // Babepedia-Tab zum Eintragen von Noten (vom Tool aus geöffnet, ?bpvote=1): stimmt wie die Seite selbst ab
-    if (!ARCHIVE && /[?&]bpvote=1\b/.test(location.search)) {
-        runVoteJob();
-        return;
+    // Start ohne Abhängigkeit von der Adresse (Babepedia kann ?bpvote=1 wegleiten): frischer Start-Auftrag im GM-Speicher
+    if (!ARCHIVE && window.top === window) {
+        const vJob = GM_getValue('bp_vote_job', null), vProg = GM_getValue('bp_vote_prog', null);
+        const vOpen = vJob && Array.isArray(vJob.items) && !(vProg && vProg.id === vJob.id && vProg.finished);
+        const vLaunch = GM_getValue('bp_vote_launch', 0) || 0;
+        if (/[?&]bpvote=1\b/.test(location.search) || (vOpen && Date.now() - vLaunch < 90000)) {
+            GM_setValue('bp_vote_launch', 0);   // nur dieser eine Tab startet automatisch
+            runVoteJob();
+            return;
+        }
+        if (vOpen) {
+            // Offener Auftrag (z. B. Tab zu früh geschlossen): Knopf zum Fortsetzen anbieten
+            const showBtn = () => {
+                const btn = document.createElement('button');
+                const done = vProg && vProg.id === vJob.id ? vProg.results.length : 0;
+                btn.textContent = `⭐ Noten-Auftrag fortsetzen (${done}/${vJob.items.length})`;
+                btn.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;padding:8px 12px;background:#00838f;color:#fff;border:0;border-radius:8px;font:13px system-ui,sans-serif;cursor:pointer';
+                btn.onclick = () => { btn.remove(); runVoteJob(); };
+                document.body.appendChild(btn);
+            };
+            if (document.body) showBtn(); else document.addEventListener('DOMContentLoaded', showBtn);
+        }
     }
     async function runVoteJob() {
+        try { await runVoteJobInner(); }
+        catch (e) { console.error('[Noten eintragen]', e); alert('Babe Organizer – Noten eintragen: Fehler\n' + (e && e.message || e)); }
+    }
+    async function runVoteJobInner() {
         const box = document.createElement('div');
         box.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;width:min(420px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:#16161c;color:#eee;border:1px solid #00838f;border-radius:10px;padding:12px 14px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 6px 30px rgba(0,0,0,.5)';
         box.innerHTML = '<b>⭐ Babepedia-Noten eintragen</b><div id="bpv-st" style="margin:6px 0"></div><button id="bpv-stop" style="padding:3px 10px">Anhalten</button><pre id="bpv-log" style="white-space:pre-wrap;margin:8px 0 0;font-size:12px;color:#bbb"></pre>';
@@ -179,7 +203,9 @@
         if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
         const st = (t) => { const el = box.querySelector('#bpv-st'); if (el) el.textContent = t; };
         const log = (t) => { const el = box.querySelector('#bpv-log'); if (el) el.textContent += t + '\n'; };
-        const job = GM_getValue('bp_vote_job', null);
+        st('Warte auf den Auftrag aus dem Tool …');
+        let job = GM_getValue('bp_vote_job', null);
+        for (let n = 0; n < 20 && !(job && Array.isArray(job.items)); n++) { await new Promise(r => setTimeout(r, 250)); job = GM_getValue('bp_vote_job', null); }
         let prog = GM_getValue('bp_vote_prog', null);
         if (!job || !Array.isArray(job.items)) { st('Kein Auftrag vorhanden – im Tool unter Daten → „Babepedia-Noten angleichen…“ starten.'); return; }
         if (!prog || prog.id !== job.id) prog = { id: job.id, total: job.items.length, results: [], finished: false, current: '' };
