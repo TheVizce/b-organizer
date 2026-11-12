@@ -1301,6 +1301,7 @@
     if (!d || typeof d !== 'object') return;
     if (d.type === 'BP_PING' && ready) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
     if (d.type === 'BP_KNOWN_REQ' && ready) sendKnown(d.id);
+    if (d.type === 'BP_VOTE_PROG' && ready) bridgeQueue = bridgeQueue.then(() => onVoteProg(d)).catch(() => {});
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
       bridgeQueue = bridgeQueue.then(() => withImportLock(async () => { entries = await load(); return importItems(d.items); })).then(r => {
@@ -2673,18 +2674,9 @@
   function votePing() {
     return new Promise(res => {
       const t = setTimeout(() => { window.removeEventListener('message', on); res(false); }, 1500);
-      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_ACK') { clearTimeout(t); window.removeEventListener('message', on); res((ev.data.v || 1) >= 2); } }
+      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_ACK') { clearTimeout(t); window.removeEventListener('message', on); res((ev.data.v || 1) >= 3); } }
       window.addEventListener('message', on);
       window.postMessage({ type: 'BP_VOTE_PING' }, location.origin);
-    });
-  }
-  function voteRaw(k, x, url, verify) {
-    const id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    return new Promise(res => {
-      const t = setTimeout(() => { window.removeEventListener('message', on); res({ ok: false, status: 0, text: 'keine Antwort vom Skript' }); }, 60000);
-      function on(ev) { if (ev.origin === location.origin && ev.data && ev.data.type === 'BP_VOTE_RESULT' && ev.data.id === id) { clearTimeout(t); window.removeEventListener('message', on); res(ev.data); } }
-      window.addEventListener('message', on);
-      window.postMessage({ type: 'BP_VOTE', id, k: String(k), x: String(x), url: url || '', verify: !!verify }, location.origin);
     });
   }
   let voteRun = null;
@@ -2699,7 +2691,7 @@
     openModal(`
       <div class="modal-head"><h2>Babepedia-Noten angleichen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
       <div class="help vote-dlg">
-        <p>Bei <b>${cand.length}</b> der angezeigten Einträge weicht „Meine Babepedia-Note“ von der gerundeten Tool-Note ab. Das Skript trägt die Tool-Note auf Babepedia ein – dafür öffnet sich kurz ein Babepedia-Tab im Hintergrund (du musst dort eingeloggt sein), ein Profil alle 3 s. Die ersten drei und dann jedes zehnte werden auf Babepedia nachgeprüft.${noId ? ` <span class="muted">${noId === 1 ? "1 Eintrag" : noId + " Einträge"} ohne Babe ID ${noId === 1 ? "wird" : "werden"} übersprungen.</span>` : ''}</p>
+        <p>Bei <b>${cand.length}</b> der angezeigten Einträge weicht „Meine Babepedia-Note“ von der gerundeten Tool-Note ab. Das Skript trägt die Tool-Note auf Babepedia ein – dafür öffnet sich ein Babepedia-Tab (du musst dort eingeloggt sein), der die Liste abarbeitet (ein Profil alle 3 s) und sich danach schließt. Die ersten drei und dann jedes zehnte werden auf Babepedia nachgeprüft. Den Fortschritt siehst du dort und hier.${noId ? ` <span class="muted">${noId === 1 ? "1 Eintrag" : noId + " Einträge"} ohne Babe ID ${noId === 1 ? "wird" : "werden"} übersprungen.</span>` : ''}</p>
         <p class="muted">Es zählt die aktuelle Auswahl und Sortierung – mit Filtern kannst du eingrenzen, was dran kommt.</p>
         <label class="rk-limit">Höchstens <input type="number" id="vote-max" min="1" step="1" inputmode="numeric" value="${max}"> pro Lauf</label>
         <div class="vote-list"><table class="vote-tbl"><thead><tr><th>Name</th><th class="num">jetzt</th><th class="num">neu</th><th class="num">Tool-Note</th></tr></thead><tbody>${cand.slice(0, 300).map(row).join('')}</tbody></table>${cand.length > 300 ? `<p class="muted">… und ${cand.length - 300} weitere</p>` : ''}</div>
@@ -2710,47 +2702,48 @@
     $('#vote-go').addEventListener('click', async () => {
       const n = Math.max(1, parseInt($('#vote-max').value, 10) || max);
       ui.voteMax = n; saveUI();
-      if (!(await votePing())) { $('#vote-status').textContent = '⚠︎ Das Skript antwortet nicht. Ist es in Tampermonkey aktiv und auf Version 14.25 oder neuer?'; return; }
+      if (!(await votePing())) { $('#vote-status').textContent = '⚠︎ Das Skript antwortet nicht. Ist es in Tampermonkey aktiv und auf Version 14.26 oder neuer?'; return; }
       runVotes(cand.slice(0, n));
     });
   }
-  async function runVotes(list) {
-    voteRun = { stop: false };
-    const st = () => $('#vote-status'), logEl = () => $('#vote-log');
-    const log = (line) => { const l = logEl(); if (l) { l.hidden = false; l.textContent += line + '\n'; l.scrollTop = l.scrollHeight; } };
+  function runVotes(list) {
+    const id = 'vj' + Date.now().toString(36);
+    voteRun = { id, seen: 0, total: list.length };
+    const items = list.map(({ e, t }, i) => ({ _id: e._id, k: v(e, 'Babe ID'), x: t, name: v(e, 'Name'), url: v(e, 'Profile URL'), verify: i < 3 || i % 10 === 0 }));
     const go = $('#vote-go'), stop = $('#vote-stop');
     if (go) go.disabled = true;
-    if (stop) { stop.hidden = false; stop.onclick = () => { voteRun.stop = true; stop.disabled = true; }; }
-    let ok = 0, fail = 0, first = true, blocked = false;
-    for (let i = 0; i < list.length; i++) {
-      if (voteRun.stop) break;
-      const { e, t } = list[i];
-      if (st()) st().textContent = `${i + 1} / ${list.length}: ${v(e, 'Name')} → ${t}`;
-      // Kontrolle: die ersten drei und danach jedes zehnte Profil auf Babepedia nachlesen
-      const verify = i < 3 || i % 10 === 0;
-      const r = await voteRaw(v(e, 'Babe ID'), t, v(e, 'Profile URL'), verify);
-      if (first) { log(`Antwort von Babepedia: ${r.status}${r.text ? ' ' + String(r.text).slice(0, 200) : ''}`); first = false; }
-      if (r.ok) {
-        ok++;
-        e['User Rating'] = String(t); e._updated = Date.now();
-        log(`✓ ${v(e, 'Name')}: ${t}${r.seen ? ' (auf Babepedia geprüft)' : ''}`);
-        if (ok % 10 === 0) save().catch(() => {});
-      } else {
-        fail++;
-        log(`✗ ${v(e, 'Name')}: ${r.status || ''} ${r.reason || String(r.text || '').slice(0, 120)}`);
-        if (r.status === 429 || r.status === 403 || r.status === 503) { blocked = true; break; }
-        if (fail >= 3 && ok === 0) break;   // klappt offenbar gar nicht – nicht weiter versuchen
-      }
-      if (i < list.length - 1) await new Promise(res => setTimeout(res, 3000));
+    if (stop) { stop.hidden = false; stop.onclick = () => { window.postMessage({ type: 'BP_VOTE_STOP', id }, location.origin); stop.disabled = true; }; }
+    if ($('#vote-status')) $('#vote-status').textContent = 'Babepedia-Tab wird geöffnet …';
+    window.postMessage({ type: 'BP_VOTE_JOB', id, items }, location.origin);
+  }
+  // Fortschritt vom Skript (auch nachgereicht, wenn das Tool zwischendurch zu war)
+  let voteDirty = false;
+  async function onVoteProg(d) {
+    const live = voteRun && voteRun.id === d.id;
+    const results = Array.isArray(d.results) ? d.results : [];
+    const from = live ? voteRun.seen : 0;
+    const logEl = $('#vote-log');
+    let changed = 0;
+    for (const r of results.slice(from)) {
+      if (live && logEl) { logEl.hidden = false; logEl.textContent += `${r.ok ? '✓' : '✗'} ${r.name}: ${r.x}${r.verified && r.ok ? ' (auf Babepedia geprüft)' : ''}${r.reason ? ' – ' + r.reason : (!r.ok && r.status != null ? ' – Status ' + r.status : '')}\n`; logEl.scrollTop = logEl.scrollHeight; }
     }
-    window.postMessage({ type: 'BP_VOTE_END' }, location.origin);   // Babepedia-Tab schließen
-    const stopped = voteRun.stop; voteRun = null;
-    try { if (ok) await save(); } catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
-    refreshFilters(); render();
-    const msg = `Babepedia-Noten: ${ok} eingetragen${fail ? `, ${fail} fehlgeschlagen` : ''}${blocked ? ' – Babepedia blockt gerade (zu viele Zugriffe), später weitermachen' : ''}${stopped ? ' (angehalten)' : ''}${!blocked && fail >= 3 && ok === 0 ? ' – abgebrochen, bitte eingeloggt sein und die Antwort im Protokoll prüfen' : ''}.`;
-    if (st()) st().textContent = msg;
-    const stop2 = $('#vote-stop'); if (stop2) stop2.hidden = true;
-    toast(msg, fail ? 'err' : 'ok');
+    for (const r of results) {
+      if (!r.ok) continue;
+      const e = byId(r._id);
+      if (e && v(e, 'User Rating') !== String(r.x)) { e['User Rating'] = String(r.x); e._updated = Date.now(); changed++; }
+    }
+    if (live) voteRun.seen = results.length;
+    if (live && $('#vote-status') && !d.finished) $('#vote-status').textContent = d.current ? `Läuft: ${d.current}` : `${results.length} / ${d.total} erledigt`;
+    if (changed) voteDirty = true;
+    if (voteDirty && (d.finished || results.length % 10 === 0)) {
+      try { await save(); voteDirty = false; } catch (err) { toast('Speichern fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+    }
+    if (!d.finished) return;
+    const ok = results.filter(r => r.ok).length, fail = results.length - ok;
+    const msg = `Babepedia-Noten: ${ok} eingetragen${fail ? `, ${fail} fehlgeschlagen` : ''}${d.reason ? ' – ' + d.reason : ''}.`;
+    if (live) { if ($('#vote-status')) $('#vote-status').textContent = msg; const s2 = $('#vote-stop'); if (s2) s2.hidden = true; voteRun = null; }
+    if (live || changed) { refreshFilters(); render(); toast(msg, fail ? 'err' : 'ok'); }
+    window.postMessage({ type: 'BP_VOTE_DONE_ACK', id: d.id }, location.origin);
   }
 
   function openRaterFor(id) {

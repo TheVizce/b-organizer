@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.25
+// @version      14.26
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -115,38 +115,38 @@
             });
         });
 
-        // Babepedia-Note eintragen (Tool → „Babepedia-Noten angleichen“).
-        // Von hier (github.io) aus nimmt Babepedia die Stimme nicht an → die Anfrage läuft in einem
-        // Babepedia-Tab im Hintergrund (?bpvote=1), der wie die Seite selbst abstimmt. Austausch über GM-Speicher.
-        let voteTab = null;
-        const voteWorkerAlive = () => Date.now() - (GM_getValue('bp_vote_alive', 0) || 0) < 3000;
-        window.addEventListener('message', async (ev) => {
+        // Babepedia-Noten eintragen (Tool → „Babepedia-Noten angleichen“).
+        // Von der Tool-Seite aus nimmt Babepedia keine Stimme an (Login/Cookies). Deshalb legt das Skript einen
+        // Auftrag ab und öffnet einen Babepedia-Tab (?bpvote=1), der ihn abarbeitet; der Fortschritt kommt über
+        // den GM-Speicher zurück ins Tool.
+        let votePoll = null, voteLast = '';
+        const voteSendProg = () => {
+            const prog = GM_getValue('bp_vote_prog', null);
+            if (!prog) { clearInterval(votePoll); votePoll = null; return; }
+            const sig = prog.id + '|' + prog.results.length + '|' + (prog.current || '') + '|' + !!prog.finished;
+            if (sig !== voteLast) { voteLast = sig; window.postMessage({ type: 'BP_VOTE_PROG', ...prog }, location.origin); }
+        };
+        const voteWatch = () => { voteLast = ''; voteSendProg(); if (!votePoll) votePoll = setInterval(voteSendProg, 800); };
+        window.addEventListener('message', (ev) => {
             if (ev.origin !== location.origin || !ev.data || typeof ev.data !== 'object') return;
             const d = ev.data;
-            if (d.type === 'BP_VOTE_PING') { window.postMessage({ type: 'BP_VOTE_ACK', v: 2 }, location.origin); return; }
-            if (d.type === 'BP_VOTE_END') {
-                GM_setValue('bp_vote_end', Date.now());
-                try { if (voteTab && !voteTab.closed) voteTab.close(); } catch (e) {}
-                voteTab = null; return;
+            if (d.type === 'BP_VOTE_PING') { window.postMessage({ type: 'BP_VOTE_ACK', v: 3 }, location.origin); return; }
+            if (d.type === 'BP_TOOL_READY' && GM_getValue('bp_vote_prog', null)) { voteWatch(); return; }   // Ergebnisse nachreichen
+            if (d.type === 'BP_VOTE_STOP') { GM_setValue('bp_vote_stop', String(d.id || '')); return; }
+            if (d.type === 'BP_VOTE_DONE_ACK') {
+                const prog = GM_getValue('bp_vote_prog', null);
+                if (prog && prog.id === d.id && prog.finished) { GM_setValue('bp_vote_prog', null); GM_setValue('bp_vote_job', null); }
+                return;
             }
-            if (d.type !== 'BP_VOTE') return;
-            const reply = (x) => window.postMessage({ type: 'BP_VOTE_RESULT', id: d.id, ...x }, location.origin);
-            const k = String(d.k || ''), x = parseInt(d.x, 10);
-            if (!/^\d+$/.test(k) || !(x >= 1 && x <= 10)) { reply({ ok: false, status: 0, reason: 'ungültige Werte' }); return; }
-            const url = /^https:\/\/www\.babepedia\.com\/babe\//.test(String(d.url || '')) ? d.url : '';
-            GM_setValue('bp_vote_res', null);
-            GM_setValue('bp_vote_req', { id: d.id, k, x, url, verify: !!d.verify, at: Date.now() });
-            if (!voteWorkerAlive()) {
-                GM_setValue('bp_vote_end', 0);
-                voteTab = GM_openInTab('https://www.babepedia.com/?bpvote=1', { active: false, insert: true, setParent: true });
-            }
-            const t0 = Date.now();
-            while (Date.now() - t0 < 45000) {
-                await new Promise(r => setTimeout(r, 300));
-                const res = GM_getValue('bp_vote_res', null);
-                if (res && res.id === d.id) { reply(res); return; }
-            }
-            reply({ ok: false, status: 0, reason: 'Babepedia-Tab antwortet nicht' });
+            if (d.type !== 'BP_VOTE_JOB' || !Array.isArray(d.items)) return;
+            const items = d.items.filter(it => /^\d+$/.test(String(it.k)) && it.x >= 1 && it.x <= 10)
+                .map(it => ({ _id: String(it._id || ''), k: String(it.k), x: parseInt(it.x, 10), name: String(it.name || ''), verify: !!it.verify,
+                    url: /^https:\/\/www\.babepedia\.com\/babe\//.test(String(it.url || '')) ? it.url : '' }));
+            GM_setValue('bp_vote_stop', '');
+            GM_setValue('bp_vote_job', { id: d.id, items, at: Date.now() });
+            GM_setValue('bp_vote_prog', { id: d.id, total: items.length, results: [], finished: false, current: '' });
+            GM_openInTab('https://www.babepedia.com/?bpvote=1', { active: true, insert: true, setParent: true });
+            voteWatch();
         });
 
         // Falls das Tool schon geladen ist: anpingen
@@ -166,47 +166,74 @@
     })();
     if (ARCHIVE === false) return; // andere Archiv-Seite -> nichts tun
 
-    // Hintergrund-Tab zum Eintragen von Noten (vom Tool aus geöffnet): stimmt wie die Seite selbst ab
+    // Babepedia-Tab zum Eintragen von Noten (vom Tool aus geöffnet, ?bpvote=1): stimmt wie die Seite selbst ab
     if (!ARCHIVE && /[?&]bpvote=1\b/.test(location.search)) {
+        runVoteJob();
+        return;
+    }
+    async function runVoteJob() {
+        const box = document.createElement('div');
+        box.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;width:min(420px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:#16161c;color:#eee;border:1px solid #00838f;border-radius:10px;padding:12px 14px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 6px 30px rgba(0,0,0,.5)';
+        box.innerHTML = '<b>⭐ Babepedia-Noten eintragen</b><div id="bpv-st" style="margin:6px 0"></div><button id="bpv-stop" style="padding:3px 10px">Anhalten</button><pre id="bpv-log" style="white-space:pre-wrap;margin:8px 0 0;font-size:12px;color:#bbb"></pre>';
+        const mount = () => (document.body || document.documentElement).appendChild(box);
+        if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
+        const st = (t) => { const el = box.querySelector('#bpv-st'); if (el) el.textContent = t; };
+        const log = (t) => { const el = box.querySelector('#bpv-log'); if (el) el.textContent += t + '\n'; };
+        const job = GM_getValue('bp_vote_job', null);
+        let prog = GM_getValue('bp_vote_prog', null);
+        if (!job || !Array.isArray(job.items)) { st('Kein Auftrag vorhanden – im Tool unter Daten → „Babepedia-Noten angleichen…“ starten.'); return; }
+        if (!prog || prog.id !== job.id) prog = { id: job.id, total: job.items.length, results: [], finished: false, current: '' };
+        if (prog.finished) { st('Dieser Auftrag ist schon erledigt. Du kannst den Tab schließen.'); return; }
+        const lock = GM_getValue('bp_vote_lock', null);
+        if (lock && lock.id === job.id && Date.now() - lock.t < 5000) { st('Läuft schon in einem anderen Tab.'); return; }
+        const hb = setInterval(() => GM_setValue('bp_vote_lock', { id: job.id, t: Date.now() }), 1000);
+        GM_setValue('bp_vote_lock', { id: job.id, t: Date.now() });
+        let stop = false;
+        box.querySelector('#bpv-stop').onclick = () => { stop = true; };
         document.title = '⭐ Noten eintragen … (Babe Organizer)';
-        let lastId = GM_getValue('bp_vote_req', null)?.id || null, idle = Date.now(), busy = false;
-        // Eine Anfrage, die vor dem Öffnen dieses Tabs gestellt wurde, gleich bearbeiten
-        const pre = GM_getValue('bp_vote_req', null);
-        if (pre && Date.now() - (pre.at || 0) < 40000) lastId = null;
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
         const readRating = (html) => {
             const doc = new DOMParser().parseFromString(html, 'text/html');
             const el = doc.querySelector('#rating-score');
             const m = el && el.textContent.match(/(\d+(?:\.\d+)?)/);
             return m ? m[1] : '';
         };
-        const tick = setInterval(async () => {
-            GM_setValue('bp_vote_alive', Date.now());
-            if ((GM_getValue('bp_vote_end', 0) || 0) > 0 || Date.now() - idle > 120000) { clearInterval(tick); window.close(); return; }
-            if (busy) return;
-            const req = GM_getValue('bp_vote_req', null);
-            if (!req || req.id === lastId) return;
-            lastId = req.id; busy = true; idle = Date.now();
-            let res;
+        const saveProg = () => GM_setValue('bp_vote_prog', prog);
+        let reason = '';
+        for (let i = prog.results.length; i < job.items.length; i++) {
+            if (stop || GM_getValue('bp_vote_stop', '') === job.id) { reason = 'angehalten'; break; }
+            const it = job.items[i];
+            prog.current = `${i + 1}/${job.items.length}: ${it.name} → ${it.x}`; saveProg(); st(prog.current);
+            const res = { _id: it._id, name: it.name, x: it.x, ok: false };
             try {
-                const r = await fetch(`/ajax-vote-profile.php?x=${encodeURIComponent(req.x)}&k=${encodeURIComponent(req.k)}`, {
-                    credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' }, referrer: req.url || location.href
+                const r = await fetch(`/ajax-vote-profile.php?x=${it.x}&k=${it.k}`, {
+                    credentials: 'include', headers: { 'Accept': '*/*', 'X-Requested-With': 'XMLHttpRequest' },
+                    referrer: it.url || location.href, method: 'GET', mode: 'cors'
                 });
-                const text = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
-                res = { id: req.id, ok: r.ok, status: r.status, text };
-                if (r.ok && req.verify && req.url) {
-                    await new Promise(z => setTimeout(z, 1200));
-                    const p = await fetch(req.url, { credentials: 'include', cache: 'no-store' });
-                    const seen = p.ok ? readRating(await p.text()) : '';
-                    res.seen = seen;
-                    if (String(parseInt(seen, 10)) !== String(req.x)) { res.ok = false; res.reason = `auf Babepedia steht danach ${seen || 'keine Note'} statt ${req.x}`; }
+                res.status = r.status;
+                res.text = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+                res.ok = r.ok;
+                if (r.ok && it.verify && it.url) {
+                    await wait(1200);
+                    const p = await fetch(it.url, { credentials: 'include', cache: 'no-store' });
+                    res.seen = p.ok ? readRating(await p.text()) : '';
+                    res.verified = true;
+                    if (String(parseInt(res.seen, 10)) !== String(it.x)) { res.ok = false; res.reason = `auf Babepedia steht danach ${res.seen || 'keine Note'} statt ${it.x}`; }
                 }
-            } catch (e) {
-                res = { id: req.id, ok: false, status: 0, reason: 'Fehler: ' + (e && e.message || e) };
-            }
-            GM_setValue('bp_vote_res', res);
-            busy = false; idle = Date.now();
-        }, 400);
-        return;
+            } catch (e) { res.reason = 'Fehler: ' + (e && e.message || e); }
+            prog.results.push(res); saveProg();
+            log(`${res.ok ? '✓' : '✗'} ${it.name}: ${it.x}${res.verified && res.ok ? ' (geprüft)' : ''}${res.reason ? ' – ' + res.reason : ''}`);
+            if ([429, 403, 503].includes(res.status)) { reason = 'Babepedia blockt gerade (zu viele Zugriffe)'; break; }
+            const okN = prog.results.filter(x => x.ok).length;
+            if (prog.results.length >= 3 && okN === 0) { reason = 'die ersten drei haben nicht geklappt'; break; }
+            if (i < job.items.length - 1) await wait(3000);
+        }
+        clearInterval(hb);
+        prog.finished = true; prog.reason = reason; prog.current = ''; saveProg();
+        const okN = prog.results.filter(x => x.ok).length;
+        st(`Fertig: ${okN} von ${prog.total} eingetragen${reason ? ' – ' + reason : ''}. Der Tab schließt sich gleich.`);
+        await wait(5000);
+        window.close();
     }
     const unwrapArchive = (u) => String(u || '').replace(/^https?:\/\/web\.archive\.org\/web\/\d+[a-z_]*\//i, '');
     const toArchiveImg = (u) => u ? `https://web.archive.org/web/${ARCHIVE.ts}im_/${unwrapArchive(u)}` : '';
