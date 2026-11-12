@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.18
+// @version      14.19
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -962,9 +962,14 @@
         const recent = getFetchedRecent();
         const inBatch = new Set(getStoredData().map(i => slugOfUrl(i['Profile URL'])));
         const failed = new Set(getFailed().map(f => slugOfUrl(f.url || f)));
+        const orgAt = org.at ? new Date(org.at).getTime() : 0;
         const list = org.stale.map(([url, ts]) => {
-            const k = slugOfUrl(url);
-            return { url, toolTs: ts || 0, ts: Math.max(ts || 0, recent[k] || 0, inBatch.has(k) ? Date.now() : 0), k };
+            const k = slugOfUrl(url), r = recent[k] || 0;
+            // Geholt, das Tool hat sich danach gemeldet und steht trotzdem noch auf dem alten Stand?
+            // Dann ist die Übernahme verloren gegangen → wieder normal einreihen (Fehlschläge bleiben zurückgestellt).
+            const lost = r && !failed.has(k) && !inBatch.has(k) && orgAt > r + 60000 && (ts || 0) < r - 864e5;
+            const eff = inBatch.has(k) ? Date.now() : lost ? (ts || 0) : Math.max(ts || 0, r);
+            return { url, toolTs: ts || 0, ts: eff, k };
         }).sort((a, b) => a.ts - b.ts);
         // Profile, die im Tool älter sind als das, was jetzt drankommt, aber zurückgestellt wurden – mit Grund
         const head = list.slice(0, n), lastTs = head.length ? head[head.length - 1].ts : 0;

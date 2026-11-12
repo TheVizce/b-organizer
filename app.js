@@ -1011,7 +1011,15 @@
     $('#pu-off').addEventListener('change', (ev) => { ui.reviewUpdates = !ev.target.checked; saveUI(); });
   }
 
+  // Nur ein Tab übernimmt gleichzeitig (mehrere Tool-Tabs bekommen denselben Batch vom Skript)
+  let entriesGen = 0;   // wird hochgezählt, wenn „entries“ von außen ersetzt wird (Cloud-Sync, anderer Tab)
+  function withImportLock(fn) {
+    return navigator.locks && navigator.locks.request ? navigator.locks.request('bp-organizer-import', fn) : fn();
+  }
   async function importItems(items) {
+    // Wird „entries“ während der Übernahme ersetzt (Sync aus der Cloud, anderer Tab hat gespeichert),
+    // dürfen die Ergebnisse nicht verloren gehen: am Ende in den aktuellen Stand einarbeiten.
+    const gen0 = entriesGen, touched = new Set(), dropped = new Set();
     let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0, gone = 0;
     const pendingBefore = JSON.stringify(pendingUpdates);
     if (items.length > 100) toast(`Übernehme ${items.length} Profile … bitte das Tool geöffnet lassen, bis die Bestätigung kommt.`);
@@ -1024,7 +1032,7 @@
       if (raw.__gone) {
         // Meldung vom Skript: Profil gibt es auf Babepedia nicht mehr
         const ex = index.get(keyOf(raw));
-        if (ex) { if (!isTrue(ex['Profile Deleted'])) { ex['Profile Deleted'] = 'true'; ex['Deleted Since'] = v(raw, 'Scraped At'); ex._updated = Date.now(); gone++; } ex['Scraped At'] = v(raw, 'Scraped At') || ex['Scraped At']; }
+        if (ex) { touched.add(ex); if (!isTrue(ex['Profile Deleted'])) { ex['Profile Deleted'] = 'true'; ex['Deleted Since'] = v(raw, 'Scraped At'); ex._updated = Date.now(); gone++; } ex['Scraped At'] = v(raw, 'Scraped At') || ex['Scraped At']; }
         else skipped++;
         continue;
       }
@@ -1054,7 +1062,7 @@
             if (!existing) renamed++;
             if (existing && existing !== old) {
               mergeOwn(old, existing);
-              entries = entries.filter(x => x !== existing);
+              entries = entries.filter(x => x !== existing); dropped.add(existing._id);
               index.delete(keyOf(existing)); byId.delete(existing._id);
               merged++;
             }
@@ -1065,6 +1073,7 @@
           }
         }
       }
+      if (existing) touched.add(existing);
       if (existing && !raw._id && isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = ''; existing['Deleted Since'] = ''; existing._updated = Date.now(); }
       if (existing && !raw._id && !raw.__direct && ui.reviewUpdates) {
         // bekanntes Profil von Babepedia: Änderungen zur Prüfung vormerken
@@ -1082,10 +1091,24 @@
         for (const f of ALL_FIELDS) e[f] = item[f] || '';
         if (!e.Favorite) e.Favorite = 'false';
         derive(e);
-        entries.push(e);
+        entries.push(e); touched.add(e);
         index.set(k, e); byId.set(e._id, e);
         added++;
       }
+    }
+    if (entriesGen !== gen0) {
+      // Stand wurde zwischendurch ausgetauscht → Babepedia-Felder der bearbeiteten Einträge übertragen
+      const cur = new Map(entries.map(x => [x._id, x]));
+      const KEEP = [...ALL_FIELDS, 'Profile Deleted', 'Deleted Since', 'Scraped At'];
+      for (const t of touched) {
+        const c = cur.get(t._id);
+        if (!c) { if (!dropped.has(t._id)) entries.push(t); continue; }
+        if (c === t) continue;
+        for (const f of KEEP) if (t[f] !== undefined && !OWN_FIELDS.includes(f)) c[f] = t[f];
+        for (const f of OWN_FIELDS) if (v(t, f) && !v(c, f)) c[f] = t[f];
+        c._updated = Math.max(c._updated || 0, t._updated || 0); derive(c);
+      }
+      if (dropped.size) entries = entries.filter(x => !dropped.has(x._id));
     }
     // offene Änderungen zuerst sichern – erst danach bestätigt das Tool dem Userscript den Empfang
     if (JSON.stringify(pendingUpdates) !== pendingBefore) await savePendingUpdates();
@@ -1191,7 +1214,7 @@
     if (d.type === 'BP_KNOWN_REQ' && ready) sendKnown(d.id);
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
-      bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
+      bridgeQueue = bridgeQueue.then(() => withImportLock(async () => { entries = await load(); return importItems(d.items); })).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
         sendKnown();   // neuer Stand (z. B. Scraped At) gleich ans Skript
         toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.gone ? `, ${r.gone} auf Babepedia gelöscht` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
@@ -2939,7 +2962,7 @@
       stampDelay: 1500,
       get: () => ({ entries }),
       apply: async (d) => {
-        entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive);
+        entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
         try { await save(); } catch { return false; }
         refreshFilters(); render();
         return true;
@@ -3430,7 +3453,7 @@
   window.addEventListener('hashchange', openFromHash);
 
   // Änderungen aus anderen Tabs übernehmen
-  if (channel) channel.onmessage = async () => { entries = await load(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
+  if (channel) channel.onmessage = async () => { const fresh = await load(); entries = fresh; entriesGen++; await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
   (async () => {
     $('#main').innerHTML = '<div class="empty"><p>Lade Daten…</p></div>';
