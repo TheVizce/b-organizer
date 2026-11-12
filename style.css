@@ -682,3 +682,8 @@ body.cards-noname .card .body { display: none; }
 .mg-item img, .mg-item .placeholder { width: 40px; height: 54px; object-fit: cover; border-radius: 5px; flex: none; display: grid; place-items: center; background: var(--surface-3); }
 .mg-opt { display: flex; align-items: flex-start; white-space: normal; margin: 4px 0; color: var(--text); }
 .mg-warn { color: #f0bd6a; }
+
+/* Update-Erinnerung */
+.upd-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 16px 10px; padding: 9px 14px; border: 1px solid rgba(0,131,143,.6); background: rgba(0,131,143,.14); border-radius: 10px; font-size: 13.5px; }
+.upd-banner[hidden] { display: none; }
+.upd-banner .upd-acts { display: flex; gap: 6px; margin-left: auto; }

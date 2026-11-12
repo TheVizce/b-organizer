@@ -1194,6 +1194,71 @@
   }
   // Dem Skript mitteilen, welche Profile schon im Tool sind (Ausgrauen auf Babepedia) und wann sie
   // zuletzt geholt wurden (für „🔁 Update – älteste zuerst“)
+  // ---------- Update-Plan: rechtzeitig und in verträglichen Portionen aktualisieren ----------
+  // Ziel: jedes aktive Babepedia-Profil spätestens alle `updInterval` Tage neu holen, pro Lauf höchstens `updMax`.
+  // Empfohlen wird pro Woche mindestens die „Wochenmenge“ (aktive Profile · 7 / Rhythmus) der ältesten – auch wenn sie noch
+  // nicht fällig sind. So zieht sich ein großer Block gleich alter Profile (z. B. nach einem Komplett-Update) von selbst auseinander.
+  // Erinnert wird, wenn etwas überfällig ist oder in den letzten 7 Tagen weniger als die Wochenmenge geholt wurde –
+  // höchstens einmal pro Tag (nach einem Lauf erst am nächsten Tag wieder), damit es nicht zu viel auf einmal wird.
+  if (!ui.updInterval) ui.updInterval = 90;
+  if (!ui.updMax) ui.updMax = 150;
+  const isActiveLink = (e) => /^https?:\/\/(www\.)?babepedia\.com\/babe\//i.test(v(e, 'Profile URL')) && !isTrue(e['Profile Deleted']);
+  function updatePlan() {
+    const DAY = 864e5, now = Date.now(), iv = ui.updInterval * DAY;
+    let active = 0, overdue = 0, soon = 0, oldest = Infinity, newest = 0, week = 0;
+    for (const e of entries) {
+      if (!isActiveLink(e)) continue;
+      active++;
+      const ts = scrapedTs(e);
+      oldest = Math.min(oldest, ts); newest = Math.max(newest, ts);
+      if (ts >= now - 7 * DAY) week++;
+      if (ts < now - iv) overdue++;
+      else if (ts < now - iv + 7 * DAY) soon++;
+    }
+    const perWeek = Math.ceil(active * 7 / ui.updInterval);
+    const want = Math.min(active, Math.max(overdue + soon, perWeek - week));
+    const sinceLast = newest ? Math.floor((now - newest) / DAY) : 999;
+    const due = active > 0 && (overdue > 0 || (want >= Math.max(10, perWeek * 0.2) && sinceLast >= 1));
+    const recommended = due ? Math.min(ui.updMax, want) : 0;
+    return { active, overdue, soon, perWeek, week, want, sinceLast, recommended, oldest: oldest === Infinity ? 0 : oldest, interval: ui.updInterval, max: ui.updMax, runs: due ? Math.ceil(want / ui.updMax) : 0 };
+  }
+  function renderUpdateBanner() {
+    const box = $('#upd-banner'); if (!box) return;
+    const pl = updatePlan();
+    let hide = false; try { hide = localStorage.getItem('bp-organizer-upd-hide') === new Date().toDateString(); } catch {}
+    if (!pl.recommended || hide) { box.hidden = true; return; }
+    box.hidden = false;
+    const head = pl.overdue ? `${pl.overdue} Profile sind überfällig${pl.soon ? ` (+${pl.soon} diese Woche)` : ''}` : `Update fällig – in den letzten 7 Tagen ${pl.week} von ${pl.perWeek} Profilen der Wochenmenge geholt`;
+    box.innerHTML = `<span>🔁 <b>${head}</b> – empfohlen: <b>${pl.recommended}</b> holen${pl.runs > 1 ? ` (noch ${pl.want} diese Woche, also ${pl.runs} Läufe à höchstens ${pl.max} an verschiedenen Tagen)` : ''}. Auf Babepedia: „🔁 Update“.</span>
+      <span class="upd-acts"><button class="btn small" id="upd-cfg">Rhythmus…</button><button class="btn small ghost" id="upd-hide">Heute ausblenden</button></span>`;
+    $('#upd-hide').onclick = () => { try { localStorage.setItem('bp-organizer-upd-hide', new Date().toDateString()); } catch {} box.hidden = true; };
+    $('#upd-cfg').onclick = showUpdateSettings;
+  }
+  function showUpdateSettings() {
+    const pl = updatePlan();
+    openModal(`
+      <div class="modal-head"><h2>Update-Rhythmus</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help">
+        <p>${pl.active} Einträge haben ein aktives Babepedia-Profil. Das Tool erinnert, wenn Profile fällig werden, und empfiehlt dem Skript eine verträgliche Menge pro Lauf.</p>
+        <div class="field"><label>Jedes Profil spätestens alle … Tage aktualisieren</label><input type="number" id="upd-iv" min="7" max="365" step="1" value="${ui.updInterval}"></div>
+        <div class="field"><label>Höchstens … Profile pro Lauf</label><input type="number" id="upd-max" min="10" max="1000" step="10" value="${ui.updMax}"></div>
+        <p class="muted" id="upd-info"></p>
+      </div>
+      <div class="form-foot"><button class="btn" data-action="close">Abbrechen</button><button class="btn primary" id="upd-save">Übernehmen</button></div>`);
+    const info = () => {
+      const iv = Math.max(7, +$('#upd-iv').value || 90), mx = Math.max(10, +$('#upd-max').value || 150);
+      const pw = Math.ceil(pl.active * 7 / iv), runs = Math.ceil(pw / mx);
+      $('#upd-info').textContent = `Das sind etwa ${pw} Profile pro Woche – also ${runs <= 1 ? 'ein Lauf' : runs + ' Läufe'} pro Woche (bei ca. 15 Profilen pro Minute rund ${Math.round(pw / 15)} Minuten insgesamt).`;
+    };
+    $('#upd-iv').addEventListener('input', info); $('#upd-max').addEventListener('input', info); info();
+    $('#upd-save').addEventListener('click', () => {
+      ui.updInterval = Math.max(7, Math.min(365, Math.round(+$('#upd-iv').value || 90)));
+      ui.updMax = Math.max(10, Math.min(1000, Math.round(+$('#upd-max').value || 150)));
+      saveUI(); closeModal(true); renderUpdateBanner(); sendKnown();
+      toast('Update-Rhythmus gespeichert.', 'ok');
+    });
+  }
+
   function sendKnown(reqId) {
     const slugs = [], ids = [], stale = [];
     for (const e of entries) {
@@ -1203,7 +1268,7 @@
       if (/^https?:\/\/(www\.)?babepedia\.com\/babe\//i.test(url) && !isTrue(e['Profile Deleted'])) stale.push([url, scrapedTs(e)]);
     }
     stale.sort((a, b) => a[1] - b[1]);
-    window.postMessage({ type: 'BP_KNOWN', id: reqId || null, slugs, ids, count: entries.length, stale }, location.origin);
+    window.postMessage({ type: 'BP_KNOWN', id: reqId || null, slugs, ids, count: entries.length, stale, plan: updatePlan() }, location.origin);
   }
   let bridgeQueue = Promise.resolve();
   window.addEventListener('message', (ev) => {
@@ -1547,6 +1612,7 @@
   }
 
   function render() {
+    renderUpdateBanner();
     if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
     $('#count').textContent = list.length === entries.length ? `${entries.length} Einträge` : `${list.length} von ${entries.length}`;
@@ -2764,6 +2830,7 @@
         break;
       case 'help': showHelp(); break;
       case 'clear-scores': clearScores(); break;
+      case 'upd-cfg': showUpdateSettings(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {
           entries = []; saveQuiet(); refreshFilters(); render(); toast('Alle Einträge gelöscht.');

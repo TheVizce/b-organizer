@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.19
+// @version      14.20
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -51,7 +51,7 @@
 
             if (d.type === 'BP_TOOL_READY') requestKnown();
             if (d.type === 'BP_KNOWN' && Array.isArray(d.slugs)) {
-                GM_setValue('bp_known_organizer', { slugs: d.slugs, ids: Array.isArray(d.ids) ? d.ids : [], stale: Array.isArray(d.stale) ? d.stale : [], count: d.count || d.slugs.length, at: new Date().toISOString() });
+                GM_setValue('bp_known_organizer', { slugs: d.slugs, ids: Array.isArray(d.ids) ? d.ids : [], stale: Array.isArray(d.stale) ? d.stale : [], plan: d.plan || null, count: d.count || d.slugs.length, at: new Date().toISOString() });
             }
             if (d.type === 'BP_TOOL_READY' && !sent) {
                 sent = true;
@@ -302,6 +302,8 @@
         #bp-tool-btn:hover { background-color: #7d2747; }
         #bp-update-btn { background-color: #00838f; }
         #bp-update-btn:hover { background-color: #005662; }
+        #bp-update-btn.due { box-shadow: 0 0 0 2px #ffcc80; animation: bpPulse 2s ease-in-out 3; }
+        @keyframes bpPulse { 50% { box-shadow: 0 0 0 5px rgba(255,204,128,.35); } }
         #bp-failed-btn { background-color: #8d6e00; }
         #bp-failed-btn:hover { background-color: #5f4a00; }
         #bp-ranker-btn { background-color: #b8860b; }
@@ -1001,7 +1003,9 @@
     }
 
     async function updateOldest(onProgress) {
-        const def = Number(GM_getValue('bp_update_n', 300)) || 300;
+        const orgPlan = (GM_getValue('bp_known_organizer', null) || {}).plan;
+        // Vorschlag aus dem Update-Plan des Tools (fällig in den nächsten 7 Tagen, höchstens „pro Lauf“); sonst zuletzt genutzte Zahl
+        const def = (orgPlan && orgPlan.recommended) || Number(GM_getValue('bp_update_n', 150)) || 150;
         const peek = pickOldest(1);
         if (!peek) { alert('Das Skript kennt den Stand des Tools noch nicht.\n\nBitte das Tool einmal öffnen (🗂️ Tool öffnen) und danach hier erneut starten.'); return; }
         const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('de-DE') : 'nie';
@@ -1010,11 +1014,12 @@
         if (w.failed) notes.push(`${w.failed} zuletzt fehlgeschlagen → „↻ Fehlgeschlagene“`);
         if (w.batch) notes.push(`${w.batch} schon geholt, warten auf Übernahme → „🗂️ Tool öffnen“`);
         if (w.notImported) notes.push(`${w.notImported} kürzlich geholt, im Tool aber noch nicht aktualisiert → Tool öffnen`);
-        const ans = prompt(`Rollierendes Update: Wie viele Profile holen?\n\nDie am längsten nicht aktualisierten zuerst (als Nächstes dran: Stand ${fmt(peek.picked[0].ts)}).\n${peek.total} Profile im Tool · Stand vom ${new Date(peek.at).toLocaleString('de-DE')}` +
+        const planTxt = orgPlan ? `\n\nPlan (Tool): alle ${orgPlan.interval} Tage, höchstens ${orgPlan.max} pro Lauf · ${orgPlan.overdue} überfällig, ${orgPlan.soon} diese Woche fällig.` : '';
+        const ans = prompt(`Rollierendes Update: Wie viele Profile holen?${planTxt}\n\nDie am längsten nicht aktualisierten zuerst (als Nächstes dran: Stand ${fmt(peek.picked[0].ts)}).\n${peek.total} Profile im Tool · Stand vom ${new Date(peek.at).toLocaleString('de-DE')}` +
             (full.deferred ? `\n\nZurückgestellt (im Tool älter, ältestes ${fmt(full.oldestTool)}):\n• ${notes.join('\n• ')}` : ''), String(def));
         if (ans === null) return;
         const n = Math.max(1, Math.min(peek.total, Math.floor(Number(ans)) || def));
-        GM_setValue('bp_update_n', n);
+        if (!orgPlan || n !== orgPlan.recommended) GM_setValue('bp_update_n', n);
         const { picked } = pickOldest(n);
         let okCount = 0, goneCount = 0; const failed = [];
         for (let i = 0; i < picked.length; i++) {
@@ -1367,12 +1372,17 @@
         const updateBtn = document.createElement('button');
         updateBtn.id = 'bp-update-btn';
         updateBtn.className = 'bp-btn';
-        updateBtn.innerHTML = '🔁 Update (älteste)';
+        const updLabel = () => {
+            const pl = (GM_getValue('bp_known_organizer', null) || {}).plan;
+            if (pl && pl.recommended) { updateBtn.classList.add('due'); return `🔁 Update · ${pl.recommended} fällig`; }
+            updateBtn.classList.remove('due'); return '🔁 Update (älteste)';
+        };
+        updateBtn.innerHTML = updLabel();
         updateBtn.title = 'Holt die Profile neu, die im Tool am längsten nicht aktualisiert wurden (Anzahl wählbar)';
         updateBtn.addEventListener('click', async () => {
             updateBtn.disabled = true;
             await updateOldest((txt) => { updateBtn.innerHTML = txt; updateAddBtnText(); });
-            updateBtn.innerHTML = '🔁 Update (älteste)';
+            updateBtn.innerHTML = updLabel();
             updateBtn.disabled = false;
             updateAddBtnText();
         });

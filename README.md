@@ -258,3 +258,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - 14.18 (Skript): Die Abfrage bei **🔁 Update (älteste)** nennt zurückgestellte Profile mit Grund – im Tool älter, aber zuletzt fehlgeschlagen (→ ↻ Fehlgeschlagene), schon geholt und wartend (→ Tool öffnen) oder geholt, aber im Tool noch nicht aktualisiert. „Als Nächstes dran“ zeigt den Stand des ersten Profils, das jetzt geholt wird.
 - Tool: Übernahmen vom Skript laufen tabübergreifend nacheinander (Web Locks) und starten mit dem frischen Stand aus der Datenbank. Wird der Stand während einer Übernahme ersetzt (Cloud-Sync, Speichern in einem anderen Tab), werden die Ergebnisse in den neuen Stand eingearbeitet statt verloren zu gehen.
 - 14.19 (Skript): Profile, die geholt wurden, deren Übernahme im Tool aber verloren ging (Tool meldet danach weiter den alten Stand), reiht das rollierende Update automatisch wieder ein.
+
+## Änderungen in 14.20 (Skript) / Tool – Update-Rhythmus und Erinnerung
+- **Daten → Update-Rhythmus…**: „jedes Profil spätestens alle N Tage“ (Standard 90) und „höchstens M pro Lauf“ (Standard 150). Daraus ergibt sich die Wochenmenge (aktive Profile · 7 / N).
+- Das Tool erinnert mit einem Hinweis oben, wenn Profile überfällig sind oder in den letzten 7 Tagen weniger als die Wochenmenge geholt wurde – höchstens einmal pro Tag („Heute ausblenden“ möglich). Es wird immer mindestens die Wochenmenge der ältesten empfohlen, auch wenn sie noch nicht fällig sind; so verteilt sich ein großer gleich alter Block von selbst über die Wochen.
+- Das Skript bekommt den Plan vom Tool: Der Knopf zeigt „🔁 Update · N fällig“ (hervorgehoben), die Abfrage schlägt genau diese Zahl vor und nennt Rhythmus und Stand.
