@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.15
+// @version      14.16
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -340,6 +340,7 @@
         return '';
     }
 
+    let lastFinalUrl = '';
     async function fetchWithRetry(url, options = {}, retries = 5, initialDelay = 3000) {
         let delay = initialDelay;
         for (let attempt = 1; attempt <= retries; attempt++) {
@@ -367,12 +368,17 @@
                     continue;
                 }
 
+                if (res.status === 404 || res.status === 410) {
+                    // Seite gibt es nicht (mehr) – nicht wiederholen
+                    const e404 = new Error(`HTTP ${res.status}`); e404.gone = true; throw e404;
+                }
                 if (res.status < 200 || res.status >= 300) {
                     throw new Error(`HTTP ${res.status}`);
                 }
-
+                lastFinalUrl = res.finalUrl || url;
                 return res.responseText;
             } catch (err) {
+                if (err && err.gone) throw err;
                 console.warn(`[Fetch Retry] Versuch ${attempt} für ${url} fehlgeschlagen.`, err.message);
                 if (attempt < retries) {
                     await new Promise(r => setTimeout(r, delay));
@@ -963,7 +969,7 @@
     }
 
     // Am Ende eines Laufs: Fehlschläge einmal nachholen, dann anbieten, das Tool zu öffnen
-    async function finishRun(title, okCount, total, failed, onProgress) {
+    async function finishRun(title, okCount, total, failed, onProgress, goneCount = 0) {
         let retried = 0;
         if (failed.length) {
             if (onProgress) onProgress(`⏸ Pause vor 2. Versuch (${failed.length})`);
@@ -977,8 +983,9 @@
         }
         const rest = failed.length - retried;
         const msg = `${title}: ${okCount} von ${total} Profilen geholt` + (retried ? ` (${retried} davon im 2. Versuch)` : '') + '.' +
-            (rest ? `\n${rest} weiterhin fehlgeschlagen – später über „↻ Fehlgeschlagene“.` : '');
-        if (okCount && confirm(msg + '\n\nJetzt ins Tool übernehmen?')) GM_openInTab(TOOL_URL, { active: true });
+            (rest ? `\n${rest} weiterhin fehlgeschlagen – später über „↻ Fehlgeschlagene“.` : '') +
+            (goneCount ? `\n${goneCount} Profil(e) gibt es auf Babepedia nicht mehr – das Tool markiert sie als gelöscht.` : '');
+        if ((okCount || goneCount) && confirm(msg + '\n\nJetzt ins Tool übernehmen?')) GM_openInTab(TOOL_URL, { active: true });
         else if (!okCount) alert(msg);
     }
 
@@ -992,14 +999,14 @@
         const n = Math.max(1, Math.min(peek.total, Math.floor(Number(ans)) || def));
         GM_setValue('bp_update_n', n);
         const { picked } = pickOldest(n);
-        let okCount = 0; const failed = [];
+        let okCount = 0, goneCount = 0; const failed = [];
         for (let i = 0; i < picked.length; i++) {
             if (onProgress) onProgress(`⏳ ${i + 1}/${picked.length} Update`);
             const res = await fetchOneProfile(picked[i].url, false);
-            if (res.ok) okCount++; else { failed.push({ url: picked[i].url, move: false }); noteFetched(picked[i].url); }   // auch Fehlschläge rotieren weiter (z. B. gelöschte Profile)
+            if (res.ok) okCount++; else if (res.gone) goneCount++; else { failed.push({ url: picked[i].url, move: false }); noteFetched(picked[i].url); }   // auch Fehlschläge rotieren weiter (z. B. gelöschte Profile)
             await new Promise(r => setTimeout(r, getRandomDelay(MIN_DELAY_MS, MAX_DELAY_MS)));
         }
-        await finishRun('Update', okCount, picked.length, failed, onProgress);
+        await finishRun('Update', okCount, picked.length, failed, onProgress, goneCount);
     }
 
     // Holt ein einzelnes Profil, legt es im Batch ab und verschiebt es ggf. in GELISTET
@@ -1007,6 +1014,8 @@
         try {
             const htmlText = await fetchWithRetry(url);
             const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+            // Babepedia leitet gelöschte Profile teils auf eine andere Seite (Suche/Startseite) um
+            if (lastFinalUrl && !/\/babe\//i.test(lastFinalUrl)) { const g = new Error('Profil leitet nicht mehr auf ein Profil weiter: ' + lastFinalUrl); g.gone = true; throw g; }
             const { profileData, babeId } = await parseProfileFromDoc(doc, url);
             if (!profileData || !profileData.Name) {
                 // z. B. Bot-Schutz-/Captcha-Seite statt Profil
@@ -1026,6 +1035,15 @@
             return { ok: true };
         } catch (err) {
             console.error(`[Fetch Fehler] ${url}:`, err.message);
+            if (err && err.gone) {
+                // Profil existiert auf Babepedia nicht mehr → dem Tool melden (Status „gelöscht“), nicht als Fehlschlag merken
+                const list = getStoredData();
+                if (!list.some(i => i['Profile URL'] === url && i.__gone)) list.push({ 'Profile URL': url, __gone: true, 'Scraped At': getTodayDDMMYYYY(), __reason: err.message });
+                saveStoredData(list);
+                clearFailed(url);
+                noteFetched(url);
+                return { ok: false, gone: true, error: err.message };
+            }
             markFailed(url, moveToListed, err.message);
             return { ok: false, error: err.message };
         }
@@ -1191,14 +1209,14 @@
             return;
         }
 
-        let okCount = 0;
+        let okCount = 0, goneCount = 0;
         const failedPages = [];
 
         for (let i = 0; i < links.length; i++) {
             const url = links[i];
             if (onProgress) onProgress(i + 1, links.length);
             const res = await fetchOneProfile(url, moveToListed);
-            if (res.ok) okCount++; else failedPages.push({ url, error: res.error, move: moveToListed });
+            if (res.ok) okCount++; else if (res.gone) goneCount++; else failedPages.push({ url, error: res.error, move: moveToListed });
             await new Promise(r => setTimeout(r, getRandomDelay(MIN_DELAY_MS, MAX_DELAY_MS)));
         }
 
@@ -1206,7 +1224,7 @@
             console.warn("=== FEHLGESCHLAGENE PROFILE ===");
             console.table(failedPages);
         }
-        await finishRun('Auto Fetch fertig', okCount, links.length, failedPages, onProgress);
+        await finishRun('Auto Fetch fertig', okCount, links.length, failedPages, onProgress, goneCount);
     }
 
     function initArchiveUI() {

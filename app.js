@@ -16,7 +16,7 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
@@ -24,7 +24,7 @@
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
-    { title: 'Babepedia', fields: ['Profile URL', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
+    { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
   ];
@@ -32,7 +32,7 @@
 
   const TYPES = {
     'Born': 'date', 'Died': 'date', 'Scraped At': 'date',
-    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool', 'In Ranker': 'bool',
+    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool', 'In Ranker': 'bool', 'Profile Deleted': 'bool', 'Deleted Since': 'date',
     'Tattoos': ['n/a', 'Ja', 'Nein'], 'Piercings': ['n/a', 'Ja', 'Nein'],
     'Boobs': ['', 'Real/Natural', 'Fake/Enhanced', 'Real (Removed implants)', 'Unknown'],
     'Height': 'num', 'Weight': 'num', 'Global Rating': 'num', 'Votes': 'num', 'User Rating': 'num',
@@ -288,6 +288,14 @@
     }
   }
   const hasScore = (e) => !!v(e, 'Score');
+  // Profil-Status: ok · archive (nur im Internet Archive) · gone-archive (gelöscht, Archiv vorhanden) · gone (gelöscht, kein Archiv)
+  function profileStatus(e) {
+    const archiveOnly = /web\.archive\.org/i.test(v(e, 'Profile URL'));
+    const hasArchive = archiveOnly || !!v(e, 'Archive URL');
+    if (isTrue(e['Profile Deleted'])) return hasArchive ? 'gone-archive' : 'gone';
+    return archiveOnly ? 'archive' : 'ok';
+  }
+  const STATUS_LABEL = { ok: 'Profil vorhanden', archive: 'nur im Internet Archive', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
   const fmtScoreVal = (x) => x == null || x === '' ? '–' : String(x).replace('.5', '½').replace('.', ',');
 
   function derive(e) {
@@ -952,7 +960,7 @@
   }
 
   async function importItems(items) {
-    let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0;
+    let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0, gone = 0;
     const pendingBefore = JSON.stringify(pendingUpdates);
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const byId = new Map(entries.map(e => [e._id, e]));
@@ -960,6 +968,13 @@
     const now = Date.now();
     for (let raw of items) {
       if (!raw || typeof raw !== 'object') { skipped++; continue; }
+      if (raw.__gone) {
+        // Meldung vom Skript: Profil gibt es auf Babepedia nicht mehr
+        const ex = index.get(keyOf(raw));
+        if (ex) { if (!isTrue(ex['Profile Deleted'])) { ex['Profile Deleted'] = 'true'; ex['Deleted Since'] = v(raw, 'Scraped At'); ex._updated = Date.now(); gone++; } ex['Scraped At'] = v(raw, 'Scraped At') || ex['Scraped At']; }
+        else skipped++;
+        continue;
+      }
       const item = {};
       for (const f of ALL_FIELDS) if (raw[f] !== undefined && raw[f] !== null) item[f] = String(raw[f]).trim();
       if (!item.Name) { skipped++; continue; }
@@ -990,6 +1005,7 @@
           }
         }
       }
+      if (existing && !raw._id && isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = ''; existing['Deleted Since'] = ''; existing._updated = Date.now(); }
       if (existing && !raw._id && !raw.__direct && ui.reviewUpdates) {
         // bekanntes Profil von Babepedia: Änderungen zur Prüfung vormerken
         if (addPending(existing, item)) pending++;
@@ -1017,7 +1033,7 @@
     render();
     await save();
     if (pending) setTimeout(() => { if (overlay.hidden) showPending(); else toast(`${pending} Einträge mit Änderungen – oben „Änderungen prüfen“.`); }, 300);
-    return { added, updated, skipped, merged, renamed, pending };
+    return { added, updated, skipped, merged, renamed, pending, gone };
   }
 
   function parseCSV(text) {
@@ -1101,7 +1117,7 @@
       const s = slugOf(e['Profile URL']); if (s) slugs.push(s);
       const id = v(e, 'Babe ID'); if (id) ids.push(String(id));
       const url = v(e, 'Profile URL');
-      if (/^https?:\/\/(www\.)?babepedia\.com\/babe\//i.test(url)) stale.push([url, scrapedTs(e)]);
+      if (/^https?:\/\/(www\.)?babepedia\.com\/babe\//i.test(url) && !isTrue(e['Profile Deleted'])) stale.push([url, scrapedTs(e)]);
     }
     stale.sort((a, b) => a[1] - b[1]);
     window.postMessage({ type: 'BP_KNOWN', id: reqId || null, slugs, ids, count: entries.length, stale }, location.origin);
@@ -1118,7 +1134,7 @@
       bridgeQueue = bridgeQueue.then(() => importItems(d.items)).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
         sendKnown();   // neuer Stand (z. B. Scraped At) gleich ans Skript
-        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
+        toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.gone ? `, ${r.gone} auf Babepedia gelöscht` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
       }).catch(() => toast('Übernahme fehlgeschlagen – die Profile bleiben im Userscript gespeichert.', 'err'));
     }
   });
@@ -1212,6 +1228,7 @@
     const cf = $('#f-cat').value;
     const rk = $('#f-ranker').value;
     const mf = $('#f-missing').value;
+    const sf = $('#f-status').value;
 
     const xf = Object.entries(xfVals).filter(([, x]) => x);
     let list = entries.filter(e => {
@@ -1222,6 +1239,7 @@
         if (want === '__empty' ? vals.length : !vals.includes(want)) return false;
       }
       if (cf && !catList(e).includes(cf)) return false;
+      if (sf) { const st = profileStatus(e); if (sf === 'gone-any' ? !st.startsWith('gone') : st !== sf) return false; }
       if (mf) {
         const miss = CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([f]) => f);
         if (mf === 'any') { if (!miss.length) return false; }
@@ -1286,7 +1304,7 @@
   const FIELD_LABELS = {
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)'
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status'
   };
   const lab = (f) => FIELD_LABELS[f] || f;
   const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
@@ -1294,7 +1312,7 @@
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID'];
   const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
-    ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']];
+    ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
@@ -1503,7 +1521,7 @@
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
-            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
+            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${profileStatus(e).startsWith('gone') ? `<span class="badge gone" title="${esc(STATUS_LABEL[profileStatus(e)])}">${profileStatus(e) === 'gone' ? '⚠︎ gelöscht' : '🏛️ gelöscht'}</span>` : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
           </div>
         </div>
         <div class="body">
@@ -1522,9 +1540,10 @@
   const STAT_CATS = [
     ['Nationality', 'Nationalität'], ['Profession Category', 'Bereich'], ['Professions', 'Professions'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'],
     ['Body type', 'Figur'], ['Ethnicity', 'Ethnicity'], ['Bra/Cup', 'Cup'], ['Boobs', 'Boobs'], ['Sexuality', 'Sexuality'], ['Tattoos', 'Tattoos'],
-    ['Piercings', 'Piercings'], ['Active', 'Aktiv'], ['Favorite', 'Favorit'], ['Tags', 'Tags'], ['Geburtsland', 'Geburtsland'], ['Birthplace', 'Geburtsort']];
+    ['Piercings', 'Piercings'], ['Active', 'Aktiv'], ['__status', 'Profil-Status'], ['Favorite', 'Favorit'], ['Tags', 'Tags'], ['Geburtsland', 'Geburtsland'], ['Birthplace', 'Geburtsort']];
   const COUNTRY_ALIAS = { 'usa': 'United States', 'us': 'United States', 'u.s.': 'United States', 'uk': 'United Kingdom', 'england': 'United Kingdom', 'russian federation': 'Russia' };
   function statValues(e, f) {
+    if (f === '__status') return [STATUS_LABEL[profileStatus(e)]];
     if (f !== 'Geburtsland') return fieldValues(e, f);
     const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return [];
     const last = bp.split(',').pop().trim(); return last ? [COUNTRY_ALIAS[last.toLowerCase()] || last] : [];
@@ -1970,6 +1989,7 @@
             ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
+          ${profileStatus(e).startsWith('gone') ? `<div class="sec gone-box">⚠︎ <b>${esc(STATUS_LABEL[profileStatus(e)])}</b>${v(e, 'Deleted Since') ? ` <span class="muted">(festgestellt ${esc(fmtDate(v(e, 'Deleted Since')))})</span>` : ''}<br><span class="muted">Daten und Bilder bleiben erhalten; das rollierende Update fragt dieses Profil nicht mehr ab.${profileStatus(e) === 'gone' ? ' Bilder von Babepedia können nach und nach nicht mehr laden – eigene Bilder hochladen sichert sie.' : ''} Taucht das Profil wieder auf, wird der Status beim nächsten Holen automatisch zurückgesetzt.</span></div>` : ''}
           ${scoreBox(e)}
           ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
           ${sec('Allgemein', GROUPS[0].fields)}
@@ -2696,7 +2716,7 @@
   });
   let searchTimer = null;
   $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); });
-  ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing'].forEach(s => $(s).addEventListener('input', render));
+  ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing', '#f-status'].forEach(s => $(s).addEventListener('input', render));
   // Bild-Filter: ungeprüfte Einträge im Hintergrund prüfen, Liste danach aktualisieren
   $('#f-missing').addEventListener('input', (ev) => { if (filterNeedsImages(ev.target.value)) scanImages(false); });
   $('#sort').addEventListener('change', (ev) => {
@@ -2733,7 +2753,7 @@
   if (ui.sort === 'mine') ui.sort = 'score';   // „Meine Bewertung“ ist jetzt die Tool-Note
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
-    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-fav').checked = false;
+    $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-status').value = ''; $('#f-fav').checked = false;
     for (const k of Object.keys(xfVals)) delete xfVals[k];
     statFilter = null;
     renderExtraFilters(); render();

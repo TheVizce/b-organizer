@@ -240,3 +240,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Vier Noten mit festen Namen: **Babepedia Ø** (Durchschnitt aller Nutzer, Feld `Global Rating`), **Meine Babepedia-Note** (`User Rating`), **🏆 Ranker-Score** (aus dem Image Ranker) und **♥ Tool-Note** (aus den Kategorien, Feld `Score`; gerundet in `My Rating`). Die Feldnamen in den Daten bleiben englisch.
 - Die direkte Bewertung 1–10 ohne Kategorien ist entfernt. Vorhandene direkte Werte wurden als „Alte eigene Note“ (`My Rating (old)`) aufgehoben. In der Detailansicht öffnet `R` den Bewertungsmodus für den Eintrag.
 - ⚙︎ Ansicht: Kategorien einzeln oder kompakt („G4½ B4 H4 C3 S2½“) als Kachel-Angabe, Kachelgröße klein/mittel/groß, Bildausschnitt oben, „nur Bilder“.
+
+## Änderungen in 14.16 (Skript) / Tool – gelöschte Babepedia-Profile
+- Antwortet Babepedia mit 404/410 oder leitet ein Profil auf eine Nicht-Profilseite um, meldet das Skript das Profil als gelöscht (kein Fehlschlag, keine 5 Wiederholungen). Das Tool setzt **Babepedia-Profil gelöscht** (`Profile Deleted`) und **Gelöscht festgestellt am** (`Deleted Since`).
+- Status je Eintrag: Profil vorhanden · nur im Internet Archive · gelöscht – Archiv vorhanden · gelöscht – kein Archiv. Filter **Profil-Status**, Abzeichen ⚠︎/🏛️ auf der Kachel, Hinweis in der Detailansicht, Statistik.
+- Gelöschte Profile bietet das rollierende Update nicht mehr an. Taucht ein Profil wieder auf (erfolgreich geholt), wird der Status automatisch zurückgesetzt. Von Hand: Bearbeiten → Babepedia → „Babepedia-Profil gelöscht“.

@@ -636,3 +636,5 @@ body.cards-noname .card .body { display: none; }
 .cfg-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .cfg-grid .chk { white-space: normal; align-items: flex-start; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
 .cfg-grid .chk input { flex: none; margin-top: 2px; }
+.badge.gone { background: rgba(80,20,20,.85); color: #ffb4b4; }
+.gone-box { border: 1px solid rgba(240,120,120,.45); background: rgba(240,120,120,.08); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; }
