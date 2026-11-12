@@ -2660,7 +2660,7 @@
   $('#btn-random').addEventListener('click', randomEntry);
   $('#btn-rate').addEventListener('click', openRater);
   // „Zufällig“ in der Sortierung: bei jeder erneuten Wahl neu mischen
-  $('#sort').addEventListener('change', () => { if (ui.sort === 'random') { shuffleSeed = Math.floor(Math.random() * 2 ** 31); render(); } });
+
   {
     // Detail: seitlich wischen = vorheriger/nächster Eintrag
     let sx = 0, sy = 0, st = 0, ok = false;
@@ -2685,7 +2685,11 @@
   ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing'].forEach(s => $(s).addEventListener('input', render));
   // Bild-Filter: ungeprüfte Einträge im Hintergrund prüfen, Liste danach aktualisieren
   $('#f-missing').addEventListener('input', (ev) => { if (filterNeedsImages(ev.target.value)) scanImages(false); });
-  $('#sort').addEventListener('change', (ev) => { ui.sort = ev.target.value; saveUI(); render(); });
+  $('#sort').addEventListener('change', (ev) => {
+    ui.sort = ev.target.value;
+    if (ui.sort === 'random') shuffleSeed = Math.floor(Math.random() * 2 ** 31);   // erneut wählen = neu mischen
+    saveUI(); render();
+  });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; if (ui.view !== 'stats') ui.lastListView = ui.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
   $('#main').addEventListener('click', (ev) => {
