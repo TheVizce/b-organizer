@@ -1837,7 +1837,7 @@
       <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundete Tool-Note zum Eintragen auf Babepedia">Auf Babepedia eintragen: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
   }
   function scoreBox(e) {
-    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span></h3>
+    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><button class="btn small sc-open" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button></h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
       ${scoreSummary(e)}</div>`;
   }
@@ -2384,9 +2384,10 @@
           <div class="rt-meta"></div>
           <div class="rt-cats"></div>
           <div class="rt-sum"></div>
+          <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
           <div class="rt-ref"></div>
           <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
-          <p class="muted rt-help">1–5 setzt die markierte Kategorie · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
+          <p class="muted rt-help">1–5 setzt die markierte Kategorie · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -2408,6 +2409,17 @@
       const row = t.closest('[data-sc-idx]'); if (row) { rater.cat = Number(row.dataset.scIdx); raterCats(); return; }
       if (t.closest('.rt-name')) { const id = rater.ids[rater.i]; closeRater(); showDetail(id); }
     });
+    const ta = $('.rt-notes textarea', el);
+    let noteTimer = null;
+    const saveNote = () => {
+      clearTimeout(noteTimer); noteTimer = null;
+      const e = raterEntry(); if (!e || ta.dataset.eid !== e._id) return;
+      if ((e.Notes || '') === ta.value) return;
+      e.Notes = ta.value; e._updated = Date.now(); saveQuiet(); refreshItem(e._id);
+    };
+    ta.addEventListener('input', () => { clearTimeout(noteTimer); noteTimer = setTimeout(saveNote, 600); });
+    ta.addEventListener('blur', saveNote);
+    rater.saveNote = saveNote;
     $('.rt-only input', el).addEventListener('change', (ev) => { ui.raterOnlyOpen = ev.target.checked; saveUI(); toast('Gilt beim nächsten Start des Bewertungsmodus.'); });
     // Wischen auf dem Bild: Bilder wechseln
     let sx = 0, sy = 0;
@@ -2418,10 +2430,9 @@
   function openRaterFor(id) {
     const keep = ui.raterOnlyOpen; ui.raterOnlyOpen = false;
     closeModal(true);
-    const all = shown.map(e => e._id);
     openRater();
     ui.raterOnlyOpen = keep;
-    if (rater) { const i = rater.ids.indexOf(id); if (i >= 0) { rater.i = i; raterShow(); } else { rater.ids.unshift(id); rater.i = 0; raterShow(); } }
+    if (rater) { rater.fromDetail = true; const i = rater.ids.indexOf(id); if (i >= 0) { rater.i = i; raterShow(); } else { rater.ids.unshift(id); rater.i = 0; raterShow(); } }
   }
   function raterEntry() { return rater && byId(rater.ids[rater.i]); }
   function raterShow() {
@@ -2431,6 +2442,7 @@
     $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
     $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
     rater.img = 0;
+    const ta = $('.rt-notes textarea', el); ta.value = e.Notes || ''; ta.dataset.eid = e._id;
     raterImgShow(); raterCats();
     const nx = byId(rater.ids[rater.i + 1]); if (nx) { const u = images(nx)[0]; if (u) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); } }
   }
@@ -2485,6 +2497,7 @@
     $('.rt-count', rater.el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
   }
   function raterStep(d) {
+    if (rater.saveNote) rater.saveNote();
     const n = rater.i + d;
     if (n < 0) return;
     if (n >= rater.ids.length) { toast(`Fertig – ${rater.done} Einträge bewertet.`, 'ok'); closeRater(); return; }
@@ -2492,7 +2505,10 @@
   }
   function raterKey(ev) {
     const k = ev.key;
+    // Beim Tippen in den Notizen keine Tastenkürzel; Esc verlässt das Feld
+    if (ev.target && ev.target.closest && ev.target.closest('.rt-notes')) { if (k === 'Escape') { ev.preventDefault(); rater.saveNote(); ev.target.blur(); } return; }
     if (k === 'Escape') { closeRater(); return; }
+    if (k === 'n' || k === 'N') { ev.preventDefault(); $('.rt-notes textarea', rater.el).focus(); return; }
     if (/^[1-5]$/.test(k)) { raterSet(rater.cat, Number(k), true); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
@@ -2512,9 +2528,12 @@
   }
   function closeRater() {
     if (!rater) return;
+    if (rater.saveNote) rater.saveNote();
+    const backTo = rater.fromDetail ? rater.ids[rater.i] : null;
     rater.el.remove(); rater = null;
     if (overlay.hidden) document.body.style.overflow = '';
     render();
+    if (backTo) showDetail(backTo);   // aus der Detailansicht gestartet: dorthin zurück (zum zuletzt bewerteten Eintrag)
   }
 
   function lightbox(src) {
@@ -2598,6 +2617,8 @@
     if (t.closest('#btn-menu')) { menu.hidden = !menu.hidden; return; }
     if (!t.closest('#menu')) menu.hidden = true;
 
+    const rm = t.closest('[data-rate-mode]');
+    if (rm && !t.closest('.rater')) { openRaterFor(rm.dataset.rateMode); return; }
     const sc = t.closest('[data-score]');
     if (sc && !t.closest('.rater')) {
       setScore(sc.dataset.id, sc.dataset.score, sc.dataset.val);

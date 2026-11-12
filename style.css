@@ -638,3 +638,10 @@ body.cards-noname .card .body { display: none; }
 .cfg-grid .chk input { flex: none; margin-top: 2px; }
 .badge.gone { background: rgba(80,20,20,.85); color: #ffb4b4; }
 .gone-box { border: 1px solid rgba(240,120,120,.45); background: rgba(240,120,120,.08); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; }
+
+.rt-notes { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rt-notes textarea { width: 100%; resize: vertical; min-height: 60px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13.5px; }
+.rt-notes textarea:focus { outline: none; border-color: var(--accent); }
+.score-box h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.score-box .sc-open { margin-left: auto; }
+@media (max-width: 800px) { .rt-notes textarea { min-height: 44px; } }
