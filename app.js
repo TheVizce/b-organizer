@@ -288,14 +288,23 @@
     }
   }
   const hasScore = (e) => !!v(e, 'Score');
-  // Profil-Status: ok · archive (nur im Internet Archive) · gone-archive (gelöscht, Archiv vorhanden) · gone (gelöscht, kein Archiv)
+  // Profil-Status: ok · gone-archive (gelöscht, Archiv vorhanden) · gone (gelöscht, kein Archiv)
+  // Ein Eintrag aus dem Internet Archive heißt immer: das Babepedia-Profil gab es und es ist gelöscht.
   function profileStatus(e) {
-    const archiveOnly = /web\.archive\.org/i.test(v(e, 'Profile URL'));
-    const hasArchive = archiveOnly || !!v(e, 'Archive URL');
-    if (isTrue(e['Profile Deleted'])) return hasArchive ? 'gone-archive' : 'gone';
-    return archiveOnly ? 'archive' : 'ok';
+    if (!isTrue(e['Profile Deleted'])) return 'ok';
+    return v(e, 'Archive URL') ? 'gone-archive' : 'gone';
   }
-  const STATUS_LABEL = { ok: 'Profil vorhanden', archive: 'nur im Internet Archive', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
+  const STATUS_LABEL = { ok: 'Profil vorhanden', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
+  // Ältere Archiv-Einträge hatten die Archiv-Adresse als Profil-Adresse → Original-Adresse herausziehen, Status setzen
+  function normalizeArchiveEntry(e) {
+    const u = v(e, 'Profile URL');
+    const m = u.match(/^https?:\/\/web\.archive\.org\/web\/[^/]+\/(https?:\/\/(?:www\.)?babepedia\.com\/babe\/.+)$/i);
+    if (!m) return;
+    if (!v(e, 'Archive URL')) e['Archive URL'] = u;
+    e['Profile URL'] = m[1].replace(/^http:/, 'https:');
+    e['Profile Deleted'] = 'true';
+    deriveChanged = true;
+  }
   const fmtScoreVal = (x) => x == null || x === '' ? '–' : String(x).replace('.5', '½').replace('.', ',');
 
   function derive(e) {
@@ -303,6 +312,7 @@
     applyScore(e);
     mergeNationality(e);
     cleanValues(e);
+    normalizeArchiveEntry(e);
     e['Profession Category'] = professionCategories(e.Professions);
     if (looksLikeInches(e.Measurements)) e.Measurements = measToCm(e.Measurements, 'in');
     return e;
@@ -1074,7 +1084,14 @@
         }
       }
       if (existing) touched.add(existing);
-      if (existing && !raw._id && isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = ''; existing['Deleted Since'] = ''; existing._updated = Date.now(); }
+      // aus dem Internet Archive geholt (Skript-Markierung oder Archiv-Adresse bei Babepedia-Übernahme)
+      const fromArchive = !raw._id && (!!raw.__archive || !!v(raw, 'Archive URL'));
+      if (fromArchive) {
+        // aus dem Internet Archive geholt: Original-Profil ist gelöscht – direkt übernehmen, nicht zur Prüfung
+        raw = Object.assign({}, raw, { __direct: true });
+        if (existing && !isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = 'true'; existing._updated = now; }
+      }
+      if (existing && !raw._id && !fromArchive && isTrue(existing['Profile Deleted'])) { existing['Profile Deleted'] = ''; existing['Deleted Since'] = ''; existing._updated = Date.now(); }
       if (existing && !raw._id && !raw.__direct && ui.reviewUpdates) {
         // bekanntes Profil von Babepedia: Änderungen zur Prüfung vormerken
         if (addPending(existing, item)) pending++;
@@ -1090,6 +1107,7 @@
         const e = { _id: raw._id || uid(), _created: raw._created || now, _updated: now };
         for (const f of ALL_FIELDS) e[f] = item[f] || '';
         if (!e.Favorite) e.Favorite = 'false';
+        if (fromArchive) e['Profile Deleted'] = 'true';
         derive(e);
         entries.push(e); touched.add(e);
         index.set(k, e); byId.set(e._id, e);
@@ -3529,6 +3547,13 @@
       await loadLocalImages().catch(() => {});
       await loadImgCheck();
       await loadPending();
+      // Einmalig: Einträge mit Archiv-Kopie gelten als auf Babepedia gelöscht (Archiv-Übernahme = Original weg)
+      try {
+        if (!localStorage.getItem('bp-organizer-archmig1')) {
+          for (const e of entries) if (v(e, 'Archive URL') && !isTrue(e['Profile Deleted'])) { e['Profile Deleted'] = 'true'; e._updated = Date.now(); deriveChanged = true; }
+          localStorage.setItem('bp-organizer-archmig1', '1');
+        }
+      } catch (_) {}
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
       if (deriveChanged) setTimeout(() => { deriveChanged = false; save().then(() => toast('Gespeicherte Werte vereinheitlicht und gespeichert.', 'ok')).catch(() => {}); }, 2500);
     } catch (e) {

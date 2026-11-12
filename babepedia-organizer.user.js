@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.20
+// @version      14.21
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -815,6 +815,7 @@
             for (const k of ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL']) data[k] = toArchiveImg(data[k]);
             data['User Upload Image URLs'] = String(data['User Upload Image URLs'] || '').split(', ').filter(Boolean).map(toArchiveImg).join(', ');
             data['User Rating'] = ''; // eigene Bewertung ist in der Archiv-Kopie nicht enthalten
+            data.__archive = true;    // Profil kommt aus dem Archiv → auf Babepedia gelöscht (Tool setzt den Status)
         }
         data['Babe ID'] = babeId || '';
         return { profileData: data, babeId: babeId };

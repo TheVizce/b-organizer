@@ -263,3 +263,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - **Daten → Update-Rhythmus…**: „jedes Profil spätestens alle N Tage“ (Standard 90) und „höchstens M pro Lauf“ (Standard 150). Daraus ergibt sich die Wochenmenge (aktive Profile · 7 / N).
 - Das Tool erinnert mit einem Hinweis oben, wenn Profile überfällig sind oder in den letzten 7 Tagen weniger als die Wochenmenge geholt wurde – höchstens einmal pro Tag („Heute ausblenden“ möglich). Es wird immer mindestens die Wochenmenge der ältesten empfohlen, auch wenn sie noch nicht fällig sind; so verteilt sich ein großer gleich alter Block von selbst über die Wochen.
 - Das Skript bekommt den Plan vom Tool: Der Knopf zeigt „🔁 Update · N fällig“ (hervorgehoben), die Abfrage schlägt genau diese Zahl vor und nennt Rhythmus und Stand.
+
+## Änderungen in 14.21 (Skript) / Tool – Archiv-Einträge = gelöschtes Profil
+- Ein Profil aus dem Internet Archive bedeutet immer: Es gab ein Babepedia-Profil, und es ist gelöscht. Das Tool setzt beim Übernehmen deshalb automatisch „Auf Babepedia gelöscht“; Profil-Adresse ist die Original-Adresse auf Babepedia, die Archiv-Kopie steht unter „Archiv-Adresse“.
+- Der Status „nur im Internet Archive“ entfällt. Ältere Einträge mit Archiv-Adresse als Profil-Adresse werden einmalig umgestellt; Einträge mit Archiv-Adresse werden einmalig als gelöscht markiert (Status „gelöscht – Archiv vorhanden“).
+- Gelöschte Profile bleiben aus dem rollierenden Update draußen. Holt man so ein Profil doch wieder erfolgreich live von Babepedia, wird der Gelöscht-Haken wie bisher zurückgenommen.
