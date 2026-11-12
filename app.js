@@ -1345,7 +1345,8 @@
       ranker: (e) => e._ranker ? -(e._ranker.score + 1) : 1,
       site: (e) => -(num(e['User Rating']) ?? -1),
       diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); },
-      random: (e) => shuffleKey(e._id)
+      random: (e) => shuffleKey(e._id),
+      scraped: (e) => /babepedia\.com\/babe\//i.test(v(e, 'Profile URL')) && !isTrue(e['Profile Deleted']) ? scrapedTs(e) : 9e15   // wie „🔁 Update (älteste)“
     }[ui.sort] || (() => 0);
     return list.map(e => ({ e, k: key(e), n: v(e, 'Name') }))
       .sort((a, b) => (a.k - b.k) || collator.compare(a.n, b.n))
@@ -1360,12 +1361,12 @@
   const FIELD_LABELS = {
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status'
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status'
   };
   const lab = (f) => FIELD_LABELS[f] || f;
   const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
-    'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID'];
+    'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
   const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
@@ -1394,6 +1395,7 @@
     if (f === 'Alter') { const a = age(e); return a == null ? '' : `${a} J.`; }
     if (f === 'Geburtsjahr') return fieldValues(e, f)[0] || '';
     if (f === 'Born') return fmtDate(v(e, 'Born'), isTrue(e['Exact Birthdate']));
+    if (f === 'Scraped At') return v(e, f) ? '🔁 ' + fmtDate(v(e, f), true) : '';
     if (f === 'Nationality') return natDisplay(e);
     if (f === 'Global Rating') return v(e, f) ? `BP Ø ${v(e, f).replace('.', ',')}` : '';
     if (f === 'User Rating') return v(e, f) ? `Meine BP ${v(e, f)}` : '';
