@@ -837,10 +837,13 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .slide.tr-fade .sl-layer { transition: opacity var(--sl-fade, .8s) ease; }
 .slide.tr-slide .sl-layer { transition: transform var(--sl-fade, .8s) ease, opacity var(--sl-fade, .8s) ease; transform: translateX(6%); }
 .slide.tr-slide .sl-layer.on { transform: none; }
-.sl-layer img { width: 100%; height: 100%; object-fit: contain; }
+.sl-layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }   /* absolut: im Grid wuchs die Höhe sonst mit dem Seitenverhältnis (am PC abgeschnitten) */
 .slide.fit-cover .sl-layer img { object-fit: cover; }
 .slide.kb .sl-layer.on img { animation: sl-kb var(--sl-dur, 6s) linear forwards; }
 @keyframes sl-kb { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.12) translate(var(--kx, -2%), var(--ky, -2%)); } }
+/* „ganzes Bild zeigen“: Zoom bleibt innerhalb des Bildschirms (von 90 % auf 100 %), damit nichts abgeschnitten wird */
+.slide.kb:not(.fit-cover) .sl-layer.on img { animation-name: sl-kb-fit; }
+@keyframes sl-kb-fit { from { transform: scale(.9); } to { transform: scale(1); } }
 .slide.blurbg .sl-layer::before { content: ''; position: absolute; inset: -40px; background: var(--sl-bg) center / cover; filter: blur(30px) brightness(.45); z-index: -1; }
 .sl-info { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 20px calc(16px + env(safe-area-inset-bottom)) 200px; background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0)); color: #fff; transition: opacity .3s; pointer-events: none; }
 .sl-info .sl-name { font-size: 22px; font-weight: 700; pointer-events: auto; cursor: pointer; background: none; border: 0; color: #fff; padding: 0; text-align: left; }
@@ -886,7 +889,7 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .img-sec + .img-sec { margin-top: 12px; }
 .img-cell .img-kind-btn { position: absolute; right: 6px; bottom: 6px; border: 0; border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; background: rgba(10,11,15,.75); color: var(--muted); }
 .img-cell .img-kind-btn.k-scene, .own-btn.kind.k-scene { color: #7fd1ff; }
-.img-cell .img-kind-btn.k-cos, .own-btn.kind.k-cos { color: #ffb37f; }
+.img-cell .img-kind-btn.k-off, .own-btn.kind.k-off { color: #9be29b; }
 .img-cell .img-kind-btn.k-fan, .own-btn.kind.k-fan { color: #c9a3ff; }
 .img-cell .img-kind-btn:hover { color: var(--text); }
 .own-btn.kind { top: auto; bottom: 4px; left: 4px; width: auto; height: 20px; border-radius: 6px; padding: 0 6px; font-size: 10px; }

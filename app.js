@@ -23,7 +23,7 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Fan Art', 'Scene Images', 'Cosplay Images'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
@@ -97,7 +97,7 @@
     'Adult': 'Bewerten (Kategorien) ist nur bei „ja“ möglich', 'First Appearance': 'Jahr des ersten Auftritts', 'Voice Actor': 'Sprecherin (Original)', 'Actress': 'Darstellerin (Realfilm, Motion Capture)',
     'Full Name': 'vollständiger Name, falls anders'
   };
-  if (IS_CHARS) HINTS['Own Image URLs'] = 'Neue Links bekommen die Art aus der Auswahl daneben (Standard: offiziell). Der Knopf unten links am Bild wechselt Offiziell → Szene → Cosplay → Fan, ✕ entfernt, ★ macht zum Kachelbild (geht bei jeder Art).';
+  if (IS_CHARS) HINTS['Own Image URLs'] = 'Neue Links bekommen die Art aus der Auswahl daneben (Standard: unklar). Der Knopf unten links am Bild wechselt Offiziell → Szene → Fan → Unklar, ✕ entfernt, ★ macht zum Kachelbild (geht bei jeder Art).';
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
     .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
@@ -377,7 +377,7 @@
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
-    if (IS_CHARS) { germanizeChar(e); return e; }   // Babepedia-Bereinigungen gelten nur für Personen
+    if (IS_CHARS) { germanizeChar(e); if (migrateKinds(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } return e; }   // Babepedia-Bereinigungen gelten nur für Personen
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
@@ -529,7 +529,15 @@
 
   async function load() {
     let d = await idbGet('entries');
-    if (IS_CHARS) return (Array.isArray(d) ? d : []).map(derive);
+    if (IS_CHARS) {
+      kindsMigrated = 0;
+      const arr = (Array.isArray(d) ? d : []).map(derive);
+      if (kindsMigrated) {
+        try { await idbSet('entries', arr); toast(`Bildarten umgestellt (${kindsMigrated} Einträge): bisherige Bild-Links gelten als offiziell, hochgeladene Bilder als „unklar“.`, 'ok'); }
+        catch (err) { toast('Speichern der Bildarten-Umstellung fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+      }
+      return arr;
+    }
     if (!Array.isArray(d)) {
       // Umzug aus dem alten localStorage (Version bis 13.6)
       const old = safeJSON(localStorage.getItem(STORE_KEY), null);
@@ -619,16 +627,30 @@
     return [...new Set(list)].filter(u => !isPlaceholder(u));
   }
   // Charaktere: Bild ist Fan-Art (sonst offizielles Artwork)
-  // Charaktere: Bildart. 'off' ist Standard (kein Feld) – alles Bisherige gilt als offiziell.
+  // Charaktere: Bildart. 'unk' (Unklar) ist Standard ohne eigenes Feld.
   const IMG_KINDS = [
-    { k: 'off', field: '', title: 'Offizielle Artworks', short: 'Offiziell', tiny: 'Off.', one: 'offiziell' },
+    { k: 'off', field: 'Official Images', title: 'Offizielle Artworks', short: 'Offiziell', tiny: 'Off.', one: 'offiziell' },
     { k: 'scene', field: 'Scene Images', title: 'Szenenbilder', short: 'Szene', tiny: 'Szene', one: 'Szenenbild' },
-    { k: 'cos', field: 'Cosplay Images', title: 'Cosplay', short: 'Cosplay', tiny: 'Cos', one: 'Cosplay' },
-    { k: 'fan', field: 'Fan Art', title: 'Fan-Artworks', short: 'Fan', tiny: 'Fan', one: 'Fan-Art' }];
+    { k: 'fan', field: 'Fan Art', title: 'Fan-Artworks', short: 'Fan', tiny: 'Fan', one: 'Fan-Art' },
+    { k: 'unk', field: '', title: 'Unklar / Andere', short: 'Unklar', tiny: '?', one: 'unklar' }];
   const KIND_IDX = Object.fromEntries(IMG_KINDS.map((x, i) => [x.k, i]));
   const KIND_OF = Object.fromEntries(IMG_KINDS.map(x => [x.k, x]));
-  const kindFromGet = (get, u) => { for (const x of IMG_KINDS) if (x.field && splitList(get(x.field)).includes(u)) return x.k; return 'off'; };
-  const imgKind = (e, u) => IS_CHARS && e ? kindFromGet(f => e[f], u) : 'off';
+  const kindFromGet = (get, u) => { for (const x of IMG_KINDS) if (x.field && splitList(get(x.field)).includes(u)) return x.k; return 'unk'; };
+  const imgKind = (e, u) => IS_CHARS && e ? kindFromGet(f => e[f], u) : 'unk';
+  // Einmalige Umstellung (Nov. 2026): bis dahin galt alles ohne Eintrag als offiziell.
+  // Alte Bild-Links -> 'Official Images', hochgeladene Bilder bleiben unklar, 'Cosplay Images' entfällt.
+  // _imgKinds merkt sich die Umstellung (wird mitsynchronisiert), damit kein Gerät sie später wiederholt.
+  let kindsMigrated = 0;
+  function migrateKinds(e) {
+    if (e._imgKinds) return false;
+    const marked = new Set([...splitList(e['Scene Images']), ...splitList(e['Fan Art']), ...splitList(e['Cosplay Images'])]);   // Cosplay -> unklar
+    const off = splitList(e['Official Images']);
+    for (const u of images(e)) if (!isLocal(u) && !marked.has(u) && !off.includes(u)) off.push(u);
+    if (off.length) e['Official Images'] = off.join(', ');
+    delete e['Cosplay Images'];
+    e._imgKinds = 1;
+    return true;
+  }
   const nextKind = (k) => IMG_KINDS[(KIND_IDX[k] + 1) % IMG_KINDS.length].k;
   function setKindOn(get, set, u, k) {
     for (const x of IMG_KINDS) if (x.field) {
@@ -1684,7 +1706,7 @@
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
-    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Fan Art': 'Fan-Artworks', 'Scene Images': 'Szenenbilder', 'Cosplay Images': 'Cosplay-Bilder', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
+    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
   };
   if (IS_CHARS) Object.assign(FIELD_LABELS, { 'Hair color': 'Haarfarbe', 'Eye color': 'Augenfarbe', 'Body type': 'Figur', 'Bra/Cup': 'Cup', 'Height': 'Größe', 'Notes': 'Notizen', 'Favorite': 'Favorit', 'Main Image URL': 'Hauptbild-URL' });
   const lab = (f) => FIELD_LABELS[f] || f;
@@ -2513,8 +2535,8 @@
   }
 
   // kinds: Funktion Bild → Art (aus Eintrag oder Formular)
-  const kindBtn = (r, kinds) => IS_CHARS && kinds ? `<button type="button" class="own-btn kind k-${kinds(r)}" data-own-kind title="Bildart wechseln (Offiziell → Szene → Cosplay → Fan)">${KIND_OF[kinds(r)].tiny}</button>` : '';
-  const kindCls = (r, kinds) => IS_CHARS && kinds && kinds(r) !== 'off' ? 'is-alt' : '';
+  const kindBtn = (r, kinds) => IS_CHARS && kinds ? `<button type="button" class="own-btn kind k-${kinds(r)}" data-own-kind title="Bildart wechseln (Offiziell → Szene → Fan → Unklar)">${KIND_OF[kinds(r)].tiny}</button>` : '';
+  const kindCls = (r, kinds) => IS_CHARS && kinds && kinds(r) === 'unk' ? 'is-alt' : '';
   const formGet = (form) => (f) => { const h = form && form.elements.namedItem(f); return h ? h.value : ''; };
   const formKinds = (form) => IS_CHARS ? (u) => kindFromGet(formGet(form), u) : null;
   const entryKinds = (e) => IS_CHARS ? (u) => imgKind(e, u) : null;
@@ -2540,7 +2562,7 @@
     if (f === 'Own Image URLs') {
       const urls = splitList(v(e, f));
       return `<div class="field wide own-field"><label>${IS_CHARS ? 'Bild-Links' : 'Eigene Bild-Links'}</label>
-        <div class="unit-row"><input type="text" data-ownurl-in placeholder="Bild-Adresse einfügen (https://…) – mehrere mit Leerzeichen oder Komma" autocomplete="off" inputmode="url">${IS_CHARS ? `<select data-ownurl-kind title="Neue Links einordnen als">${IMG_KINDS.map(x => `<option value="${x.k}">${x.one}</option>`).join('')}</select>` : ''}<button type="button" class="btn small" data-ownurl-add>Hinzufügen</button></div>
+        <div class="unit-row"><input type="text" data-ownurl-in placeholder="Bild-Adresse einfügen (https://…) – mehrere mit Leerzeichen oder Komma" autocomplete="off" inputmode="url">${IS_CHARS ? `<select data-ownurl-kind title="Neue Links einordnen als">${IMG_KINDS.map(x => `<option value="${x.k}" ${x.k === 'unk' ? 'selected' : ''}>${x.one}</option>`).join('')}</select>` : ''}<button type="button" class="btn small" data-ownurl-add>Hinzufügen</button></div>
         <input type="hidden" name="Own Image URLs" value="${esc(urls.join(', '))}">
         ${kindHiddenHTML(e)}
         <div class="own-list" data-ownurl-list>${ownUrlItemsHTML(urls, v(e, 'Cover'), entryKinds(e))}</div>
@@ -2664,7 +2686,7 @@
     list.addEventListener('click', (ev) => {
       const item = ev.target.closest('.own-item'); if (!item) return;
       const u = item.dataset.ref, cv = coverIn();
-      if (ev.target.closest('[data-own-del]')) { if (cv && cv.value === u) cv.value = ''; if (IS_CHARS) setFormKind(form, u, 'off'); redraw(urls().filter(x => x !== u)); }
+      if (ev.target.closest('[data-own-del]')) { if (cv && cv.value === u) cv.value = ''; if (IS_CHARS) setFormKind(form, u, 'unk'); redraw(urls().filter(x => x !== u)); }
       else if (ev.target.closest('[data-own-cover]') && cv) { cv.value = cv.value === u ? '' : u; redraw(urls()); }
       else if (ev.target.closest('[data-own-kind]')) { setFormKind(form, u, nextKind(formKinds(form)(u))); redraw(urls()); }
     });
@@ -2695,7 +2717,7 @@
       const r = item.dataset.ref;
       if (ev.target.closest('[data-own-del]')) {
         if (coverIn.value === r) coverIn.value = '';
-        if (IS_CHARS) setFormKind(form, r, 'off');
+        if (IS_CHARS) setFormKind(form, r, 'unk');
         redraw(refs().filter(x => x !== r));
       } else if (ev.target.closest('[data-own-kind]')) {
         setFormKind(form, r, nextKind(formKinds(form)(r))); redraw(refs());
@@ -2717,6 +2739,7 @@
       else if (TYPES[f] === 'date') data[f] = isoToDd(el.value);
       else data[f] = el.value.trim();
     }
+    if (IS_CHARS) data._imgKinds = 1;   // Bildarten im Formular gesetzt -> keine Umstellung mehr
     if (data.Measurements) data.Measurements = measToCm(data.Measurements, form.elements.namedItem('Measurements-unit').value);
     data['Profession Category'] = professionCategories(data.Professions);
     if (!data.Name) { toast('Bitte einen Namen eingeben.', 'err'); $('[name="Name"]', form).focus(); return; }
@@ -2994,7 +3017,7 @@
     info: true, infoNote: true, bar: true, loop: true, fullscreen: true, coverFirst: true, onlyChecked: false };
   let slide = null;
   // Bildarten für die Diashow (alte Einstellung 'kind': all/off/fan wird übernommen)
-  const slideKinds = (c) => Array.isArray(c.kinds) ? c.kinds : c.kind === 'off' ? ['off'] : c.kind === 'fan' ? ['fan'] : IMG_KINDS.map(x => x.k);
+  const slideKinds = (c) => Array.isArray(c.kinds) ? c.kinds.map(k => k === 'cos' ? 'unk' : k).filter((k, i, a) => KIND_OF[k] && a.indexOf(k) === i) : c.kind === 'off' ? ['off'] : c.kind === 'fan' ? ['fan'] : IMG_KINDS.map(x => x.k);
   function showSlideSettings() {
     if (!shown.length) { toast('Keine Einträge in der Liste.'); return; }
     const c = Object.assign({}, SLIDE_DEF, ui.slide || {});
