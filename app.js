@@ -78,7 +78,11 @@
     'Medium': { 'game': 'Spiel', 'videospiel': 'Spiel', 'videogame': 'Spiel', 'video game': 'Spiel', 'series': 'Serie', 'book': 'Buch', 'movie': 'Film' },
     'Style': { '3d game/cgi': '3D Spiel/CGI' }
   };
+  // Doppelte Schreibweisen eines Universums zusammenführen (auf Wunsch des Nutzers)
+  const UNIVERSE_ALIAS = { 'cyberpunk2077': ['Cyberpunk 2077'], 'nier: automata': ['NieR', 'NieR:Automata'], 'nier:automata': ['NieR', 'NieR:Automata'] };
   function germanizeChar(e) {
+    const ua = UNIVERSE_ALIAS[v(e, 'Universe').toLowerCase()];
+    if (ua) { e.Universe = ua[0]; if (ua[1] && !v(e, 'Origin')) e.Origin = ua[1]; e._updated = Date.now(); deriveChanged = true; }
     for (const [f, map] of Object.entries(CHAR_DE)) {
       const cur = v(e, f), de = cur && map[cur.toLowerCase()];
       if (de && de !== cur) { e[f] = de; deriveChanged = true; }
