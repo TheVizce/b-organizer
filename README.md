@@ -316,3 +316,4 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Neues eigenes Feld **„Eigene Bild-Links“** (`Own Image URLs`, kommagetrennt): Bild-Adressen, die du selbst einträgst. Zählen bei den Bildern normal mit (nach den Babepedia-Uploads), werden von Babepedia-Updates nie verändert.
 - Einmalig beim Start: Links in „User Upload Image URLs“, die nicht von babepedia.com oder web.archive.org stammen, wandern automatisch dorthin.
 - „Aktualisierungen prüfen“: Jedes als entfernt angezeigte Bild hat „behalten“ – verschiebt den Link in „Eigene Bild-Links“, danach kann die Bild-Änderung gefahrlos übernommen werden.
+- Eigene Bild-Links bearbeiten: Im Bearbeiten-Formular als Bildkacheln mit ✕ (entfernen) und ★ (Kachelbild); neue Adressen einfügen (Einfügen, Enter oder „Hinzufügen“, mehrere mit Leerzeichen/Komma). In der Detailansicht haben eigene Links 🔗 und ein ✕ oben links zum direkten Entfernen.

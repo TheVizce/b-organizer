@@ -825,3 +825,6 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .pu-keep:hover { border-color: var(--accent); }
 .pu-keepwrap.kept img.rem { opacity: 1; outline-color: var(--good); }
 .pu-keepwrap.kept .pu-keep { color: var(--good); border-color: var(--good); cursor: default; }
+.img-cell .img-del-btn { position: absolute; left: 6px; top: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(10,11,15,.75); color: var(--muted); font-size: 12px; cursor: pointer; display: grid; place-items: center; }
+.img-cell .img-del-btn:hover { color: #fff; background: var(--danger); }
+.img-cell .img-own + .img-own { left: 30px; }

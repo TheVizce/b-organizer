@@ -44,7 +44,7 @@
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
-    'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'kommagetrennt – Bild-Adressen, die du selbst einträgst; Babepedia-Updates ändern sie nie', 'Gallery Links': 'kommagetrennt',
+    'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'Bild-Adressen, die du selbst einträgst – Babepedia-Updates ändern sie nie. ✕ entfernt einen Link, ★ macht ihn zum Kachelbild.', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
@@ -2318,7 +2318,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -2333,8 +2333,22 @@
       <button type="button" class="own-btn del" data-own-del title="Entfernen">✕</button></div>`).join('');
   }
 
+  function ownUrlItemsHTML(urls, cover) {
+    return urls.map(u => `<div class="own-item ${u === cover ? 'is-cover' : ''}" data-ref="${esc(u)}">
+      <img src="${esc(thumbUrl(u))}" alt="" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕" title="${esc(u)}">
+      <button type="button" class="own-btn" data-own-cover title="${u === cover ? 'Ist Cover' : 'Als Cover'}">★</button>
+      <button type="button" class="own-btn del" data-own-del title="Link entfernen">✕</button></div>`).join('');
+  }
   function fieldInput(f, e) {
     if (f === 'Cover') return '';
+    if (f === 'Own Image URLs') {
+      const urls = splitList(v(e, f));
+      return `<div class="field wide own-field"><label>Eigene Bild-Links</label>
+        <div class="unit-row"><input type="text" data-ownurl-in placeholder="Bild-Adresse einfügen (https://…) – mehrere mit Leerzeichen oder Komma" autocomplete="off" inputmode="url"><button type="button" class="btn small" data-ownurl-add>Hinzufügen</button></div>
+        <input type="hidden" name="Own Image URLs" value="${esc(urls.join(', '))}">
+        <div class="own-list" data-ownurl-list>${ownUrlItemsHTML(urls, v(e, 'Cover'))}</div>
+        <span class="hint">${esc(HINTS[f])}</span></div>`;
+    }
     if (f === 'Own Images') {
       const refs = splitList(v(e, 'Own Images'));
       return `<div class="field wide own-field"><label>Eigene Bilder</label>
@@ -2421,6 +2435,7 @@
     });
     form.addEventListener('submit', (ev) => { ev.preventDefault(); saveForm(); });
     bindOwnImages(form);
+    bindOwnUrls(form);
     $('[name="Name"]', form).focus();
   }
 
@@ -2430,6 +2445,27 @@
     if (!formUploads.size) return;
     const refs = [...formUploads]; formUploads = new Set();
     deleteLocalImages(refs);
+  }
+  function bindOwnUrls(form) {
+    const list = $('[data-ownurl-list]', form), hidden = form.elements.namedItem('Own Image URLs'), inp = $('[data-ownurl-in]', form);
+    if (!list || !hidden) return;
+    const coverIn = () => form.elements.namedItem('Cover');
+    const urls = () => splitList(hidden.value);
+    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownUrlItemsHTML(arr, coverIn() ? coverIn().value : ''); dirty = true; };
+    const add = () => {
+      const neu = inp.value.split(/[\s,]+/).map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
+      if (!neu.length) { if (inp.value.trim()) toast('Bitte eine Adresse mit http(s):// einfügen.', 'err'); return; }
+      redraw([...new Set([...urls(), ...neu])]); inp.value = '';
+    };
+    $('[data-ownurl-add]', form).addEventListener('click', add);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); add(); } });
+    inp.addEventListener('paste', () => setTimeout(add, 0));
+    list.addEventListener('click', (ev) => {
+      const item = ev.target.closest('.own-item'); if (!item) return;
+      const u = item.dataset.ref, cv = coverIn();
+      if (ev.target.closest('[data-own-del]')) { if (cv && cv.value === u) cv.value = ''; redraw(urls().filter(x => x !== u)); }
+      else if (ev.target.closest('[data-own-cover]') && cv) { cv.value = cv.value === u ? '' : u; redraw(urls()); }
+    });
   }
   function bindOwnImages(form) {
     const list = $('[data-own-list]', form), hidden = form.elements.namedItem('Own Images'), coverIn = form.elements.namedItem('Cover');
@@ -3412,6 +3448,17 @@
     }
     const rkPick = t.closest('[data-rk-pick]');
     if (rkPick) { sendReplacement(rkPick.dataset.rkPick, rkPick); return; }
+    const ourm = t.closest('[data-ownurl-rm]');
+    if (ourm) {
+      const e = byId(ourm.dataset.id), u = ourm.dataset.ownurlRm;
+      if (e) {
+        e['Own Image URLs'] = splitList(e['Own Image URLs']).filter(x => x !== u).join(', ');
+        if (v(e, 'Cover') === u) e.Cover = '';
+        e._updated = Date.now(); saveQuiet(); render(); showDetail(e._id);
+        toast('Eigenen Bild-Link entfernt.', 'ok');
+      }
+      return;
+    }
     const cchk = t.closest('[data-cover-chk]');
     if (cchk) { const e = byId(cchk.dataset.coverChk); if (e) { coverAction(e, null); render(); showDetail(e._id); } return; }
     const setCover = t.closest('[data-set-cover]');
