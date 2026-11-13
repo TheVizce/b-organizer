@@ -302,3 +302,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Danach zeigt das Tool, ob die Bewertung standhält; bei Widerspruch oder Gleichstand mit klarem Sieger schlägt es vor, einen der beiden Werte anzupassen (nur auf Klick, Tool-Note rechnet sich neu).
 - Paare: zuerst selten verglichene Einträge, nie dasselbe Paar zweimal in einer Kategorie; Sympathie 2,5 („unbekannt“) nimmt nicht teil.
 - Ergebnisse liegen in IndexedDB (`duels`), werden synchronisiert (`collections.duels`, ID `id`) und sind im JSON-Backup enthalten.
+
+## Tool – Kopfzeile, Kachel-Karte, Ecke „Bild geprüft“
+- Desktop (ab 1100 px): Bewerten, ⚖️ Abgleich, Blättern, Zufall und An Ranker sitzen in der Kopfzeile; die Leiste darunter enthält nur noch Filter, Sortierung und Ansicht. Am Handy bleibt alles wie bisher (Abgleich über Daten).
+- Kachel-Abzeichen „🃏 Kategorien als Karte“: unten im Bild große Tool-Note mit Flagge, daneben GES/BOD/HOT/CUT/SYM und BP (✓ = gleich, Zahl = abweichende Babepedia-Note). Ersetzt dann das ♥-Abzeichen.
+- Kachel-Abzeichen „✓ Ecke Kachelbild geprüft“: grünes Band oben links.
+- Beide in Ansicht → Abzeichen ein-/ausschaltbar, standardmäßig an.

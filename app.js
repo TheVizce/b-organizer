@@ -250,11 +250,11 @@
   // Gesamt = (2·Gesicht + 2·Body + max(Hot, Cute) + 0,1·min(Hot, Cute) + 1,5·Sympathie) / 6,5   (je 1–5)
   // 10er-Wert über scoreToTen (3 = typisch = 7 wie bisher auf Babepedia, ab 4,5 = 10, 1 = 1)
   const SCORE_CATS = [
-    { f: 'Face Score', label: 'Gesicht', hint: 'inkl. Haare', half: true, key: 'G' },
-    { f: 'Body Score', label: 'Body', half: true, key: 'B' },
-    { f: 'Hot Score', label: 'Hot', half: true, key: 'H' },
-    { f: 'Cute Score', label: 'Cute', half: true, key: 'C' },
-    { f: 'Sympathy Score', label: 'Sympathie', vals: [1, 2, 2.5, 3, 4, 5], key: 'S' }
+    { f: 'Face Score', label: 'Gesicht', short: 'GES', hint: 'inkl. Haare', half: true, key: 'G' },
+    { f: 'Body Score', label: 'Body', short: 'BOD', half: true, key: 'B' },
+    { f: 'Hot Score', label: 'Hot', short: 'HOT', half: true, key: 'H' },
+    { f: 'Cute Score', label: 'Cute', short: 'CUT', half: true, key: 'C' },
+    { f: 'Sympathy Score', label: 'Sympathie', short: 'SYM', vals: [1, 2, 2.5, 3, 4, 5], key: 'S' }
   ];
   const SCORE_W = { face: 2, body: 2, hotcute: 1, minor: 0.1, sym: 1.5, div: 6.5, symDefault: 2.5 };
   // Leitfaden (nur Beschriftung): Bekannte nutzen 1–5, bei Unbekannten bewegt der Eindruck nur zwischen 2 und 3
@@ -1495,7 +1495,8 @@
   const CARD_FIELD_CHOICES = ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
-  const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
+  const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier'],
+    ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
@@ -1504,6 +1505,7 @@
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
   if (!Array.isArray(ui.cardFields)) ui.cardFields = ['Nationality', 'Alter', 'Height'];
   if (!Array.isArray(ui.cardBadges)) ui.cardBadges = CARD_BADGES.map(b => b[0]);
+  if (!ui.cardBadgesV2) { for (const k of ['fut', 'cover']) if (!ui.cardBadges.includes(k)) ui.cardBadges.push(k); ui.cardBadgesV2 = true; }
   if (!ui.hiddenFilters || typeof ui.hiddenFilters !== 'object') ui.hiddenFilters = {};
   if (!Array.isArray(ui.extraFilters)) ui.extraFilters = [];
   const xfVals = {};   // aktuelle Auswahl der Zusatzfilter (nicht gespeichert)
@@ -1710,15 +1712,34 @@
           <td>${isTrue(e.Favorite) ? '<span style="color:var(--accent)">♥</span>' : ''}</td>
         </tr>`;
   }
+  // Karten-Stil wie eine Sammelkarte: große Tool-Note + Flagge links, Kategorien rechts
+  const futV = (x) => x == null ? '–' : (x % 1 ? Math.floor(x) + '½' : String(x));
+  function futHTML(e) {
+    const s = scoreOf(e); if (!s) return '';
+    const st = SCORE_CATS.map(c => {
+      const x = num(v(e, c.f)), unset = x == null;
+      return `<span class="fut-s${unset ? ' unset' : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}"><b>${futV(x)}</b><i>${esc(c.short)}</i></span>`;
+    }).join('');
+    const r = ratingDiff(e);
+    const bp = r.state === 'same' ? `<span class="fut-s ok" title="gleich meiner Babepedia-Note"><b>✓</b><i>BP</i></span>`
+      : r.state === 'diff' ? `<span class="fut-s diff" title="meine Babepedia-Note ${r.site} – Tool-Note gerundet ${r.mine}"><b>${r.site}</b><i>BP</i></span>`
+      : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
+    const nat = fieldValues(e, 'Nationality')[0];
+    return `<div class="fut" title="Tool-Note ${esc(v(e, 'Score'))}">
+      <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}</span></div>
+      <div class="fut-grid">${st}${bp}</div></div>`;
+  }
   function cardHTML(e) {
+    const fut = ui.cardBadges.includes('fut') ? futHTML(e) : '';
+    const coverOk = ui.cardBadges.includes('cover') && isTrue(e['Cover Checked']);
     return `
       <article class="card" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
-        <div class="img">${coverTag(e)}
+        <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${coverOk ? '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>' : ''}${fut}
           <div class="badges">
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
-            ${ui.cardBadges.includes('rating') ? ratingBadge(e) : ''}
+            ${ui.cardBadges.includes('rating') && !fut ? ratingBadge(e) : ''}
             ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${profileStatus(e).startsWith('gone') ? `<span class="badge gone" title="${esc(STATUS_LABEL[profileStatus(e)])}">${profileStatus(e) === 'gone' ? '⚠︎ gelöscht' : '🏛️ gelöscht'}</span>` : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
           </div>
         </div>
@@ -3340,6 +3361,12 @@
   $('#btn-pending').addEventListener('click', showPending);
   $('#btn-random').addEventListener('click', randomEntry);
   $('#btn-rate').addEventListener('click', openRater);
+  // Desktop: Werkzeug-Knöpfe in der Kopfzeile (lösen dieselben Aktionen aus wie die in der Leiste)
+  document.querySelector('.top-tools').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-proxy]'); if (!b) return;
+    if (b.dataset.proxy === 'calib') return openCalib();
+    const t = $(b.dataset.proxy); if (t) t.click();
+  });
   // „Zufällig“ in der Sortierung: bei jeder erneuten Wahl neu mischen
 
   {

@@ -777,3 +777,34 @@ body.cards-noname .card .body { display: none; }
 }
 .cb-top { position: relative; padding-right: 52px; }
 .cb-top .vw-x { position: absolute; right: 12px; top: calc(8px + env(safe-area-inset-top)); color: var(--text); }
+
+/* Desktop: Werkzeuge in der Kopfzeile, in der Leiste dann ausgeblendet */
+.top-tools { display: none; gap: 6px; align-items: center; margin-left: auto; }
+@media (min-width: 1100px) {
+  .top-tools { display: flex; }
+  #btn-rate, #btn-random, #btn-browse, #btn-to-ranker { display: none; }
+}
+
+/* Kachel: Ecke „Kachelbild geprüft“ */
+.card .cover-ok { position: absolute; top: 0; left: 0; width: 70px; height: 70px; overflow: hidden; z-index: 2; pointer-events: none; }
+.card .cover-ok span { position: absolute; top: 13px; left: -26px; width: 100px; transform: rotate(-45deg); background: var(--good); color: #08140e; text-align: center; font-size: 10.5px; font-weight: 750; letter-spacing: .04em; padding: 2px 0; box-shadow: 0 2px 6px rgba(0,0,0,.45); }
+
+/* Kachel: Kategorien als Sammelkarte */
+.card .fut { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 10px; padding: 26px 10px 8px;
+  background: linear-gradient(to top, rgba(8,9,12,.92) 0%, rgba(8,9,12,.78) 55%, rgba(8,9,12,0) 100%); color: #fff; pointer-events: none; }
+.fut-main { display: flex; flex-direction: column; align-items: center; line-height: 1; min-width: 44px; }
+.fut-main b { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: #ffe6ef; text-shadow: 0 1px 6px rgba(229,103,143,.45); }
+.fut-main span { font-size: 15px; margin-top: 3px; min-height: 15px; }
+.fut-grid { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 2px; border-left: 1px solid rgba(255,255,255,.18); padding-left: 6px; }
+.fut-s { display: flex; flex-direction: column; align-items: center; line-height: 1.05; min-width: 0; }
+.fut-s b { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fut-s i { font-style: normal; font-size: 9px; letter-spacing: .08em; color: rgba(255,255,255,.6); }
+.fut-s.unset b { color: rgba(255,255,255,.45); font-weight: 500; }
+.fut-s.ok b { color: var(--good); }
+.fut-s.diff b { color: var(--warn); }
+.card .img.has-fut .badges { bottom: 70px; }
+body.cards-s .fut-main b { font-size: 20px; }
+body.cards-s .fut-s b { font-size: 12px; }
+body.cards-s .fut-s i { font-size: 9px; }
+body.cards-s .card .fut { gap: 6px; padding: 22px 6px 6px; }
+body.cards-s .card .img.has-fut .badges { bottom: 60px; }
