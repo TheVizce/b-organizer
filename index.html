@@ -7,7 +7,7 @@
   <meta name="bp-organizer" content="1">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
-  <title>Babe Organizer</title>
+  <title>Organizer</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -18,7 +18,8 @@
   <header class="topbar">
     <div class="brand">
       <img class="brand-mark" src="icon.svg" alt="" width="22" height="22">
-      <span class="brand-name">Babe Organizer</span>
+      <span class="brand-name">Organizer</span>
+      <nav class="kind-tabs" aria-label="Reiter"><a href="./" data-kind="babes">Personen</a><a href="./?k=chars" data-kind="chars">Charaktere</a></nav>
       <span class="count" id="count"></span>
     </div>
     <div class="top-tools" aria-label="Werkzeuge">
@@ -30,18 +31,19 @@
       <button class="btn ghost" data-proxy="#btn-to-ranker" title="Alle angezeigten Einträge an den Image Ranker senden">🏆 An Ranker</button>
     </div>
     <div class="top-actions">
-      <button class="btn warn" id="btn-pending" hidden style="display:none" title="Änderungen an bekannten Einträgen prüfen">⟳<span class="lbl"> Änderungen</span> (<span class="n">0</span>)</button>
+      <button class="btn warn bp-only" id="btn-pending" hidden style="display:none" title="Änderungen an bekannten Einträgen prüfen">⟳<span class="lbl"> Änderungen</span> (<span class="n">0</span>)</button>
       <button class="btn primary" id="btn-new" title="Neuer Eintrag">＋<span class="lbl"> Neuer Eintrag</span></button>
       <div class="menu-wrap">
         <button class="btn" id="btn-menu" aria-haspopup="true">Daten ▾</button>
         <div class="menu" id="menu" hidden>
           <button data-action="import-file">Importieren (CSV / JSON)…</button>
           <button data-action="export-json">Backup exportieren (JSON)</button>
-          <button data-action="export-csv">Als CSV exportieren (Notion)</button>
+          <button class="bp-only" data-action="export-csv">Als CSV exportieren (Notion)</button>
           <button data-action="scan-images">Alle Bilder neu prüfen</button>
-          <button data-action="find-dups">Doppel-Einträge suchen</button>
-          <button data-action="upd-cfg">Update-Rhythmus…</button>
-          <button data-action="vote-sync">Babepedia-Noten angleichen…</button>
+          <button class="bp-only" data-action="find-dups">Doppel-Einträge suchen</button>
+          <button class="bp-only" data-action="upd-cfg">Update-Rhythmus…</button>
+          <button class="bp-only" data-action="vote-sync">Babepedia-Noten angleichen…</button>
+          <button data-action="rk-link" class="chars-only">🔗 Mit Image Ranker verknüpfen…</button>
           <button data-action="calib" class="menu-mobile-only">⚖️ Kategorie-Abgleich…</button>
           <hr>
           <button data-action="help">Anleitung</button>
@@ -61,19 +63,19 @@
     <select id="f-hair"><option value="">Haarfarbe: alle</option></select>
     <select id="f-eyes"><option value="">Augenfarbe: alle</option></select>
     <select id="f-body"><option value="">Figur: alle</option></select>
-    <select id="f-active">
+    <select id="f-active" class="bp-only">
       <option value="">Aktiv: egal</option>
       <option value="true">nur aktiv</option>
       <option value="false">nur inaktiv</option>
     </select>
     <select id="f-rating">
       <option value="">Noten: alle</option>
-      <option value="diff" title="Gelöschte Babepedia-Profile zählen bei den Vergleichen nicht mit">Tool-Note ≠ meine Babepedia-Note</option>
-      <option value="same">Tool-Note = meine Babepedia-Note</option>
-      <option value="missing">nur eine der beiden Noten vorhanden</option>
-      <option value="site-only">nur Babepedia-Note (noch keine Tool-Note)</option>
-      <option value="mine-only">nur Tool-Note (auf Babepedia noch offen)</option>
-      <option value="none">weder Tool- noch Babepedia-Note</option>
+      <option value="diff" class="bp-only" title="Gelöschte Babepedia-Profile zählen bei den Vergleichen nicht mit">Tool-Note ≠ meine Babepedia-Note</option>
+      <option value="same" class="bp-only">Tool-Note = meine Babepedia-Note</option>
+      <option value="missing" class="bp-only">nur eine der beiden Noten vorhanden</option>
+      <option value="site-only" class="bp-only">nur Babepedia-Note (noch keine Tool-Note)</option>
+      <option value="mine-only" class="bp-only">nur Tool-Note (auf Babepedia noch offen)</option>
+      <option value="none" class="bp-only">weder Tool- noch Babepedia-Note</option>
       <option value="scored">♥ Tool-Note vorhanden</option>
       <option value="unscored">noch keine Tool-Note</option>
     </select>
@@ -83,7 +85,7 @@
       <option value="false">nicht im Ranker</option>
       <option value="stale">⟳ im Ranker veraltet</option>
     </select>
-    <select id="f-status" title="Gibt es das Profil auf Babepedia noch?">
+    <select id="f-status" class="bp-only" title="Gibt es das Profil auf Babepedia noch?">
       <option value="">Profil-Status: alle</option>
       <option value="ok">Profil vorhanden</option>
       <option value="gone-any">⚠︎ auf Babepedia gelöscht</option>
@@ -119,12 +121,12 @@
       <option value="name">Sortierung: Name A–Z</option>
       <option value="created">Zuletzt hinzugefügt</option>
       <option value="updated">Zuletzt geändert</option>
-      <option value="global">Babepedia Ø ↓</option>
+      <option value="global" class="bp-only">Babepedia Ø ↓</option>
       <option value="score">♥ Tool-Note ↓</option>
-      <option value="site">Meine Babepedia-Note ↓</option>
-      <option value="diff">Tool- vs. Babepedia-Note: größte Abweichung</option>
-      <option value="rank">Rank ↑</option>
-      <option value="scraped">🔁 Zuletzt von Babepedia geholt ↑ (älteste zuerst)</option>
+      <option value="site" class="bp-only">Meine Babepedia-Note ↓</option>
+      <option value="diff" class="bp-only">Tool- vs. Babepedia-Note: größte Abweichung</option>
+      <option value="rank" class="bp-only">Rank ↑</option>
+      <option value="scraped" class="bp-only">🔁 Zuletzt von Babepedia geholt ↑ (älteste zuerst)</option>
       <option value="random">🎲 Zufällige Reihenfolge</option>
       <option value="ranker">🏆 Ranker-Score ↓</option>
     </select>
@@ -144,7 +146,7 @@
     <button class="btn ghost" id="btn-reset" title="Filter zurücksetzen">✕ Filter</button>
   </section>
 
-  <div id="upd-banner" class="upd-banner" hidden></div>
+  <div id="upd-banner" class="upd-banner bp-only" hidden></div>
   <main id="main"></main>
 
   <!-- Detail / Formular -->

@@ -7,6 +7,7 @@
 - **Übergabe an den Image Ranker:** über die gemeinsame IndexedDB `tool-transfer` (Store `jobs`) und `BroadcastChannel('tool-transfer')`. Der Image Ranker verarbeitet das in seiner `ranker-inbox.js`. Den Ranker (`ImageRankerDB`) nur lesen, nie beschreiben.
 - Keine automatischen Verknüpfungen nur über den Namen: unklare Fälle verknüpft der Nutzer von Hand, damit im Ranker keine Doppelten entstehen.
 - Deep-Link `#e=<id>` öffnet einen Eintrag.
+- **Reiter Charaktere** (`?k=chars`, `IS_CHARS` in app.js): gleicher Code, getrennte Daten. IndexedDB-Schlüssel mit Präfix `chars:` (`chars:entries`, `chars:duels`, …; Bilder `img:` gemeinsam), localStorage `bp-organizer-ui-chars` / `bp-organizer-ranker-chars`, Sync-Ordner `b-organizer-chars/` (8 Teildateien, gleiche collections). Keine Babepedia-Funktionen und keine Skript-Nachrichten (BP_*) im Charakter-Reiter. Import-Dateien mit `kind: 'chars'` nur dort. Bewerten nur bei `Adult = ja`. Verknüpfen mit vorhandenen Ranker-Bildern nur nach Bestätigung (Auftrag mit `linkTo`, `create: false`).
 
 ## Gemeinsame Regeln für alle Tools unter thevizce.github.io
 

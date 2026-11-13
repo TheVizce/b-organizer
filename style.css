@@ -859,3 +859,23 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .sl-cfg .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 @media (max-width: 600px) { .sl-cfg .row2 { grid-template-columns: 1fr; } .sl-info { padding-left: 20px; padding-bottom: calc(64px + env(safe-area-inset-bottom)); } .sl-info .sl-name { font-size: 18px; } }
 .sl-paused[hidden] { display: none; }
+
+/* Reiter Personen | Charaktere */
+.kind-tabs { display: inline-flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px; margin-left: 4px; }
+.kind-tabs a { padding: 3px 11px; border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap; }
+.kind-tabs a.on { background: var(--accent-bg); color: var(--accent-2); font-weight: 600; }
+.kind-tabs a:hover { color: var(--text); }
+@media (max-width: 600px) { .brand-name { display: none; } .kind-tabs a { padding: 3px 9px; } }
+/* Volljährigkeit (Charaktere) */
+.adult-ask { padding: 6px 2px; }
+.adult-ask p { margin: 0 0 8px; font-size: 13.5px; }
+.adult-btns { display: flex; gap: 8px; }
+.adult-btns .btn.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-2); }
+.lk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 6px 0 10px; }
+.lk-body { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.lk-row { display: grid; grid-template-columns: 28px 52px minmax(120px, 1fr) minmax(160px, 1.3fr); align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.lk-img img { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; display: block; }
+.lk-name { display: flex; flex-direction: column; min-width: 0; }
+.lk-name b, .lk-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lk-row input[type=text] { width: 100%; }
+@media (max-width: 600px) { .lk-row { grid-template-columns: 24px 44px 1fr; } .lk-row input[type=text] { grid-column: 1 / -1; } .lk-img img { width: 44px; height: 44px; } }

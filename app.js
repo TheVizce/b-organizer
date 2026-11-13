@@ -2,8 +2,15 @@
 (() => {
   'use strict';
 
+  // ---------- Reiter: Personen (Babepedia) oder fiktive Charaktere (?k=chars) ----------
+  // Beide Reiter teilen sich den Code, die Daten sind getrennt (eigene Schlüssel in der IndexedDB, eigener Sync-Ordner).
+  const IS_CHARS = /[?&]k=chars\b/.test(location.search);
+  if (IS_CHARS) document.documentElement.classList.add('mode-chars');
   // ---------- Schema (identisch zum Userscript) ----------
-  const FIELDS = [
+  const CHAR_FIELDS = ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Adult',
+    'Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'Voice Actor', 'Actress', 'Wiki URL',
+    'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'];
+  const FIELDS = IS_CHARS ? CHAR_FIELDS : [
     'Name', 'AKA', 'Profile URL', 'Archive URL', 'Babe ID', 'Main Image URL',
     'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
     'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays',
@@ -20,7 +27,14 @@
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
-  const GROUPS = [
+  const GROUPS = IS_CHARS ? [
+    { title: 'Allgemein', fields: ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Adult'] },
+    { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height'] },
+    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'Tags', 'Notes', 'Cover Checked'] },
+    { title: 'Darstellung', fields: ['Voice Actor', 'Actress'] },
+    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'] },
+    { title: 'Links', fields: ['Wiki URL'] }
+  ] : [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
@@ -39,13 +53,24 @@
     'Rank': 'num', 'Highest Rank': 'num', 'Peakdays': 'num', 'Years active': 'num', 'Active till': 'num',
     'My Rating': 'num', 'My Rating (old)': 'num', 'Score': 'num',
     'Face Score': 'score', 'Body Score': 'score', 'Hot Score': 'score', 'Cute Score': 'score', 'Sympathy Score': 'score',
-    'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area'
+    'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area',
+    // Charaktere
+    'Medium': ['', 'Game', 'Anime', 'Manga', 'Comic', 'Cartoon', 'Serie', 'Film', 'Buch', 'Sonstiges'],
+    'Style': ['', '2D Anime/Manga', '2D Cartoon/Comic', '2D Pixel', '3D Game/CGI', 'Realfilm', 'Sonstiges'],
+    'Gender': ['', 'weiblich', 'männlich', 'divers'],
+    'Role': ['', 'Hauptfigur', 'Nebenfigur', 'Antagonistin', 'spielbare Figur', 'Begleiterin'],
+    'Adult': ['', 'ja', 'nein', 'unklar'],
+    'First Appearance': 'num'
   };
+  if (IS_CHARS) TYPES['Height'] = 'num';
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'Bild-Adressen, die du selbst einträgst – Babepedia-Updates ändern sie nie. ✕ entfernt einen Link, ★ macht ihn zum Kachelbild.', 'Gallery Links': 'kommagetrennt',
-    'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
+    'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia',
+    'Universe': 'Franchise/Werk, z. B. Overwatch, Fire Emblem (im Ranker: Herkunft)', 'Origin': 'konkreter Teil, z. B. Fire Emblem Fates', 'Species': 'z. B. Human, Humanoid, Elfe, Android',
+    'Adult': 'Bewerten (Kategorien) ist nur bei „ja“ möglich', 'First Appearance': 'Jahr des ersten Auftritts', 'Voice Actor': 'Sprecherin (Original)', 'Actress': 'Darstellerin (Realfilm, Motion Capture)',
+    'Full Name': 'vollständiger Name, falls anders'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
@@ -182,7 +207,7 @@
       return [...cats].sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(', ');
   }
 
-  const catList = (e) => String(e['Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
+  const catList = (e) => String(e[IS_CHARS ? 'Medium' : 'Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
   // ---- Measurements: werden immer in cm gespeichert (Format Brust-Taille-Hüfte) ----
   const INCH = 2.54;
   function parseMeas(str) {
@@ -326,6 +351,7 @@
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
+    if (IS_CHARS) return e;   // Babepedia-Bereinigungen gelten nur für Personen
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
@@ -338,7 +364,21 @@
   // Bewertungsvergleich: My Rating (Tool) vs. User Rating (Babepedia)
   // Bei gelöschten Profilen ist die alte Babepedia-Note bedeutungslos (nicht mehr änderbar, oft nur Platzhalter) → ignorieren
   const siteRating = (e) => isTrue(e['Profile Deleted']) ? null : num(e['User Rating']);
+  // Charaktere: Bewerten nur bei Figuren, die laut Kanon volljährig sind
+  const rateable = (e) => !IS_CHARS || v(e, 'Adult') === 'ja';
+  function adultAskHTML(e) {
+    const a = v(e, 'Adult');
+    return `<div class="adult-ask"><p><b>Volljährig laut Kanon?</b> <span class="muted">Die Kategorien-Bewertung (Gesicht, Body, Hot/Cute …) gibt es nur für erwachsene Figuren.</span></p>
+      <div class="adult-btns">${['ja', 'nein', 'unklar'].map(x => `<button class="btn small ${a === x ? 'on' : ''}" data-adult="${x}" data-id="${esc(e._id)}">${x}</button>`).join('')}</div>
+      ${a === 'nein' || a === 'unklar' ? `<p class="muted">${a === 'nein' ? 'Minderjährig – wird nicht bewertet.' : 'Unklar – erst bewerten, wenn geklärt.'}</p>` : ''}</div>`;
+  }
+  function setAdult(id, val) {
+    const e = byId(id); if (!e) return;
+    e.Adult = val; e._updated = Date.now();
+    saveQuiet(); refreshItem(id);
+  }
   function ratingDiff(e) {
+    if (IS_CHARS) { const mine = num(e['My Rating']); return mine === null ? { state: 'none' } : { state: 'mine-only', mine }; }
     if (isTrue(e['Profile Deleted'])) return { state: 'gone' };
     const mine = num(e['My Rating']), site = num(e['User Rating']);
     if (mine === null && site === null) return { state: 'none' };
@@ -350,7 +390,9 @@
   const fmtDiff = (d) => (d > 0 ? '+' : '') + String(d).replace('.', ',');
 
   const STORE_KEY = 'bp-organizer-v1';
-  const UI_KEY = 'bp-organizer-ui';
+  const UI_KEY = IS_CHARS ? 'bp-organizer-ui-chars' : 'bp-organizer-ui';
+  // Charaktere: eigene Schlüssel in derselben IndexedDB (Bilder „img:“ gemeinsam, IDs sind eindeutig)
+  const K = (k) => IS_CHARS && !String(k).startsWith('img:') ? 'chars:' + k : k;
 
   // ---------- Zustand ----------
   // Daten liegen in IndexedDB (viel mehr Platz als localStorage, das sich alle *.github.io-Seiten
@@ -380,7 +422,7 @@
   async function idbGet(key) {
     const d = await db();
     return new Promise((resolve, reject) => {
-      const r = d.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+      const r = d.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(K(key));
       r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
     });
   }
@@ -388,16 +430,24 @@
     const d = await db();
     return new Promise((resolve, reject) => {
       const tx = d.transaction(DB_STORE, 'readwrite');
-      tx.objectStore(DB_STORE).put(value, key);
+      tx.objectStore(DB_STORE).put(value, K(key));
       tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('Speichern abgebrochen'));
     });
   }
 
+  // Ohne Reiter-Präfix lesen (z. B. um einen Deep-Link in den richtigen Reiter umzuleiten)
+  async function idbGetRaw(key) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const r = d.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+    });
+  }
   async function idbDel(key) {
     const d = await db();
     return new Promise((resolve, reject) => {
       const tx = d.transaction(DB_STORE, 'readwrite');
-      tx.objectStore(DB_STORE).delete(key);
+      tx.objectStore(DB_STORE).delete(K(key));
       tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
     });
   }
@@ -453,6 +503,7 @@
 
   async function load() {
     let d = await idbGet('entries');
+    if (IS_CHARS) return (Array.isArray(d) ? d : []).map(derive);
     if (!Array.isArray(d)) {
       // Umzug aus dem alten localStorage (Version bis 13.6)
       const old = safeJSON(localStorage.getItem(STORE_KEY), null);
@@ -469,7 +520,7 @@
     return d.map(derive);
   }
 
-  const channel = 'BroadcastChannel' in window ? new BroadcastChannel('bp-organizer') : null;
+  const channel = 'BroadcastChannel' in window ? new BroadcastChannel(IS_CHARS ? 'bp-organizer-chars' : 'bp-organizer') : null;
   // Speichert; wirft bei Fehler, damit z. B. die Übernahme vom Userscript nicht bestätigt wird
   async function save() {
     try {
@@ -644,6 +695,7 @@
   const normUrl = (u) => { try { u = decodeURIComponent(String(u || '')); } catch {} return u.toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '').replace(/[\s_]+/g, '_'); };
 
   function keyOf(e) {
+    if (IS_CHARS) return 'name:' + v(e, 'Name').toLowerCase() + '|' + v(e, 'Universe').toLowerCase();
     const url = v(e, 'Profile URL').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
     return url ? 'url:' + url : 'name:' + v(e, 'Name').toLowerCase();
   }
@@ -935,6 +987,7 @@
   }
   function updatePendingBtn() {
     const b = $('#btn-pending'); if (!b) return;
+    if (IS_CHARS) { b.hidden = true; b.style.display = 'none'; return; }
     const n = pendingUpdates.filter(p => byId(p.id) && pendingDiff(p).length).length;
     b.hidden = !n; b.style.display = n ? '' : 'none'; b.querySelector('.n').textContent = n;
   }
@@ -1084,7 +1137,7 @@
     const gen0 = entriesGen, touched = new Set(), dropped = new Set();
     let added = 0, updated = 0, skipped = 0, merged = 0, renamed = 0, pending = 0, gone = 0;
     const pendingBefore = JSON.stringify(pendingUpdates);
-    if (items.length > 100) toast(`Übernehme ${items.length} Profile … bitte das Tool geöffnet lassen, bis die Bestätigung kommt.`);
+    if (items.length > 100) toast(`Übernehme ${items.length} ${IS_CHARS ? "Einträge" : "Profile"} … bitte das Tool geöffnet lassen, bis die Bestätigung kommt.`);
     const index = new Map(entries.map(e => [keyOf(e), e]));
     const byId = new Map(entries.map(e => [e._id, e]));
     let ix = null;
@@ -1231,6 +1284,10 @@
       if (/\.json$/i.test(file.name) || /^\s*[\[{]/.test(text)) {
         const data = JSON.parse(text);
         items = Array.isArray(data) ? data : (data.entries || []);
+        // Falscher Reiter? Charaktere nie in die Personen und umgekehrt
+        const isCharFile = data && data.kind === 'chars', looksBp = items.some(x => x && /babepedia\.com/i.test(String(x['Profile URL'] || '')));
+        if (isCharFile && !IS_CHARS) { toast('Das ist eine Charakter-Datei – bitte im Reiter „Charaktere“ importieren.', 'err'); return; }
+        if (IS_CHARS && !isCharFile && looksBp) { toast('Das ist ein Personen-Backup (Babepedia) – bitte im Reiter „Personen“ importieren.', 'err'); return; }
         if (data && Array.isArray(data.duels) && data.duels.length) {
           const have = new Set(duels.map(x => x.id)); let n = 0;
           for (const x of data.duels) if (x && x.id && !have.has(x.id)) { duels.push(x); n++; }
@@ -1301,6 +1358,7 @@
   }
   function renderUpdateBanner() {
     const box = $('#upd-banner'); if (!box) return;
+    if (IS_CHARS) { box.hidden = true; return; }
     const pl = updatePlan();
     let hide = false; try { hide = localStorage.getItem('bp-organizer-upd-hide') === new Date().toDateString(); } catch {}
     if (!pl.recommended || hide) { box.hidden = true; return; }
@@ -1349,6 +1407,7 @@
   }
   let bridgeQueue = Promise.resolve();
   window.addEventListener('message', (ev) => {
+    if (IS_CHARS) return;   // Charaktere: keine Verbindung zum Babepedia-Skript
     if (ev.origin !== location.origin) return;
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
@@ -1366,7 +1425,8 @@
   });
 
   // ---------- Filter & Sortierung ----------
-  const FILTERS = { 'f-nationality': 'Nationality', 'f-hair': 'Hair color', 'f-eyes': 'Eye color', 'f-body': 'Body type' };
+  const FILTERS = IS_CHARS ? { 'f-nationality': 'Universe', 'f-hair': 'Hair color', 'f-eyes': 'Species', 'f-body': 'Style' }
+    : { 'f-nationality': 'Nationality', 'f-hair': 'Hair color', 'f-eyes': 'Eye color', 'f-body': 'Body type' };
 
   function refreshFilters() {
     refreshCatFilter();
@@ -1390,6 +1450,12 @@
   function refreshCatFilter() {
     const sel = $('#f-cat'), cur = sel.value;
     const present = new Set(entries.flatMap(catList));
+    if (IS_CHARS) {
+      const order = TYPES['Medium'].filter(Boolean), list = [...present].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b, 'de'));
+      sel.innerHTML = sel.options[0].outerHTML + list.map(c => `<option>${esc(c)}</option>`).join('');
+      sel.value = present.has(cur) ? cur : '';
+      return;
+    }
     const cats = PROFESSION_CATEGORIES.map(c => c[0]).filter(c => present.has(c));
     sel.innerHTML = sel.options[0].outerHTML + cats.map(c => `<option>${esc(c)}</option>`).join('');
     sel.value = present.has(cur) ? cur : '';
@@ -1397,7 +1463,8 @@
 
   const collator = new Intl.Collator('de');
   // Felder, die auch der Image Ranker nutzt – Filter „Fehlende Werte“
-  const CORE_FIELDS = [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Ethnicity', 'Ethnicity'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup'], ['__img', 'Bild']];
+  const CORE_FIELDS = IS_CHARS ? [['Universe', 'Universum'], ['Medium', 'Medium'], ['Style', 'Stil'], ['Species', 'Spezies'], ['Hair color', 'Haarfarbe'], ['Adult', 'Volljährig'], ['__img', 'Bild']]
+    : [['Professions', 'Profession'], ['Nationality', 'Nationality'], ['Hair color', 'Hair Color'], ['Ethnicity', 'Ethnicity'], ['Born', 'Born'], ['Bra/Cup', 'Bra/Cup'], ['__img', 'Bild']];
   const isMissing = (e, f) => {
     if (f === '__img') return imgState(e) === 'none';
     const x = v(e, f).toLowerCase(); return !x || x === 'n/a' || x === '-' || x === 'unknown';
@@ -1494,7 +1561,8 @@
         if (f === 'Nationality' ? !natNames(e).includes(val) : v(e, f) !== val) return false;
       }
       if (terms.length) {
-        const hay = [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e['Profession Category'], e.Nationality].join(' ').toLowerCase();
+        const hay = (IS_CHARS ? [e.Name, e.AKA, e['Full Name'], e.Universe, e.Origin, e.Tags, e.Notes, e['Voice Actor'], e.Actress]
+          : [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e['Profession Category'], e.Nationality]).join(' ').toLowerCase();
         if (!terms.every(t => hay.includes(t))) return false;
       }
       return true;
@@ -1531,21 +1599,29 @@
   const FIELD_LABELS = {
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links'
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
+    'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
+    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
   };
   const lab = (f) => FIELD_LABELS[f] || f;
-  const CARD_FIELD_CHOICES = ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
+  const CARD_FIELD_CHOICES = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'Adult',
+    'Voice Actor', 'Actress', 'AKA', 'Tags', 'Cover Checked', 'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
-  const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier'],
+  const CARD_BADGES = IS_CHARS ? [['rating', '♥ Tool-Note'], ['ranker', '🏆 Ranker-Tier'], ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“']]
+    : [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier'],
     ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“']];
-  const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
+  const BUILTIN_FILTERS = IS_CHARS ? [['f-nationality', 'Universum'], ['f-cat', 'Medium'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Spezies'], ['f-body', 'Stil'],
+    ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']]
+    : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
-  const EXTRA_FILTER_CHOICES = ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
+  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Gender', 'Role', 'Adult', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'First Appearance', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
+    'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
-  if (!Array.isArray(ui.cardFields)) ui.cardFields = ['Nationality', 'Alter', 'Height'];
+  const DEF_CARD_FIELDS = IS_CHARS ? ['Universe', 'Medium'] : ['Nationality', 'Alter', 'Height'];
+  if (!Array.isArray(ui.cardFields)) ui.cardFields = DEF_CARD_FIELDS.slice();
   if (!Array.isArray(ui.cardBadges)) ui.cardBadges = CARD_BADGES.map(b => b[0]);
   if (!ui.cardBadgesV2) { for (const k of ['fut', 'cover']) if (!ui.cardBadges.includes(k)) ui.cardBadges.push(k); ui.cardBadgesV2 = true; }
   if (!ui.hiddenFilters || typeof ui.hiddenFilters !== 'object') ui.hiddenFilters = {};
@@ -1664,7 +1740,7 @@
       }
     });
     $('#cfg-default').addEventListener('click', () => {
-      ui.cardFields = ['Nationality', 'Alter', 'Height']; ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
+      ui.cardFields = DEF_CARD_FIELDS.slice(); ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
       ui.cardSize = 'm'; ui.cardImgTop = false; ui.cardNoName = false; applyCardLook();
       saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
     });
@@ -1689,7 +1765,7 @@
     const tn = v(e, 'Score').replace('.', ',');
     if (r.state === 'same') return `<span class="badge mine" title="Tool-Note ${tn} – gerundet gleich meiner Babepedia-Note">♥ ${tn} ✓</span>`;
     if (r.state === 'diff') return `<span class="badge diff" title="Tool-Note ${tn} (gerundet ${r.mine}) – meine Babepedia-Note ${r.site}">♥ ${tn} · BP ${r.site}</span>`;
-    if (r.state === 'mine-only') return `<span class="badge mine" title="Tool-Note – auf Babepedia noch nicht bewertet">♥ ${tn}</span>`;
+    if (r.state === 'mine-only') return `<span class="badge mine" title="${IS_CHARS ? 'Tool-Note' : 'Tool-Note – auf Babepedia noch nicht bewertet'}">♥ ${tn}</span>`;
     if (r.state === 'gone') return hasScore(e) ? `<span class="badge mine" title="Tool-Note – Babepedia-Profil gelöscht, kein Abgleich">♥ ${tn}</span>` : '';
     if (r.state === 'site-only') return `<span class="badge site" title="Nur meine Babepedia-Note, noch keine Tool-Note">BP ${r.site}</span>`;
     return '';
@@ -1763,10 +1839,11 @@
       return `<span class="fut-s${unset ? ' unset' : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}"><b>${futV(x)}</b><i>${esc(c.short)}</i></span>`;
     }).join('');
     const r = ratingDiff(e);
-    const bp = r.state === 'same' ? `<span class="fut-s ok" title="gleich meiner Babepedia-Note"><b>✓</b><i>BP</i></span>`
+    const bp = IS_CHARS ? (e._ranker ? `<span class="fut-s" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank}/${e._ranker.total}"><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><i>RNK</i></span>` : `<span class="fut-s unset" title="nicht im Ranker"><b>–</b><i>RNK</i></span>`)
+      : r.state === 'same' ? `<span class="fut-s ok" title="gleich meiner Babepedia-Note"><b>✓</b><i>BP</i></span>`
       : r.state === 'diff' ? `<span class="fut-s ${r.site > r.mine ? 'up' : 'down'}" title="meine Babepedia-Note ${r.site} – ${r.site > r.mine ? 'höher' : 'niedriger'} als die Tool-Note (gerundet ${r.mine})"><b>${r.site > r.mine ? '▲' : '▼'}${r.site}</b><i>BP</i></span>`
       : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
-    const nat = fieldValues(e, 'Nationality')[0];
+    const nat = IS_CHARS ? '' : fieldValues(e, 'Nationality')[0];
     return `<div class="fut" title="Tool-Note ${esc(v(e, 'Score'))}">
       <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}</span></div>
       <div class="fut-grid">${st}${bp}</div></div>`;
@@ -1798,7 +1875,10 @@
   // Ein Klick auf einen Balken filtert die Liste danach (Chip in der Leiste, ✕ entfernt ihn).
   let statFilter = null;          // { label, test(e) } – nicht gespeichert
   let statRefs = [];              // Klickziele der aktuellen Statistik
-  const STAT_CATS = [
+  const STAT_CATS = IS_CHARS ? [
+    ['Universe', 'Universum'], ['Origin', 'Ursprünglich (Titel)'], ['Medium', 'Medium'], ['Style', 'Stil'], ['Species', 'Spezies'], ['Gender', 'Geschlecht'], ['Role', 'Rolle'],
+    ['Adult', 'Volljährig (Kanon)'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'], ['Body type', 'Figur'], ['Bra/Cup', 'Cup'], ['Voice Actor', 'Sprecherin'],
+    ['Favorite', 'Favorit'], ['Tags', 'Tags']] : [
     ['Nationality', 'Nationalität'], ['Profession Category', 'Bereich'], ['Professions', 'Professions'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'],
     ['Body type', 'Figur'], ['Ethnicity', 'Ethnicity'], ['Bra/Cup', 'Cup'], ['Boobs', 'Boobs'], ['Sexuality', 'Sexuality'], ['Tattoos', 'Tattoos'],
     ['Piercings', 'Piercings'], ['Active', 'Aktiv'], ['__status', 'Profil-Status'], ['Favorite', 'Favorit'], ['Tags', 'Tags'], ['Geburtsland', 'Geburtsland'], ['Birthplace', 'Geburtsort']];
@@ -1986,7 +2066,15 @@
       const i = test ? statRefs.push({ label, test }) - 1 : -1;
       return `<${test ? `button data-sf="${i}"` : 'div'} class="st-tile"><b>${big}</b><span>${small}</span></${test ? 'button' : 'div'}>`;
     };
-    const tiles = [
+    const tiles = IS_CHARS ? [
+      tile(total.toLocaleString('de-DE'), total === entries.length ? 'Charaktere' : `von ${entries.length} Charakteren (gefiltert)`),
+      tile(`${fav} <small>${pct(fav)}</small>`, 'Favoriten', e => isTrue(e.Favorite), 'Favorit'),
+      tile(`${rk} <small>${pct(rk)}</small>`, 'im Image Ranker', e => !!e._ranker, 'im Ranker'),
+      tile(String(new Set(list.map(e => v(e, 'Universe')).filter(Boolean)).size), 'Universen'),
+      tile(`${list.filter(e => v(e, 'Adult') === 'ja').length}`, 'volljährig (bewertbar)', e => v(e, 'Adult') === 'ja', 'volljährig'),
+      tile(`${list.filter(e => !v(e, 'Adult')).length}`, 'Volljährigkeit offen', e => !v(e, 'Adult'), 'Volljährigkeit offen'),
+      tile(f1(mean(mr), 1), `Tool-Note im Mittel · ${mr.length} bewertet`, e => hasScore(e), 'Tool-Note vorhanden'),
+    ].join('') : [
       tile(total.toLocaleString('de-DE'), total === entries.length ? 'Einträge' : `von ${entries.length} Einträgen (gefiltert)`),
       tile(`${fav} <small>${pct(fav)}</small>`, 'Favoriten', e => isTrue(e.Favorite), 'Favorit'),
       tile(`${rk} <small>${pct(rk)}</small>`, 'im Image Ranker', e => !!e._ranker, 'im Ranker'),
@@ -2047,7 +2135,7 @@
       html: `<span class="badge rk-tier" style="--rk:${rkColor(t)}">${esc(t)}</span>`, test: e => e._ranker && e._ranker.tier === t }));
 
     // Vollständigkeit
-    const COMPLETE = ['Main Image URL', 'Born', 'Nationality', 'Professions', 'Hair color', 'Eye color', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Body type', 'Ethnicity', 'Babe ID', 'My Rating'];
+    const COMPLETE = IS_CHARS ? ['Main Image URL', 'Universe', 'Medium', 'Style', 'Species', 'Hair color', 'Eye color', 'Adult', 'My Rating'] : ['Main Image URL', 'Born', 'Nationality', 'Professions', 'Hair color', 'Eye color', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Body type', 'Ethnicity', 'Babe ID', 'My Rating'];
     const compRows = COMPLETE.map(f => {
       const n = list.filter(e => f === 'Main Image URL' ? imgState(e) !== 'none' : fieldValues(e, f).length).length;
       const L = f === 'Main Image URL' ? 'Bild' : f === 'My Rating' ? 'Tool-Note' : lab(f);
@@ -2064,6 +2152,10 @@
     return `<div class="stats">
       <div class="st-tiles">${tiles}</div>
       <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile oder Säule filtert die Liste danach.</p>
+      ${IS_CHARS ? `${group('rating', 'Bewertungen', [scoreMatrixHTML(list), hist('Score', { span: true, unit: 'bewertet' }), statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })])}
+      ${group('origin', 'Herkunft', [catBy['Universe'], catBy['Medium'], catBy['Style'], catBy['Origin'], catBy['Species'], catBy['Gender'], catBy['Role'], catBy['Voice Actor']])}
+      ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type'], catBy['Bra/Cup']])}
+      ${group('data', 'Sammlung & Daten', [catBy['Adult'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}` : `
       ${group('rating', 'Bewertungen', [
         scoreMatrixHTML(list),
         hist('Score', { span: true, unit: 'bewertet' }),
@@ -2075,7 +2167,7 @@
       ${group('person', 'Person & Beruf', [hist('Alter', { span: true }), hist('Geburtsjahr'), catBy['Profession Category'], catBy['Professions'], catBy['Sexuality'], catBy['Active']])}
       ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type'], catBy['Boobs'], hist('Height', { span: true }), hist('Weight', { span: true }),
         catBy['Bra/Cup'], catBy['Tattoos'], catBy['Piercings']])}
-      ${group('data', 'Sammlung & Daten', [catBy['__status'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}
+      ${group('data', 'Sammlung & Daten', [catBy['__status'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}`}
     </div>`;
   }
   function renderStatChip() {
@@ -2152,18 +2244,21 @@
     if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Tool-Note berechnet.</div>`;
     const site = num(e['User Rating']), old = num(e['My Rating (old)']);
     const r = Math.round(s.ten);
+    if (IS_CHARS) return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''} · gerundet ${r}</span></div>`;
     if (isTrue(e['Profile Deleted'])) return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''} · Babepedia-Profil gelöscht – kein Abgleich mehr</span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
     const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit meiner Babepedia-Note überein ✓' : `meine Babepedia-Note ist ${site} – ändern`;
     return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''}</span>
       <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundete Tool-Note zum Eintragen auf Babepedia">Auf Babepedia eintragen: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
   }
   function scoreBox(e) {
+    if (!rateable(e)) return `<div class="sec score-box"><h3>Bewertung</h3>${adultAskHTML(e)}</div>`;
     return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><button class="btn small sc-open" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button></h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
       ${scoreSummary(e)}</div>`;
   }
   function setScore(id, f, val) {
     const e = byId(id); if (!e) return;
+    if (!rateable(e) && val !== '') { toast('Erst „Volljährig (Kanon)“ auf „ja“ setzen – Minderjährige werden nicht bewertet.'); return; }
     e[f] = val === '' ? '' : String(val);
     e._updated = Date.now();
     derive(e);
@@ -2317,7 +2412,7 @@
           ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
-          ${sec('Babepedia', GROUPS[3].fields)}
+          ${sec(GROUPS[3].title, GROUPS[3].fields)}
           ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
@@ -3002,7 +3097,7 @@
   let rater = null;
   function openRater() {
     const onlyOpen = ui.raterOnlyOpen !== false;
-    const ids = shown.filter(e => !onlyOpen || !hasScore(e)).map(e => e._id);
+    const ids = shown.filter(e => (!onlyOpen || !hasScore(e)) && !(IS_CHARS && v(e, 'Adult') === 'nein')).map(e => e._id);
     if (!ids.length) { toast(onlyOpen ? 'In der aktuellen Liste ist schon alles nach Kategorien bewertet.' : 'Keine Einträge in der Liste.'); return; }
     const el = document.createElement('div');
     el.className = 'rater';
@@ -3038,6 +3133,7 @@
       if (t.closest('.vw-arrow.next')) return raterImg(1);
       if (t.closest('.rt-cover')) return raterCover();
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
+      const ad = t.closest('[data-adult]'); if (ad) { setAdult(ad.dataset.id, ad.dataset.adult); raterCats(); return; }
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
       const rs = t.closest('[data-ref-set]'); if (rs) { rater.preview = null; raterSet(rater.cat, Number(rs.dataset.refSet), false); return; }
@@ -3192,7 +3288,7 @@
   const fmtV = (x) => String(x).replace('.', ',');
   // Kandidaten: aktuelle Liste, Wert in der Kategorie gesetzt (Sympathie 2,5 = „unbekannt“ zählt nicht)
   function calibPool(c) {
-    return shown.filter(e => { const x = num(v(e, c.f)); return x != null && !(c.f === 'Sympathy Score' && x === 2.5); });
+    return shown.filter(e => { const x = num(v(e, c.f)); return rateable(e) && x != null && !(c.f === 'Sympathy Score' && x === 2.5); });
   }
   function calibPick() {
     const c = SCORE_CATS[calib.cat], pool = calibPool(c);
@@ -3438,6 +3534,7 @@
   function raterImg(d) { const n = images(raterEntry()).length; if (n < 2) return; rater.img = (rater.img + d + n) % n; raterImgShow(); }
   function raterCats() {
     const e = raterEntry(), { el } = rater;
+    if (!rateable(e)) { $('.rt-cats', el).innerHTML = adultAskHTML(e); $('.rt-sum', el).innerHTML = ''; $('.rt-ref', el).innerHTML = ''; return; }
     $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
     $('.rt-sum', el).innerHTML = scoreSummary(e);
     raterRef();
@@ -3508,6 +3605,7 @@
     if (k === 'Escape') { closeRater(); return; }
     if (k === 'n' || k === 'N') { ev.preventDefault(); $('.rt-notes textarea', rater.el).focus(); return; }
     if (k === 'k' || k === 'K') { ev.preventDefault(); raterCover(); return; }
+    if (/^[1-5]$/.test(k) && !rateable(raterEntry())) return;
     if (/^[1-5]$/.test(k)) { rater.preview = null; raterSet(rater.cat, Number(k), !!ui.raterAdvance); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
@@ -3599,7 +3697,7 @@
             const blob = await idbGet('img:' + id).catch(() => null);
             if (blob instanceof Blob) images[id] = await blobToDataUrl(blob);
           }
-          download(`babe-organizer-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', version: 2, exported: new Date().toISOString(), entries, duels, images }, null, 1), 'application/json');
+          download(`${IS_CHARS ? 'organizer-charaktere' : 'babe-organizer'}-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', kind: IS_CHARS ? 'chars' : 'babes', version: 2, exported: new Date().toISOString(), entries, duels, images }, null, 1), 'application/json');
           const n = Object.keys(images).length;
           if (n) toast(`Backup mit ${n} eigenen Bildern erstellt.`, 'ok');
         })().catch(err => toast('Backup fehlgeschlagen: ' + (err.message || err), 'err'));
@@ -3616,6 +3714,7 @@
       case 'clear-scores': clearScores(); break;
       case 'vote-sync': showVoteSync(); break;
       case 'calib': openCalib(); break;
+      case 'rk-link': showRankerLink(); break;
       case 'upd-cfg': showUpdateSettings(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {
@@ -3633,6 +3732,12 @@
 
     const rm = t.closest('[data-rate-mode]');
     if (rm && !t.closest('.rater')) { openRaterFor(rm.dataset.rateMode); return; }
+    const ad = t.closest('[data-adult]');
+    if (ad && !t.closest('.rater')) {
+      setAdult(ad.dataset.id, ad.dataset.adult);
+      const box = t.closest('.score-box'); if (box) box.outerHTML = scoreBox(byId(ad.dataset.id));
+      return;
+    }
     const sc = t.closest('[data-score]');
     if (sc && !t.closest('.rater')) {
       setScore(sc.dataset.id, sc.dataset.score, sc.dataset.val);
@@ -3840,9 +3945,9 @@
   function initSync() {
     if (!window.ToolSync) return;
     SYNC = ToolSync.create({
-      tool: 'b-organizer',
+      tool: IS_CHARS ? 'b-organizer-chars' : 'b-organizer',   // Charaktere: eigener Ordner tool-daten/b-organizer-chars/
       collections: { entries: { type: 'array', id: '_id' }, duels: { type: 'array', id: 'id' } },
-      shards: 32,
+      shards: IS_CHARS ? 8 : 32,
       stampDelay: 1500,
       get: () => ({ entries, duels }),
       apply: async (d) => {
@@ -3860,7 +3965,7 @@
   // Übergabe über die gemeinsame IndexedDB "tool-transfer" (Store "jobs"): der Babe Organizer legt einen Auftrag ab,
   // der Image Ranker arbeitet ihn mit seiner eigenen Logik ab (ranker-inbox.js). Kein Tool schreibt in die Datenbank des anderen.
   // Rückweg: der Babe Organizer liest den Ranker read-only und merkt sich Tier/Score im eigenen Feld "_ranker" (wird mit synchronisiert).
-  const RK_UI_KEY = 'bp-organizer-ranker';            // gemerkte Auswahl pro Ranker-Reiter (klein)
+  const RK_UI_KEY = IS_CHARS ? 'bp-organizer-ranker-chars' : 'bp-organizer-ranker';            // gemerkte Auswahl pro Ranker-Reiter (klein)
   const RK_TIERS = [[97, 'S+'], [93, 'S'], [90, 'S-'], [87, 'A+'], [83, 'A'], [80, 'A-'], [75, 'B+'], [70, 'B'], [65, 'B-'], [55, 'C+'], [45, 'C'], [35, 'C-'], [25, 'D+'], [15, 'D'], [5, 'D-'], [0, 'F']];
   const RK_COLORS = { S: '#ff4d4d', A: '#ffa500', B: '#e6c800', C: '#00cc00', D: '#3399ff', F: '#9933ff' };
   const transferChannel = 'BroadcastChannel' in window ? new BroadcastChannel('tool-transfer') : null;
@@ -3895,10 +4000,12 @@
 
   // Felder, die als Ranker-Eigenschaften in Frage kommen, mit vorgeschlagenem Typ
   const RK_MULTI = new Set(['Professions', 'Profession Category', 'Tags', 'AKA']);
-  const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Favorite', 'Tags', 'Global Rating', 'User Rating', 'Alter']
+  const RK_FIELDS = [...GROUPS[0].fields, ...GROUPS[1].fields, 'My Rating', 'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Favorite', 'Tags', ...(IS_CHARS ? [] : ['Global Rating', 'User Rating', 'Alter'])]
     .filter((f, i, a) => a.indexOf(f) === i && !['Name', 'Exact Birthdate'].includes(f))
     .flatMap(f => f === 'Born' ? ['Born', 'Geburtsjahr'] : [f]);      // „Geburtsjahr“ = nur die Jahreszahl aus Born
   const RK_NUMBERS = new Set(['Alter', 'Geburtsjahr']);
+  // Charaktere: Namen der Eigenschaften, wie sie im Ranker-Reiter „Charaktere“ schon heißen
+  const RK_DEFAULT_NAMES = IS_CHARS ? { 'Universe': 'Herkunft', 'Species': 'Spezies', 'Hair color': 'Haarfarbe', 'Medium': 'Medium', 'Style': 'Stil' } : {};
   const rkType = (f) => RK_MULTI.has(f) ? 'multi' : (RK_NUMBERS.has(f) || TYPES[f] === 'num' || TYPES[f] === 'score') ? 'number' : 'exact';
   function rkValues(e, f, type) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
@@ -4038,7 +4145,7 @@
     list = list.filter(Boolean);
     if (!list.length) { toast('Keine Einträge ausgewählt.'); return; }
     const tabs = rankerTabs(), prefs = rkPrefs();
-    let tab = prefs._lastTab && tabs.includes(prefs._lastTab) ? prefs._lastTab : tabs[0];
+    let tab = prefs._lastTab && tabs.includes(prefs._lastTab) ? prefs._lastTab : (IS_CHARS && tabs.find(t => /charakter/i.test(t))) || tabs[0];
     const pick = new Map(list.map(e => [e._id, 0]));   // gewähltes Bild je Eintrag (Index in images(e))
     const single = list.length === 1;
     const fieldsHTML = (t) => {
@@ -4046,7 +4153,7 @@
       return RK_FIELDS.map(f => {
         const s = sel[f], type = (s && s.type) || rkType(f);
         return `<div class="rk-f"><label class="chk"><input type="checkbox" data-rk-f="${esc(f)}" ${s ? 'checked' : ''}> ${esc(lab(f))}</label>
-          <input type="text" data-rk-name="${esc(f)}" value="${esc((s && s.name) || f)}" title="Name der Eigenschaft im Ranker">
+          <input type="text" data-rk-name="${esc(f)}" value="${esc((s && s.name) || RK_DEFAULT_NAMES[f] || f)}" title="Name der Eigenschaft im Ranker">
           <select data-rk-type="${esc(f)}">${['exact', 'multi', 'number'].map(x => `<option value="${x}" ${x === type ? 'selected' : ''}>${{ exact: 'exakt', multi: 'mehrfach', number: 'Zahl' }[x]}</option>`).join('')}</select></div>`;
       }).join('');
     };
@@ -4333,12 +4440,144 @@
     const id = decodeURIComponent(m[1]);
     rankerPick = m[2] ? { id: Number(m[2]), tab: decodeURIComponent(m[3] || '') || 'Standard', boId: id } : null;
     history.replaceState(null, '', location.pathname + location.search);
-    if (byId(id)) showDetail(id); else toast('Dieser Eintrag ist im Babe Organizer nicht (mehr) vorhanden.', 'err');
+    if (byId(id)) { showDetail(id); return; }
+    // Eintrag gehört zum anderen Reiter (z. B. Link aus dem Image Ranker zu einem Charakter) → dorthin wechseln
+    idbGetRaw(IS_CHARS ? 'entries' : 'chars:entries').then(list => {
+      if (Array.isArray(list) && list.some(x => x && x._id === id)) location.href = location.pathname + (IS_CHARS ? '' : '?k=chars') + '#e=' + encodeURIComponent(id) + (m[2] ? '&pick=' + m[2] + '&tab=' + encodeURIComponent(m[3] || '') : '');
+      else toast('Dieser Eintrag ist im Organizer nicht (mehr) vorhanden.', 'err');
+    }).catch(() => toast('Dieser Eintrag ist im Organizer nicht (mehr) vorhanden.', 'err'));
   }
   window.addEventListener('hashchange', openFromHash);
 
   // Änderungen aus anderen Tabs übernehmen
   if (channel) channel.onmessage = async () => { const fresh = await load(); entries = fresh; entriesGen++; await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
+
+  // ---------- Charaktere: vorhandene Ranker-Bilder verknüpfen ----------
+  // Liest den Image Ranker nur (ImageRankerDB) und schickt für bestätigte Paare einen Auftrag mit linkTo/create:false
+  // über „tool-transfer“ – der Ranker verknüpft dann nur, legt nichts neu an. Vorschläge nur bei eindeutig gleichem Namen,
+  // übernommen wird nichts ohne Bestätigung.
+  function readRankerImages() {
+    return new Promise(res => {
+      if (typeof indexedDB.databases !== 'function') return res(null);
+      indexedDB.databases().then(list => {
+        if (!list.some(x => x.name === 'ImageRankerDB')) return res(null);
+        const r = indexedDB.open('ImageRankerDB');
+        r.onupgradeneeded = () => { try { r.transaction.abort(); } catch {} };
+        r.onerror = r.onblocked = () => res(null);
+        r.onsuccess = () => {
+          const d = r.result; d.onversionchange = () => d.close();
+          if (!d.objectStoreNames.contains('images')) { d.close(); return res(null); }
+          const out = [], c = d.transaction('images').objectStore('images').openCursor();
+          c.onsuccess = () => { const k = c.result; if (!k) { d.close(); return res(out); } const im = k.value; out.push({ id: im.id, tab: im.tab, name: im.name || '', boId: im.boId || '', blob: im.blob, tags: im.tags || {} }); k.continue(); };
+          c.onerror = () => { d.close(); res(null); };
+        };
+      }).catch(() => res(null));
+    });
+  }
+  const normName = (x) => String(x || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, '');
+  const rkTagVal = (im, name) => { const t = im.tags && im.tags[name]; return t ? (Array.isArray(t.values) ? t.values : String(t.value || '').split(',').map(x => x.trim()).filter(Boolean)) : []; };
+  async function showRankerLink() {
+    const all = await readRankerImages();
+    if (!all) { toast('Der Image Ranker ist auf diesem Gerät nicht vorhanden (oder der Browser erlaubt das Lesen nicht).', 'err'); return; }
+    const tabs = [...new Set(all.map(i => i.tab || 'Standard'))];
+    const prefs = rkPrefs();
+    let tab = prefs._linkTab && tabs.includes(prefs._linkTab) ? prefs._linkTab : (tabs.find(t => /charakter/i.test(t)) || tabs[0]);
+    const label = (e) => `${v(e, 'Name')}${v(e, 'Universe') ? ' (' + v(e, 'Universe') + ')' : ''}`;
+    const byLabel = new Map(entries.map(e => [label(e), e]));
+    const linkedIds = new Set(all.filter(i => i.boId).map(i => i.boId));
+    const urls = [];
+    const renderRows = () => {
+      urls.forEach(u => URL.revokeObjectURL(u)); urls.length = 0;
+      const imgs = all.filter(i => (i.tab || 'Standard') === tab && !i.boId);
+      const free = entries.filter(e => !linkedIds.has(e._id));
+      const rows = imgs.map(im => {
+        const n = normName(im.name), uni = normName(rkTagVal(im, 'Herkunft')[0]);
+        let cand = free.filter(e => normName(v(e, 'Name')) === n || normName(v(e, 'AKA')).split(/,/).includes(n));
+        if (cand.length > 1 && uni) cand = cand.filter(e => normName(v(e, 'Universe')) === uni);
+        const sug = cand.length === 1 ? cand[0] : null;
+        let src = ''; if (im.blob instanceof Blob) { src = URL.createObjectURL(im.blob); urls.push(src); } else if (typeof im.blob === 'string') src = im.blob;
+        return `<div class="lk-row" data-rk="${im.id}"><label class="chk"><input type="checkbox" data-lk-on ${sug ? 'checked' : ''}></label>
+          <span class="lk-img">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer">` : ''}</span>
+          <span class="lk-name"><b>${esc(im.name || 'ohne Namen')}</b><small class="muted">${esc(rkTagVal(im, 'Herkunft').join(', '))}</small></span>
+          <input type="text" list="lk-list" data-lk-to value="${esc(sug ? label(sug) : '')}" placeholder="Charakter wählen – leer = neu anlegen"></div>`;
+      }).join('');
+      $('#lk-body').innerHTML = imgs.length ? rows : '<p class="muted">In diesem Reiter sind alle Ranker-Bilder schon verknüpft.</p>';
+      $('#lk-count').textContent = `${imgs.length} unverknüpfte Bilder im Reiter „${tab}“ · ${imgs.filter((_, k) => $$('#lk-body [data-lk-on]')[k] && $$('#lk-body [data-lk-on]')[k].checked).length} mit eindeutigem Vorschlag (vorausgewählt)`;
+    };
+    openModal(`
+      <div class="modal-head"><h2>🔗 Mit Image Ranker verknüpfen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help lk">
+        <p class="muted">Ranker-Bilder ohne Verknüpfung. Vorausgewählt ist nur, wo genau ein Charakter mit gleichem Namen existiert – bitte prüfen. Ohne Auswahl legt „verknüpfen“ einen neuen Charakter mit dem Ranker-Namen an (Universum, Spezies, Haarfarbe aus den Ranker-Eigenschaften). Der Ranker ändert dabei nur die Verknüpfung, Elo und Duelle bleiben.</p>
+        <div class="lk-bar"><label>Ranker-Reiter <select id="lk-tab">${tabs.map(t => `<option ${t === tab ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+          <label class="chk"><input type="checkbox" id="lk-img" checked> Ranker-Bild als eigenes Bild übernehmen (nur auf diesem Gerät)</label>
+          <span id="lk-count" class="muted"></span></div>
+        <datalist id="lk-list">${entries.filter(e => !linkedIds.has(e._id)).map(e => `<option value="${esc(label(e))}">`).join('')}</datalist>
+        <div id="lk-body" class="lk-body"></div>
+      </div>
+      <div class="form-foot"><button class="btn" data-action="close">Abbrechen</button><button class="btn primary" id="lk-go">Ausgewählte verknüpfen</button></div>`);
+    renderRows();
+    $('#lk-tab').addEventListener('change', (ev) => { tab = ev.target.value; prefs._linkTab = tab; rkSavePrefs(prefs); renderRows(); });
+    $('#lk-body').addEventListener('input', (ev) => { const row = ev.target.closest('.lk-row'); if (row && ev.target.matches('[data-lk-to]')) row.querySelector('[data-lk-on]').checked = true; });
+    $('#lk-go').addEventListener('click', async () => {
+      const rows = $$('#lk-body .lk-row').filter(r => r.querySelector('[data-lk-on]').checked);
+      if (!rows.length) { toast('Nichts ausgewählt.'); return; }
+      const takeImg = $('#lk-img').checked, items = [], used = new Set();
+      let created = 0, bad = 0, imgs = 0;
+      for (const row of rows) {
+        const im = all.find(i => String(i.id) === row.dataset.rk); if (!im) continue;
+        const txt = row.querySelector('[data-lk-to]').value.trim();
+        let e = txt ? byLabel.get(txt) : null;
+        if (txt && !e) { bad++; continue; }
+        if (e && (used.has(e._id) || linkedIds.has(e._id))) { bad++; continue; }
+        if (!e) {
+          const now = Date.now();
+          e = { _id: uid(), _created: now, _updated: now, Favorite: 'false' };
+          for (const f of ALL_FIELDS) if (e[f] === undefined) e[f] = '';
+          e.Name = im.name || 'Ohne Namen';
+          e.Universe = rkTagVal(im, 'Herkunft').join(', '); e.Species = rkTagVal(im, 'Spezies').join(', '); e['Hair color'] = rkTagVal(im, 'Haarfarbe').join(', ');
+          const grp = rkTagVal(im, '👥 Gruppen').find(g => TYPES['Medium'].includes(g)); if (grp) e.Medium = grp;
+          entries.push(derive(e)); created++;
+        }
+        used.add(e._id);
+        if (takeImg && im.blob instanceof Blob) {
+          try { const ref = await storeLocalImage(im.blob); e['Own Images'] = [...splitList(e['Own Images']), ref].join(', '); if (!images(e).length || images(e)[0] === ref) e.Cover = ref; imgs++; } catch {}
+        } else if (takeImg && typeof im.blob === 'string' && /^https?:/i.test(im.blob) && !splitList(e['Own Image URLs']).includes(im.blob)) {
+          e['Own Image URLs'] = [...splitList(e['Own Image URLs']), im.blob].join(', ');
+        }
+        e._updated = Date.now();
+        items.push({ boId: e._id, name: v(e, 'Name'), props: [], linkTo: im.id, create: false });
+      }
+      if (!items.length) { toast(`Nichts verknüpft${bad ? ` – ${bad} Auswahl(en) passen nicht (Name aus der Liste wählen, jeder Charakter nur einmal)` : ''}.`, 'err'); return; }
+      try {
+        await save();
+        const d = await transferDb();
+        await new Promise((res, rej) => { const tx = d.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put({ id: 'bo-link-' + Date.now(), from: 'b-organizer', createdAt: Date.now(), tab, items }); tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error); });
+        d.close();
+        if (transferChannel) transferChannel.postMessage({ type: 'job' });
+      } catch (err) { toast('Auftrag konnte nicht abgelegt werden: ' + (err && err.message || err), 'err'); return; }
+      urls.forEach(u => URL.revokeObjectURL(u));
+      closeModal(true); refreshFilters(); render();
+      toast(`${items.length} Verknüpfung(en) an den Ranker übergeben${created ? `, ${created} Charakter(e) neu angelegt` : ''}${imgs ? `, ${imgs} Bild(er) übernommen` : ''}${bad ? `, ${bad} übersprungen` : ''}. Der Ranker übernimmt sie beim nächsten Öffnen.`, 'ok');
+    });
+  }
+
+  // Reiter-Kopf und Babepedia-spezifische Bedienelemente
+  function initKind() {
+    $$('.kind-tabs a').forEach(a => a.classList.toggle('on', a.dataset.kind === (IS_CHARS ? 'chars' : 'babes')));
+    document.title = IS_CHARS ? 'Organizer · Charaktere' : 'Organizer · Personen';
+    if (!IS_CHARS) { $$('.chars-only').forEach(el => el.remove()); return; }
+    $$('.bp-only').forEach(el => { if (el.tagName === 'OPTION') el.remove(); else { el.hidden = true; el.style.display = 'none'; } });
+    const first = { 'f-nationality': 'Universum: alle', 'f-cat': 'Medium: alle', 'f-eyes': 'Spezies: alle', 'f-body': 'Stil: alle' };
+    for (const [id, t] of Object.entries(first)) { const o = $('#' + id + ' option'); if (o) o.textContent = t; }
+    const mf = $('#f-missing');
+    if (mf) mf.innerHTML = `<option value="">Fehlende Werte: egal</option><option value="any">⚠ irgendeiner fehlt</option><option value="none">✓ alle vorhanden</option>
+      <optgroup label="fehlt (evtl. auch andere)">${CORE_FIELDS.map(([f, l]) => `<option value="${esc(f)}">fehlt: ${esc(l)}</option>`).join('')}</optgroup>
+      <optgroup label="nur dieser fehlt">${CORE_FIELDS.map(([f, l]) => `<option value="only:${esc(f)}">nur ${esc(l)} fehlt</option>`).join('')}</optgroup>`;
+    $('#q').placeholder = 'Suchen: Name, Universum, Tags, Notizen…';
+    if (['global', 'site', 'diff', 'rank', 'scraped'].includes(ui.sort)) ui.sort = 'name';
+    ui.reviewUpdates = false;   // keine Babepedia-Aktualisierungen: Importe direkt übernehmen
+  }
+  initKind();
 
   (async () => {
     $('#main').innerHTML = '<div class="empty"><p>Lade Daten…</p></div>';
@@ -4349,7 +4588,7 @@
       await loadPending();
       try { duels = (await idbGet('duels')) || []; } catch { duels = []; }
       // Einmalig: Einträge mit Archiv-Kopie gelten als auf Babepedia gelöscht (Archiv-Übernahme = Original weg)
-      try {
+      if (!IS_CHARS) try {
         if (!localStorage.getItem('bp-organizer-archmig1')) {
           for (const e of entries) if (v(e, 'Archive URL') && !isTrue(e['Profile Deleted'])) { e['Profile Deleted'] = 'true'; e._updated = Date.now(); deriveChanged = true; }
           localStorage.setItem('bp-organizer-archmig1', '1');
@@ -4377,7 +4616,7 @@
     initSync();
     readRankerStatus().catch(() => {});
     openFromHash();
-    // Userscript informieren, dass das Tool bereit ist
-    window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
+    // Userscript informieren, dass das Tool bereit ist (nur Personen-Reiter)
+    if (!IS_CHARS) window.postMessage({ type: 'BP_TOOL_READY' }, location.origin);
   })();
 })();
