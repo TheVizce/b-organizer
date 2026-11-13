@@ -23,7 +23,7 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Fan Art'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Fan Art', 'Scene Images', 'Cosplay Images'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
@@ -97,7 +97,7 @@
     'Adult': 'Bewerten (Kategorien) ist nur bei „ja“ möglich', 'First Appearance': 'Jahr des ersten Auftritts', 'Voice Actor': 'Sprecherin (Original)', 'Actress': 'Darstellerin (Realfilm, Motion Capture)',
     'Full Name': 'vollständiger Name, falls anders'
   };
-  if (IS_CHARS) HINTS['Own Image URLs'] = 'Neue Links gelten als offiziell, außer du stellst vor dem Hinzufügen „Fan-Art“ ein. Off./Fan wechselt die Einordnung, ✕ entfernt, ★ macht zum Kachelbild (geht bei beiden).';
+  if (IS_CHARS) HINTS['Own Image URLs'] = 'Neue Links bekommen die Art aus der Auswahl daneben (Standard: offiziell). Der Knopf unten links am Bild wechselt Offiziell → Szene → Cosplay → Fan, ✕ entfernt, ★ macht zum Kachelbild (geht bei jeder Art).';
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
   const previewHTML = (val) => splitList(val).filter(u => /^https?:\/\//i.test(u))
     .map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕">`).join('');
@@ -614,15 +614,31 @@
     splitList(e['Own Image URLs']).forEach(u => list.push(u));
     splitList(e['Own Images']).forEach(u => list.push(u));
     const cover = v(e, 'Cover');
-    if (IS_CHARS) { const fan = new Set(splitList(e['Fan Art'])); list.sort((a, b) => fan.has(a) - fan.has(b)); }
+    if (IS_CHARS) { const ord = new Map(list.map(u => [u, KIND_IDX[imgKind(e, u)]])); list.sort((a, b) => ord.get(a) - ord.get(b)); }
     if (cover && list.includes(cover)) list.unshift(cover);
     return [...new Set(list)].filter(u => !isPlaceholder(u));
   }
   // Charaktere: Bild ist Fan-Art (sonst offizielles Artwork)
-  const isFan = (e, u) => IS_CHARS && splitList(e && e['Fan Art']).includes(u);
-  function toggleFan(e, u) {
-    const fan = splitList(e['Fan Art']);
-    e['Fan Art'] = (fan.includes(u) ? fan.filter(x => x !== u) : [...fan, u]).join(', ');
+  // Charaktere: Bildart. 'off' ist Standard (kein Feld) – alles Bisherige gilt als offiziell.
+  const IMG_KINDS = [
+    { k: 'off', field: '', title: 'Offizielle Artworks', short: 'Offiziell', tiny: 'Off.', one: 'offiziell' },
+    { k: 'scene', field: 'Scene Images', title: 'Szenenbilder', short: 'Szene', tiny: 'Szene', one: 'Szenenbild' },
+    { k: 'cos', field: 'Cosplay Images', title: 'Cosplay', short: 'Cosplay', tiny: 'Cos', one: 'Cosplay' },
+    { k: 'fan', field: 'Fan Art', title: 'Fan-Artworks', short: 'Fan', tiny: 'Fan', one: 'Fan-Art' }];
+  const KIND_IDX = Object.fromEntries(IMG_KINDS.map((x, i) => [x.k, i]));
+  const KIND_OF = Object.fromEntries(IMG_KINDS.map(x => [x.k, x]));
+  const kindFromGet = (get, u) => { for (const x of IMG_KINDS) if (x.field && splitList(get(x.field)).includes(u)) return x.k; return 'off'; };
+  const imgKind = (e, u) => IS_CHARS && e ? kindFromGet(f => e[f], u) : 'off';
+  const nextKind = (k) => IMG_KINDS[(KIND_IDX[k] + 1) % IMG_KINDS.length].k;
+  function setKindOn(get, set, u, k) {
+    for (const x of IMG_KINDS) if (x.field) {
+      const l = splitList(get(x.field)).filter(y => y !== u);
+      if (x.k === k) l.push(u);
+      set(x.field, l.join(', '));
+    }
+  }
+  function cycleKind(e, u) {
+    setKindOn(f => e[f], (f, val) => { if (val) e[f] = val; else delete e[f]; }, u, nextKind(imgKind(e, u)));
     e._updated = Date.now(); saveQuiet(); refreshItem(e._id);
   }
   const initials = (n) => (n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -1668,7 +1684,7 @@
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
-    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
+    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Fan Art': 'Fan-Artworks', 'Scene Images': 'Szenenbilder', 'Cosplay Images': 'Cosplay-Bilder', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
   };
   if (IS_CHARS) Object.assign(FIELD_LABELS, { 'Hair color': 'Haarfarbe', 'Eye color': 'Augenfarbe', 'Body type': 'Figur', 'Bra/Cup': 'Cup', 'Height': 'Größe', 'Notes': 'Notizen', 'Favorite': 'Favorit', 'Main Image URL': 'Hauptbild-URL' });
   const lab = (f) => FIELD_LABELS[f] || f;
@@ -2482,13 +2498,12 @@
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec(GROUPS[3].title, GROUPS[3].fields)}
           ${imgs.length ? (() => {
-            const cell = (u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}${IS_CHARS ? `<button class="img-kind-btn ${isFan(e, u) ? 'fan' : ''}" data-fan-toggle="${esc(u)}" data-id="${esc(e._id)}" title="${isFan(e, u) ? 'Als offizielles Artwork einordnen' : 'Als Fan-Artwork einordnen'}">${isFan(e, u) ? 'Fan' : 'Offiziell'} ⇄</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`;
+            const cell = (u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}${IS_CHARS ? `<button class="img-kind-btn k-${imgKind(e, u)}" data-fan-toggle="${esc(u)}" data-id="${esc(e._id)}" title="Bildart wechseln (weiter zu: ${KIND_OF[nextKind(imgKind(e, u))].one})">${KIND_OF[imgKind(e, u)].short} ⇄</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`;
             const all = imgs.map((u, i) => [u, i]);
             if (!IS_CHARS) return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${all.map(([u, i]) => cell(u, i)).join('')}</div></div>`;
-            const off = all.filter(([u]) => !isFan(e, u)), fan = all.filter(([u]) => isFan(e, u));
+
             return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3></div>`
-              + (off.length ? `<div class="sec img-sec"><h4>Offizielle Artworks (${off.length})</h4><div class="img-grid">${off.map(([u, i]) => cell(u, i)).join('')}</div></div>` : '')
-              + (fan.length ? `<div class="sec img-sec"><h4>Fan-Artworks (${fan.length})</h4><div class="img-grid">${fan.map(([u, i]) => cell(u, i)).join('')}</div></div>` : '');
+              + IMG_KINDS.map(x => { const g = all.filter(([u]) => imgKind(e, u) === x.k); return g.length ? `<div class="sec img-sec"><h4>${x.title} (${g.length})</h4><div class="img-grid">${g.map(([u, i]) => cell(u, i)).join('')}</div></div>` : ''; }).join('');
           })() : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
@@ -2497,22 +2512,26 @@
     if (rankerPick && rankerPick.boId === e._id) decoratePick(e);
   }
 
-  const kindBtn = (r, fan) => IS_CHARS ? `<button type="button" class="own-btn kind ${fan && fan.has(r) ? 'fan' : ''}" data-own-kind title="Offiziell ⇄ Fan-Art">${fan && fan.has(r) ? 'Fan' : 'Off.'}</button>` : '';
-  const formFan = (form) => { const h = form && form.elements.namedItem('Fan Art'); return new Set(h ? splitList(h.value) : []); };
-  function toggleFormFan(form, r) {
-    const h = form.elements.namedItem('Fan Art'); if (!h) return;
-    const f = splitList(h.value); h.value = (f.includes(r) ? f.filter(x => x !== r) : [...f, r]).join(', '); dirty = true;
+  // kinds: Funktion Bild → Art (aus Eintrag oder Formular)
+  const kindBtn = (r, kinds) => IS_CHARS && kinds ? `<button type="button" class="own-btn kind k-${kinds(r)}" data-own-kind title="Bildart wechseln (Offiziell → Szene → Cosplay → Fan)">${KIND_OF[kinds(r)].tiny}</button>` : '';
+  const kindCls = (r, kinds) => IS_CHARS && kinds && kinds(r) !== 'off' ? 'is-alt' : '';
+  const formGet = (form) => (f) => { const h = form && form.elements.namedItem(f); return h ? h.value : ''; };
+  const formKinds = (form) => IS_CHARS ? (u) => kindFromGet(formGet(form), u) : null;
+  const entryKinds = (e) => IS_CHARS ? (u) => imgKind(e, u) : null;
+  function setFormKind(form, r, k) {
+    setKindOn(formGet(form), (f, val) => { const h = form.elements.namedItem(f); if (h) h.value = val; }, r, k); dirty = true;
   }
-  function ownItemsHTML(refs, cover, fan) {
-    return refs.map(r => `<div class="own-item ${r === cover ? 'is-cover' : ''} ${fan && fan.has(r) ? 'is-fan' : ''}" data-ref="${esc(r)}">
-      <img src="${esc(R(r))}" alt="" data-full="${esc(r)}">${kindBtn(r, fan)}
+  const kindHiddenHTML = (e) => IS_CHARS ? IMG_KINDS.filter(x => x.field).map(x => `<input type="hidden" name="${x.field}" value="${esc(splitList(v(e, x.field)).join(', '))}">`).join('') : '';
+  function ownItemsHTML(refs, cover, kinds) {
+    return refs.map(r => `<div class="own-item ${r === cover ? 'is-cover' : ''} ${kindCls(r, kinds)}" data-ref="${esc(r)}">
+      <img src="${esc(R(r))}" alt="" data-full="${esc(r)}">${kindBtn(r, kinds)}
       <button type="button" class="own-btn" data-own-cover title="${r === cover ? 'Ist Cover' : 'Als Cover'}">★</button>
       <button type="button" class="own-btn del" data-own-del title="Entfernen">✕</button></div>`).join('');
   }
 
-  function ownUrlItemsHTML(urls, cover, fan) {
-    return urls.map(u => `<div class="own-item ${u === cover ? 'is-cover' : ''} ${fan && fan.has(u) ? 'is-fan' : ''}" data-ref="${esc(u)}">
-      <img src="${esc(thumbUrl(u))}" alt="" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕" title="${esc(u)}">${kindBtn(u, fan)}
+  function ownUrlItemsHTML(urls, cover, kinds) {
+    return urls.map(u => `<div class="own-item ${u === cover ? 'is-cover' : ''} ${kindCls(u, kinds)}" data-ref="${esc(u)}">
+      <img src="${esc(thumbUrl(u))}" alt="" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕" title="${esc(u)}">${kindBtn(u, kinds)}
       <button type="button" class="own-btn" data-own-cover title="${u === cover ? 'Ist Cover' : 'Als Cover'}">★</button>
       <button type="button" class="own-btn del" data-own-del title="Link entfernen">✕</button></div>`).join('');
   }
@@ -2520,12 +2539,11 @@
     if (f === 'Cover') return '';
     if (f === 'Own Image URLs') {
       const urls = splitList(v(e, f));
-      const fan = new Set(splitList(v(e, 'Fan Art')));
       return `<div class="field wide own-field"><label>${IS_CHARS ? 'Bild-Links' : 'Eigene Bild-Links'}</label>
-        <div class="unit-row"><input type="text" data-ownurl-in placeholder="Bild-Adresse einfügen (https://…) – mehrere mit Leerzeichen oder Komma" autocomplete="off" inputmode="url">${IS_CHARS ? '<select data-ownurl-kind title="Neue Links einordnen als"><option value="off">offiziell</option><option value="fan">Fan-Art</option></select>' : ''}<button type="button" class="btn small" data-ownurl-add>Hinzufügen</button></div>
+        <div class="unit-row"><input type="text" data-ownurl-in placeholder="Bild-Adresse einfügen (https://…) – mehrere mit Leerzeichen oder Komma" autocomplete="off" inputmode="url">${IS_CHARS ? `<select data-ownurl-kind title="Neue Links einordnen als">${IMG_KINDS.map(x => `<option value="${x.k}">${x.one}</option>`).join('')}</select>` : ''}<button type="button" class="btn small" data-ownurl-add>Hinzufügen</button></div>
         <input type="hidden" name="Own Image URLs" value="${esc(urls.join(', '))}">
-        ${IS_CHARS ? `<input type="hidden" name="Fan Art" value="${esc(splitList(v(e, 'Fan Art')).join(', '))}">` : ''}
-        <div class="own-list" data-ownurl-list>${ownUrlItemsHTML(urls, v(e, 'Cover'), fan)}</div>
+        ${kindHiddenHTML(e)}
+        <div class="own-list" data-ownurl-list>${ownUrlItemsHTML(urls, v(e, 'Cover'), entryKinds(e))}</div>
         <span class="hint">${esc(HINTS[f])}</span></div>`;
     }
     if (f === 'Own Images') {
@@ -2535,7 +2553,7 @@
         <input type="file" accept="image/*" multiple hidden data-own-file>
         <input type="hidden" name="Own Images" value="${esc(refs.join(', '))}">
         <input type="hidden" name="Cover" value="${esc(v(e, 'Cover'))}">
-        <div class="own-list" data-own-list>${ownItemsHTML(refs, v(e, 'Cover'), new Set(splitList(v(e, 'Fan Art'))))}</div>
+        <div class="own-list" data-own-list>${ownItemsHTML(refs, v(e, 'Cover'), entryKinds(e))}</div>
         <span class="hint">Werden verkleinert nur in diesem Browser gespeichert (nicht im Repo). Im JSON-Backup sind sie enthalten.</span></div>`;
     }
     if (f === 'Profession Category') {
@@ -2632,12 +2650,12 @@
     if (!list || !hidden) return;
     const coverIn = () => form.elements.namedItem('Cover');
     const urls = () => splitList(hidden.value);
-    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownUrlItemsHTML(arr, coverIn() ? coverIn().value : '', formFan(form)); dirty = true; };
+    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownUrlItemsHTML(arr, coverIn() ? coverIn().value : '', formKinds(form)); dirty = true; };
     const add = () => {
       const neu = inp.value.split(/[\s,]+/).map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
       if (!neu.length) { if (inp.value.trim()) toast('Bitte eine Adresse mit http(s):// einfügen.', 'err'); return; }
       const ks = $('[data-ownurl-kind]', form);
-      if (ks && ks.value === 'fan') { const fan = formFan(form); neu.forEach(u => { if (!fan.has(u)) toggleFormFan(form, u); }); }
+      if (ks) neu.forEach(u => setFormKind(form, u, ks.value));
       redraw([...new Set([...urls(), ...neu])]); inp.value = '';
     };
     $('[data-ownurl-add]', form).addEventListener('click', add);
@@ -2646,16 +2664,16 @@
     list.addEventListener('click', (ev) => {
       const item = ev.target.closest('.own-item'); if (!item) return;
       const u = item.dataset.ref, cv = coverIn();
-      if (ev.target.closest('[data-own-del]')) { if (cv && cv.value === u) cv.value = ''; if (formFan(form).has(u)) toggleFormFan(form, u); redraw(urls().filter(x => x !== u)); }
+      if (ev.target.closest('[data-own-del]')) { if (cv && cv.value === u) cv.value = ''; if (IS_CHARS) setFormKind(form, u, 'off'); redraw(urls().filter(x => x !== u)); }
       else if (ev.target.closest('[data-own-cover]') && cv) { cv.value = cv.value === u ? '' : u; redraw(urls()); }
-      else if (ev.target.closest('[data-own-kind]')) { toggleFormFan(form, u); redraw(urls()); }
+      else if (ev.target.closest('[data-own-kind]')) { setFormKind(form, u, nextKind(formKinds(form)(u))); redraw(urls()); }
     });
   }
   function bindOwnImages(form) {
     const list = $('[data-own-list]', form), hidden = form.elements.namedItem('Own Images'), coverIn = form.elements.namedItem('Cover');
     const fileIn = $('[data-own-file]', form), drop = $('[data-own-drop]', form);
     const refs = () => splitList(hidden.value);
-    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownItemsHTML(arr, coverIn.value, formFan(form)); dirty = true; };
+    const redraw = (arr) => { hidden.value = arr.join(', '); list.innerHTML = ownItemsHTML(arr, coverIn.value, formKinds(form)); dirty = true; };
     async function add(files) {
       const imgsIn = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(f.name));
       if (!imgsIn.length) { toast('Keine Bilddateien gefunden.', 'err'); return; }
@@ -2677,10 +2695,10 @@
       const r = item.dataset.ref;
       if (ev.target.closest('[data-own-del]')) {
         if (coverIn.value === r) coverIn.value = '';
-        if (formFan(form).has(r)) toggleFormFan(form, r);
+        if (IS_CHARS) setFormKind(form, r, 'off');
         redraw(refs().filter(x => x !== r));
       } else if (ev.target.closest('[data-own-kind]')) {
-        toggleFormFan(form, r); redraw(refs());
+        setFormKind(form, r, nextKind(formKinds(form)(r))); redraw(refs());
       } else if (ev.target.closest('[data-own-cover]')) {
         coverIn.value = coverIn.value === r ? '' : r;
         redraw(refs());
@@ -2862,7 +2880,7 @@
     const { el, ids, ei, ii, imgs } = viewer;
     const e = byId(ids[ei]);
     $('.vw-name', el).textContent = e ? (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name') : '';
-    $('.vw-count', el).textContent = (imgs.length ? `Bild ${ii + 1} / ${imgs.length}${IS_CHARS ? (isFan(byId(ids[ei]), imgs[ii]) ? ' · Fan-Art' : ' · offiziell') : ''}` : 'keine Bilder') + (ids.length > 1 ? ` · Eintrag ${ei + 1} / ${ids.length}` : '');
+    $('.vw-count', el).textContent = (imgs.length ? `Bild ${ii + 1} / ${imgs.length}${IS_CHARS ? ' · ' + KIND_OF[imgKind(byId(ids[ei]), imgs[ii])].one : ''}` : 'keine Bilder') + (ids.length > 1 ? ` · Eintrag ${ei + 1} / ${ids.length}` : '');
     const img = $('.vw-stage img', el), err = $('.vw-err', el);
     el.classList.remove('zoom');
     err.hidden = true; img.hidden = !imgs.length;
@@ -2975,6 +2993,8 @@
   const SLIDE_DEF = { sec: 5, per: 'all', perN: 3, order: 'list', mixImgs: false, trans: 'fade', fade: 0.8, kb: true, fit: 'contain', blurBg: true,
     info: true, infoNote: true, bar: true, loop: true, fullscreen: true, coverFirst: true, onlyChecked: false };
   let slide = null;
+  // Bildarten für die Diashow (alte Einstellung 'kind': all/off/fan wird übernommen)
+  const slideKinds = (c) => Array.isArray(c.kinds) ? c.kinds : c.kind === 'off' ? ['off'] : c.kind === 'fan' ? ['fan'] : IMG_KINDS.map(x => x.k);
   function showSlideSettings() {
     if (!shown.length) { toast('Keine Einträge in der Liste.'); return; }
     const c = Object.assign({}, SLIDE_DEF, ui.slide || {});
@@ -2992,7 +3012,7 @@
         <div class="cfg-grid">
           ${opt('per', 'all', 'alle Bilder je Eintrag', c.per)}${opt('per', 'cover', 'nur das Kachelbild', c.per)}${opt('per', 'n', 'die ersten …', c.per)}
           <label class="chk">… <input type="number" name="perN" min="1" max="50" value="${c.perN}" style="width:64px"> Bilder je Eintrag</label>
-          ${IS_CHARS ? opt('kind', 'all', 'offizielle und Fan-Art', c.kind || 'all') + opt('kind', 'off', 'nur offizielle Artworks', c.kind || 'all') + opt('kind', 'fan', 'nur Fan-Art', c.kind || 'all') : ''}
+          ${IS_CHARS ? `<span class="muted sl-kinds">Bildarten:</span>` + IMG_KINDS.map(x => chk('kind_' + x.k, x.title, slideKinds(c).includes(x.k))).join('') : ''}
           ${chk('coverFirst', 'mit dem Kachelbild beginnen', c.coverFirst)}${chk('onlyChecked', 'nur Einträge mit geprüftem Kachelbild', c.onlyChecked)}
         </div>
         <h3>Reihenfolge</h3>
@@ -3018,7 +3038,7 @@
       const g = (n) => form.elements.namedItem(n), r = (n) => (form.querySelector(`input[name="${n}"]:checked`) || {}).value;
       const cfg = {
         sec: Math.min(120, Math.max(1, Number(g('sec').value) || 5)), fade: Math.min(5, Math.max(0, Number(g('fade').value) || 0)),
-        kind: r('kind') || 'all', per: r('per') || 'all', perN: Math.max(1, parseInt(g('perN').value, 10) || 3), order: r('order') || 'list', trans: r('trans') || 'fade', fit: r('fit') || 'contain'
+        kinds: IS_CHARS ? IMG_KINDS.map(x => x.k).filter(k => g('kind_' + k).checked) : undefined, per: r('per') || 'all', perN: Math.max(1, parseInt(g('perN').value, 10) || 3), order: r('order') || 'list', trans: r('trans') || 'fade', fit: r('fit') || 'contain'
       };
       for (const k of ['mixImgs', 'loop', 'kb', 'blurBg', 'info', 'infoNote', 'bar', 'fullscreen', 'coverFirst', 'onlyChecked']) cfg[k] = g(k).checked;
       ui.slide = cfg; saveUI(); closeModal(true);
@@ -3033,8 +3053,7 @@
     for (const e of list) {
       let imgs = images(e).filter(u => R(u));
       if (!cfg.coverFirst && imgs.length > 1) imgs = imgs.slice(1).concat(imgs[0]);
-      if (IS_CHARS && cfg.kind === 'off') imgs = imgs.filter(u => !isFan(e, u));
-      if (IS_CHARS && cfg.kind === 'fan') imgs = imgs.filter(u => isFan(e, u));
+      if (IS_CHARS) { const ks = slideKinds(cfg); imgs = imgs.filter(u => ks.includes(imgKind(e, u))); }
       if (cfg.per === 'cover') imgs = imgs.slice(0, 1);
       else if (cfg.per === 'n') imgs = imgs.slice(0, cfg.perN);
       imgs.forEach((u, k) => items.push({ id: e._id, u, k, n: imgs.length }));
@@ -3861,7 +3880,7 @@
     const rkPick = t.closest('[data-rk-pick]');
     if (rkPick) { sendReplacement(rkPick.dataset.rkPick, rkPick); return; }
     const ft = t.closest('[data-fan-toggle]');
-    if (ft) { const e = byId(ft.dataset.id); if (e) { toggleFan(e, ft.dataset.fanToggle); showDetail(e._id); } return; }
+    if (ft) { const e = byId(ft.dataset.id); if (e) { cycleKind(e, ft.dataset.fanToggle); showDetail(e._id); } return; }
     const ourm = t.closest('[data-ownurl-rm]');
     if (ourm) {
       const e = byId(ourm.dataset.id), u = ourm.dataset.ownurlRm;

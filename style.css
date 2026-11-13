@@ -885,9 +885,11 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .img-sec h4 { margin: 4px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .img-sec + .img-sec { margin-top: 12px; }
 .img-cell .img-kind-btn { position: absolute; right: 6px; bottom: 6px; border: 0; border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; background: rgba(10,11,15,.75); color: var(--muted); }
-.img-cell .img-kind-btn.fan { color: #c9a3ff; }
+.img-cell .img-kind-btn.k-scene, .own-btn.kind.k-scene { color: #7fd1ff; }
+.img-cell .img-kind-btn.k-cos, .own-btn.kind.k-cos { color: #ffb37f; }
+.img-cell .img-kind-btn.k-fan, .own-btn.kind.k-fan { color: #c9a3ff; }
 .img-cell .img-kind-btn:hover { color: var(--text); }
 .own-btn.kind { top: auto; bottom: 4px; left: 4px; width: auto; height: 20px; border-radius: 6px; padding: 0 6px; font-size: 10px; }
-.own-btn.kind.fan, .own-item.is-fan .own-btn.kind { color: #c9a3ff; }
-.own-item.is-fan { border-style: dashed; }
+.own-item.is-alt { border-style: dashed; }
+.sl-kinds { grid-column: 1 / -1; font-size: 12px; margin-top: 4px; }
 .field .unit-row select[data-ownurl-kind] { width: 96px; }
