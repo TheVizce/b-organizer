@@ -2900,6 +2900,7 @@
         <b class="cb-title">⚖️ Kategorie-Abgleich</b>
         <div class="seg cb-cats">${SCORE_CATS.map((c, i) => `<button data-cbcat="${i}" title="Taste ${c.key}">${esc(c.label)}</button>`).join('')}</div>
         <span class="cb-count muted"></span>
+        <button class="btn small cb-open" title="Duelle, bei denen du noch nicht entschieden hast">Offen (0)</button>
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
       <div class="cb-q"></div>
@@ -2914,7 +2915,11 @@
       const cc = t.closest('[data-cbcat]'); if (cc) return calibSetCat(Number(cc.dataset.cbcat));
       const an = t.closest('[data-cbans]'); if (an) return calibAnswer(an.dataset.cbans);
       const im = t.closest('[data-cbimg]'); if (im) return calibImg(Number(im.dataset.cbimg), ev.shiftKey ? -1 : 1);
-      const fx = t.closest('[data-cbfix]'); if (fx) return calibFix(fx.dataset.cbfix, Number(fx.dataset.val));
+      const fx = t.closest('[data-cbfix]'); if (fx) return calibFix(fx.dataset.cbfix, Number(fx.dataset.val), fx.dataset.duel);
+      const kp = t.closest('[data-cbkeep]'); if (kp) return calibKeep(kp.dataset.cbkeep);
+      const rd = t.closest('[data-cbredo]'); if (rd) { duels = duels.filter(x => x.id !== rd.dataset.cbredo); saveDuels(); return calibOpenList(); }
+      if (t.closest('.cb-open')) return calib.list ? calibNext() : calibOpenList();
+      if (t.closest('[data-cbback]')) return calibNext();
       if (t.closest('[data-cbnext]')) return calibNext();
       if (t.closest('[data-cbskip]')) { calib.skip.add(calib.pair.map(e => e._id).sort().join('|')); return calibNext(); }
       const nm = t.closest('[data-cbopen]'); if (nm) { const id = nm.dataset.cbopen; closeCalib(); showDetail(id); }
@@ -2928,6 +2933,7 @@
     render();
   }
   function calibSetCat(i) { calib.cat = i; ui.calibCat = i; saveUI(); calibNext(); }
+  // Hinweis „später entscheiden“: die Entscheidung bleibt in „Offen“, das Paar kommt nicht nochmal
   function calibNext() {
     calib.pair = calibPick(); calib.img = [0, 0]; calib.answer = null;
     calibRender();
@@ -2949,42 +2955,75 @@
         <span class="cb-val">${reveal ? `${esc(c.label)}: <b>${fmtV(x)}</b>` : `${esc(c.label)}: <span class="muted">verdeckt</span>`}</span></div>
     </div>`;
   }
-  function calibVerdict() {
-    const c = SCORE_CATS[calib.cat], [A, B] = calib.pair, r = calib.answer;
+  // Bewertet ein Duell mit den AKTUELLEN Werten: hält es? Sonst Vorschläge zum Angleichen.
+  function duelEval(d) {
+    const c = SCORE_CATS.find(x => x.f === d.cat), A = byId(d.a), B = byId(d.b);
+    if (!c || !A || !B) return null;
     const va = num(v(A, c.f)), vb = num(v(B, c.f));
-    const nA = v(A, 'Name'), nB = v(B, 'Name');
-    const fix = (e, val, txt) => `<button class="btn small" data-cbfix="${esc(e._id)}" data-val="${val}">${esc(txt)}</button>`;
-    let ok = false, msg = '', fixes = [];
-    const win = r === 'a' ? A : r === 'b' ? B : null, lose = r === 'a' ? B : r === 'b' ? A : null;
-    if (r === '=') {
+    if (va == null || vb == null) return null;
+    const fixes = [], fx = (e, val) => fixes.push({ id: e._id, val, txt: `${v(e, 'Name')} auf ${fmtV(val)}` });
+    let ok = false, msg = '';
+    if (d.r === '=') {
       ok = va === vb;
       if (ok) msg = 'Gleich eingeschätzt und gleich bewertet – hält.';
       else {
         const hi = va > vb ? A : B, lo = va > vb ? B : A, vh = Math.max(va, vb), vl = Math.min(va, vb);
         msg = vh - vl <= 0.5 && !c.vals ? `Gleich eingeschätzt, bewertet ${fmtV(vh)} gegen ${fmtV(vl)} – knapp, angleichen?` : `Gleich eingeschätzt, aber ${fmtV(vh)} gegen ${fmtV(vl)}.`;
-        fixes = [fix(hi, vl, `${v(hi, 'Name')} auf ${fmtV(vl)}`), fix(lo, vh, `${v(lo, 'Name')} auf ${fmtV(vh)}`)];
+        fx(hi, vl); fx(lo, vh);
       }
     } else {
+      const win = d.r === 'a' ? A : B, lose = d.r === 'a' ? B : A;
       const vw = num(v(win, c.f)), vl = num(v(lose, c.f));
       if (vw > vl) { ok = true; msg = `${v(win, 'Name')} vorne und auch höher bewertet – hält.`; }
       else if (vw === vl) {
         msg = `${v(win, 'Name')} vorne, aber beide ${fmtV(vw)}.`;
         const up = stepFrom(c, vw, 1), dn = stepFrom(c, vl, -1);
-        if (up !== vw) fixes.push(fix(win, up, `${v(win, 'Name')} auf ${fmtV(up)}`));
-        if (dn !== vl) fixes.push(fix(lose, dn, `${v(lose, 'Name')} auf ${fmtV(dn)}`));
+        if (up !== vw) fx(win, up);
+        if (dn !== vl) fx(lose, dn);
       } else {
         msg = `Widerspruch: ${v(win, 'Name')} vorne, aber niedriger bewertet (${fmtV(vw)} gegen ${fmtV(vl)}).`;
-        fixes = [fix(win, vl, `${v(win, 'Name')} auf ${fmtV(vl)}`), fix(lose, vw, `${v(lose, 'Name')} auf ${fmtV(vw)}`)];
+        fx(win, vl); fx(lose, vw);
       }
     }
-    return `<div class="cb-verdict ${ok ? 'ok' : 'warn'}"><span>${ok ? '✓ ' : '⚠︎ '}${esc(msg)}</span>
-      <span class="cb-fixes">${fixes.join('')}${fixes.length ? '<span class="muted">oder</span>' : ''}<button class="btn small ${ok ? 'primary' : ''}" data-cbnext>${fixes.length ? 'so lassen' : 'Weiter'} <kbd>Enter</kbd></button></span></div>`;
+    return { ok, msg, fixes, c, A, B };
+  }
+  // Offen = Duell passt (mit heutigen Werten) nicht und wurde weder angepasst noch „so gelassen“
+  const duelOpen = (d) => !d.done && (() => { const r = duelEval(d); return r && !r.ok; })();
+  function calibVerdict() {
+    const d = calib.duel, r = duelEval(d);
+    if (!r) return '';
+    const fixes = r.fixes.map(f => `<button class="btn small" data-cbfix="${esc(f.id)}" data-val="${f.val}" data-duel="${esc(d.id)}">${esc(f.txt)}</button>`).join('');
+    return `<div class="cb-verdict ${r.ok ? 'ok' : 'warn'}"><span>${r.ok ? '✓ ' : '⚠︎ '}${esc(r.msg)}</span>
+      <span class="cb-fixes">${fixes}${fixes ? '<span class="muted">oder</span>' : ''}${fixes ? `<button class="btn small" data-cbkeep="${esc(d.id)}">so lassen</button>` : ''}<button class="btn small ${r.ok ? 'primary' : ''}" data-cbnext>${fixes ? 'später entscheiden' : 'Weiter'} <kbd>Enter</kbd></button></span></div>`;
+  }
+  // Liste der offenen Entscheidungen
+  function calibOpenList() {
+    const open = duels.filter(duelOpen).sort((a, b) => b.ts - a.ts);
+    calib.list = true;
+    const { el } = calib;
+    $('.cb-q', el).innerHTML = `<b>Offene Entscheidungen</b> <span class="muted">(${open.length}) – Duelle, bei denen deine Wahl nicht zu den Werten passt</span>`;
+    $('.cb-body', el).innerHTML = `<div class="cb-list">${open.length ? open.map(d => {
+      const r = duelEval(d);
+      const ans = d.r === '=' ? 'gleich' : `${esc(v(d.r === 'a' ? r.A : r.B, 'Name'))} vorne`;
+      return `<div class="cb-item"><div class="cb-item-h"><b>${esc(r.c.label)}</b> · <button class="linklike" data-cbopen="${esc(r.A._id)}">${esc(v(r.A, 'Name'))}</button> (${fmtV(num(v(r.A, r.c.f)))}) gegen <button class="linklike" data-cbopen="${esc(r.B._id)}">${esc(v(r.B, 'Name'))}</button> (${fmtV(num(v(r.B, r.c.f)))}) · deine Wahl: ${ans} <span class="muted">· ${new Date(d.ts).toLocaleDateString('de-DE')}</span></div>
+        <div class="cb-item-m muted">${esc(r.msg)}</div>
+        <div class="cb-fixes">${r.fixes.map(f => `<button class="btn small" data-cbfix="${esc(f.id)}" data-val="${f.val}" data-duel="${esc(d.id)}">${esc(f.txt)}</button>`).join('')}<button class="btn small" data-cbkeep="${esc(d.id)}">so lassen</button><button class="btn small ghost" data-cbredo="${esc(d.id)}" title="Duell löschen, das Paar kommt wieder dran">neu vergleichen</button></div></div>`;
+    }).join('') : '<p class="muted">Keine offenen Entscheidungen.</p>'}</div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
+    calibCount();
+  }
+  function calibCount() {
+    const c = SCORE_CATS[calib.cat], done = duels.filter(d => d.cat === c.f).length, pool = calibPool(c).length, open = duels.filter(duelOpen).length;
+    $('.cb-count', calib.el).textContent = `${done} Duell${done === 1 ? '' : 'e'} in ${c.label}${calib.n ? ` · ${calib.n} in dieser Runde` : ''} · ${pool} bewertet`;
+    const ob = $('.cb-open', calib.el);
+    ob.textContent = `Offen (${open})`; ob.classList.toggle('has', open > 0); ob.classList.toggle('on', !!calib.list);
   }
   function calibRender() {
     const { el } = calib, c = SCORE_CATS[calib.cat];
     $$('.cb-cats button', el).forEach((b, i) => b.classList.toggle('on', i === calib.cat));
-    const done = duels.filter(d => d.cat === c.f).length, pool = calibPool(c).length;
-    $('.cb-count', el).textContent = `${done} Duell${done === 1 ? '' : 'e'} in ${c.label}${calib.n ? ` · ${calib.n} in dieser Runde` : ''} · ${pool} bewertet`;
+    calib.list = false;
+    const pool = calibPool(c).length;
+    calibCount();
     if (!calib.pair) {
       $('.cb-q', el).innerHTML = '';
       $('.cb-body', el).innerHTML = `<div class="cb-empty"><p>${pool < 2 ? `In der aktuellen Liste sind in „${esc(c.label)}“ weniger als zwei Einträge bewertet.` : `Für „${esc(c.label)}“ gibt es gerade keine neuen Paare mit gleichem oder benachbartem Wert.`}</p><p class="muted">Andere Kategorie wählen oder später mit mehr Bewertungen wiederkommen.</p></div>`;
@@ -3002,15 +3041,22 @@
     if (!calib.pair || calib.answer) return;
     const c = SCORE_CATS[calib.cat], [A, B] = calib.pair;
     calib.answer = r; calib.n++;
-    duels.push({ id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cat: c.f, a: A._id, b: B._id, va: num(v(A, c.f)), vb: num(v(B, c.f)), r, ts: Date.now() });
+    calib.duel = { id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cat: c.f, a: A._id, b: B._id, va: num(v(A, c.f)), vb: num(v(B, c.f)), r, ts: Date.now() };
+    duels.push(calib.duel);
     saveDuels();
     calibRender();
   }
-  function calibFix(id, val) {
-    const c = SCORE_CATS[calib.cat];
+  function calibFix(id, val, duelId) {
+    const d = duels.find(x => x.id === duelId), c = SCORE_CATS.find(x => x.f === (d ? d.cat : SCORE_CATS[calib.cat].f));
     setScore(id, c.f, val);
+    if (d) { d.done = 'fixed'; d.doneTs = Date.now(); saveDuels(); }
     toast(`${v(byId(id), 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok');
-    calibNext();
+    calib.list ? calibOpenList() : calibNext();
+  }
+  function calibKeep(duelId) {
+    const d = duels.find(x => x.id === duelId);
+    if (d) { d.done = 'keep'; d.doneTs = Date.now(); saveDuels(); }
+    calib.list ? calibOpenList() : calibNext();
   }
   function calibKey(ev) {
     if (ev.target.closest && ev.target.closest('input, textarea, select')) return;
@@ -3018,6 +3064,7 @@
     if (k === 'Escape') { ev.preventDefault(); return closeCalib(); }
     const ci = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
     if (ci >= 0 && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); return calibSetCat(ci); }
+    if (calib.list) { if (k === 'Enter') { ev.preventDefault(); calibNext(); } return; }
     if (!calib.pair) return;
     if (!calib.answer) {
       if (k === 'ArrowLeft') { ev.preventDefault(); return calibAnswer('a'); }

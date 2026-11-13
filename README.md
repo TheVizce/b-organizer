@@ -308,3 +308,4 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Kachel-Abzeichen „🃏 Kategorien als Karte“: unten im Bild große Tool-Note mit Flagge, daneben GES/BOD/HOT/CUT/SYM und BP (✓ = gleich, Zahl = abweichende Babepedia-Note). Ersetzt dann das ♥-Abzeichen.
 - Kachel-Abzeichen „✓ Ecke Kachelbild geprüft“: grünes Band oben links.
 - Beide in Ansicht → Abzeichen ein-/ausschaltbar, standardmäßig an.
+- Abgleich: Jede Antwort wird sofort gespeichert, das Paar kommt nicht wieder. Passt die Wahl nicht zu den Werten, kann man „später entscheiden“ – das Duell landet unter **Offen (N)** (oben im Abgleich) mit denselben Vorschlägen, „so lassen“ und „neu vergleichen“ (löscht das Duell, Paar kommt wieder dran). Offen wird immer mit den aktuellen Werten berechnet – wer inzwischen anders bewertet, erledigt sich von selbst.

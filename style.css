@@ -809,3 +809,10 @@ body.cards-s .fut-s b { font-size: 12px; }
 body.cards-s .fut-s i { font-size: 9px; }
 body.cards-s .card .fut { gap: 6px; padding: 22px 6px 6px; }
 body.cards-s .card .img.has-fut .badges { bottom: 60px; }
+.cb-open.has { border-color: var(--warn); color: var(--warn); }
+.cb-open.on { background: var(--accent-bg); }
+.cb-list { grid-column: 1 / -1; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; max-width: 980px; width: 100%; margin: 0 auto; }
+.cb-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.cb-item-h { font-size: 14px; }
+.cb-item-h .linklike { background: none; border: 0; padding: 0; color: var(--accent-2); font: inherit; cursor: pointer; }
+.cb-item-m { font-size: 13px; margin: 3px 0 8px; }
