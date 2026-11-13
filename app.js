@@ -1226,11 +1226,14 @@
         index.set(keyOf(existing), existing);
         updated++;
       } else if (existing) {
-        for (const f of ALL_FIELDS) if (item[f]) existing[f] = item[f];
+        // Ergänzungs-Datei: nur leere Felder füllen, nie etwas überschreiben
+        for (const f of ALL_FIELDS) if (item[f] && !(raw.__fill && v(existing, f))) existing[f] = item[f];
         existing._updated = now;
         derive(existing);
         index.set(keyOf(existing), existing);
         updated++;
+      } else if (raw.__fill) {
+        skipped++;   // Ergänzungen legen keine Einträge an
       } else {
         const e = { _id: raw._id || uid(), _created: raw._created || now, _updated: now };
         for (const f of ALL_FIELDS) e[f] = item[f] || '';
@@ -1309,6 +1312,14 @@
         const isCharFile = data && data.kind === 'chars', looksBp = items.some(x => x && /babepedia\.com/i.test(String(x['Profile URL'] || '')));
         if (isCharFile && !IS_CHARS) { toast('Das ist eine Charakter-Datei – bitte im Reiter „Charaktere“ importieren.', 'err'); return; }
         if (IS_CHARS && !isCharFile && looksBp) { toast('Das ist ein Personen-Backup (Babepedia) – bitte im Reiter „Personen“ importieren.', 'err'); return; }
+        if (data && data.fillEmpty) {
+          // Ergänzungen: nur leere Felder bestehender Einträge füllen
+          const cnt = {}; let n = 0;
+          for (const it of items) { const e = it && byId(it._id); if (!e) continue; let any = false; for (const [f, val] of Object.entries(it)) if (!f.startsWith('_') && f !== 'Name' && val && !v(e, f)) { cnt[f] = (cnt[f] || 0) + 1; any = true; } if (any) n++; }
+          if (!n) { toast('Nichts zu ergänzen – die Felder sind schon ausgefüllt.'); return; }
+          if (!confirm(`Ergänzungen für ${n} Einträge (nur leere Felder, nichts wird überschrieben):\n` + Object.entries(cnt).map(([f, c]) => `• ${lab(f)}: ${c}`).join('\n') + '\n\nÜbernehmen?')) return;
+          items = items.map(it => Object.assign({}, it, { __fill: true }));
+        }
         if (data && Array.isArray(data.duels) && data.duels.length) {
           const have = new Set(duels.map(x => x.id)); let n = 0;
           for (const x of data.duels) if (x && x.id && !have.has(x.id)) { duels.push(x); n++; }
@@ -1624,6 +1635,7 @@
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
     'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
   };
+  if (IS_CHARS) Object.assign(FIELD_LABELS, { 'Hair color': 'Haarfarbe', 'Eye color': 'Augenfarbe', 'Body type': 'Figur', 'Bra/Cup': 'Cup', 'Height': 'Größe', 'Notes': 'Notizen', 'Favorite': 'Favorit', 'Main Image URL': 'Hauptbild-URL' });
   const lab = (f) => FIELD_LABELS[f] || f;
   const CARD_FIELD_CHOICES = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'Adult',
     'Voice Actor', 'Actress', 'AKA', 'Tags', 'Cover Checked', 'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
