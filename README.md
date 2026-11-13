@@ -282,3 +282,7 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - 14.25: Von der Tool-Seite aus nahm Babepedia die Stimme nicht an (Antwort 200, Note unverändert). Jetzt öffnet das Skript einen Babepedia-Tab im Hintergrund (`?bpvote=1`), der wie die Seite selbst abstimmt und sich danach schließt. Die ersten drei und dann jedes zehnte Profil werden auf Babepedia nachgelesen; stimmt die Note nicht, gilt es als fehlgeschlagen.
 - 14.26: Neuer Ablauf: Das Tool übergibt die ganze Liste als Auftrag, das Skript öffnet einen sichtbaren Babepedia-Tab, der sie mit Fortschrittsfenster (inkl. „Anhalten“) abarbeitet und sich danach schließt. Der Fortschritt erscheint live im Tool; war das Tool zwischendurch zu, werden die Ergebnisse beim nächsten Öffnen übernommen.
 - 14.27: Der Babepedia-Tab startet auch, wenn Babepedia die Adresse `?bpvote=1` wegleitet (Start-Markierung im Skript-Speicher, 90 s gültig). Offene Aufträge lassen sich auf jeder Babepedia-Seite über „⭐ Noten-Auftrag fortsetzen“ weiterführen; Fehler werden als Meldung angezeigt.
+
+## Tool – Kachelbild geprüft
+- Neues eigenes Feld **„Kachelbild geprüft“** (`Cover Checked`, ja/nein). Wird ein anderes Bild als Kachelbild gesetzt, gilt es automatisch als geprüft. Passt das vorhandene Bild, markiert man es mit **K** (Bewerten, Durchblättern) bzw. dem Knopf „☐ Kachelbild geprüft“ an der Bilder-Überschrift in der Detailansicht; nochmal K/Klick nimmt die Markierung zurück.
+- Filter über Ansicht → Zusatzfilter „Kachelbild geprüft“ (ja/nein); als Kachel-Feld wählbar.

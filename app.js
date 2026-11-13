@@ -16,14 +16,14 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
+    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
@@ -32,7 +32,7 @@
 
   const TYPES = {
     'Born': 'date', 'Died': 'date', 'Scraped At': 'date',
-    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool', 'In Ranker': 'bool', 'Profile Deleted': 'bool', 'Deleted Since': 'date',
+    'Exact Birthdate': 'bool', 'Active': 'bool', 'Favorite': 'bool', 'In Ranker': 'bool', 'Profile Deleted': 'bool', 'Deleted Since': 'date', 'Cover Checked': 'bool',
     'Tattoos': ['n/a', 'Ja', 'Nein'], 'Piercings': ['n/a', 'Ja', 'Nein'],
     'Boobs': ['', 'Real/Natural', 'Fake/Enhanced', 'Real (Removed implants)', 'Unknown'],
     'Height': 'num', 'Weight': 'num', 'Global Rating': 'num', 'Votes': 'num', 'User Rating': 'num',
@@ -1478,16 +1478,16 @@
   const FIELD_LABELS = {
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status'
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft'
   };
   const lab = (f) => FIELD_LABELS[f] || f;
-  const CARD_FIELD_CHOICES = ['Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
+  const CARD_FIELD_CHOICES = ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
   const CARD_BADGES = [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier']];
   const BUILTIN_FILTERS = [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
-  const EXTRA_FILTER_CHOICES = ['Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
+  const EXTRA_FILTER_CHOICES = ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
@@ -1544,6 +1544,7 @@
   // Zusatzfilter: Kommazahlen-Noten in ganze Stufen zusammenfassen (9,0–9,9 statt jeder Einzelwert)
   const XF_BUCKET = { 'Score': 1, 'Global Rating': 2 };
   function xfValues(e, f) {
+    if (f === 'Cover Checked') return [isTrue(e[f]) ? 'ja' : 'nein'];
     const vals = fieldValues(e, f);
     if (!(f in XF_BUCKET) || !vals.length) return vals;
     const x = num(vals[0]); if (x == null) return vals;
@@ -2182,7 +2183,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length})</h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${isTrue(e['Cover Checked']) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren / Markierung entfernen">${isTrue(e['Cover Checked']) ? '✓ Kachelbild geprüft' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -2518,22 +2519,37 @@
     }
     const cb = $('.vw-cover', el), isCover = imgs.length && imgs[ii] === imgs[0];
     cb.hidden = !imgs.length;
+    const ve = byId(viewer.ids[viewer.ei]);
     cb.classList.toggle('on', !!isCover);
-    cb.textContent = isCover ? '★ Kachelbild' : '☆ Als Kachelbild';
+    cb.classList.toggle('checked', !!isCover && isTrue(ve && ve['Cover Checked']));
+    cb.textContent = coverBtnText(ve, isCover);
+    cb.title = isCover ? 'Kachelbild als geprüft markieren / Markierung entfernen (K)' : 'Dieses Bild als Kachelbild verwenden (K)';
     $('.vw-dots', el).innerHTML = imgs.length > 1 && imgs.length <= 30 ? imgs.map((_, i) => `<button data-dot="${i}" class="${i === ii ? 'on' : ''}" aria-label="Bild ${i + 1}"></button>`).join('') : '';
     const last = ids.length === 1 && ii === imgs.length - 1, first = ids.length === 1 && ii === 0;
     $('.vw-arrow.prev', el).disabled = first; $('.vw-arrow.next', el).disabled = last;
     $$('[data-vwe]', el).forEach(b => { b.hidden = ids.length < 2; b.disabled = (b.dataset.vwe === '-1' ? ei === 0 : ei === ids.length - 1); });
   }
+  // Kachelbild: anderes Bild → als Kachelbild setzen und als geprüft markieren; aktuelles Kachelbild → „geprüft“ umschalten
+  function coverAction(e, u) {
+    if (!e) return false;
+    const imgs = images(e);
+    if (u && imgs.length && u !== imgs[0]) {
+      e.Cover = u; e['Cover Checked'] = 'true'; e._updated = Date.now();
+      saveQuiet(); refreshItem(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
+      return true;
+    }
+    const on = !isTrue(e['Cover Checked']);
+    e['Cover Checked'] = on ? 'true' : 'false'; e._updated = Date.now();
+    saveQuiet(); refreshItem(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
+    return false;
+  }
+  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : isTrue(e && e['Cover Checked']) ? '✓ Kachelbild geprüft' : '★ Kachelbild – passt?';
   function viewerSetCover() {
     if (!viewer) return;
     const e = byId(viewer.ids[viewer.ei]), u = viewer.imgs[viewer.ii];
-    if (!e || !u || u === viewer.imgs[0]) return;
-    e.Cover = u; e._updated = Date.now();
-    saveQuiet(); refreshItem(e._id);
-    viewer.imgs = images(e); viewer.ii = Math.max(0, viewer.imgs.indexOf(u));   // Cover steht jetzt vorne
+    if (!e || !u) return;
+    if (coverAction(e, u)) { viewer.imgs = images(e); viewer.ii = Math.max(0, viewer.imgs.indexOf(u)); }   // Cover steht jetzt vorne
     viewerShow();
-    toast('Kachelbild gesetzt.', 'ok');
   }
   function viewerStep(dir) {
     if (!viewer) return;
@@ -2583,7 +2599,7 @@
       </div>
       <div class="rt-body">
         <div class="rt-stage"><img alt="" referrerpolicy="no-referrer" draggable="false"><div class="vw-err" hidden>Bild lässt sich nicht laden</div>
-          <button class="vw-arrow prev" aria-label="Vorheriges Bild">‹</button><button class="vw-arrow next" aria-label="Nächstes Bild">›</button><span class="rt-imgc"></span></div>
+          <button class="vw-arrow prev" aria-label="Vorheriges Bild">‹</button><button class="vw-arrow next" aria-label="Nächstes Bild">›</button><span class="rt-imgc"></span><button class="vw-cover rt-cover"></button></div>
         <div class="rt-panel">
           <div class="rt-meta"></div>
           <div class="rt-cats"></div>
@@ -2591,7 +2607,7 @@
           <div class="rt-ref"></div>
           <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
           <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
-          <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
+          <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>K</kbd> Kachelbild setzen/geprüft · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -2603,6 +2619,7 @@
       if (t.closest('.vw-x')) return closeRater();
       if (t.closest('.vw-arrow.prev')) return raterImg(-1);
       if (t.closest('.vw-arrow.next')) return raterImg(1);
+      if (t.closest('.rt-cover')) return raterCover();
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
@@ -2771,6 +2788,10 @@
     const img = $('.rt-stage img', el), err = $('.rt-stage .vw-err', el);
     err.hidden = true; img.hidden = !imgs.length;
     $('.rt-imgc', el).textContent = imgs.length > 1 ? `${rater.img + 1} / ${imgs.length}` : '';
+    const cb = $('.rt-cover', el), isCover = imgs.length && rater.img === 0;
+    cb.hidden = !imgs.length;
+    cb.classList.toggle('on', !!isCover); cb.classList.toggle('checked', !!isCover && isTrue(e['Cover Checked']));
+    cb.textContent = coverBtnText(e, isCover) + ' (K)';
     if (!imgs.length) { err.hidden = false; err.textContent = 'Keine Bilder'; return; }
     const full = R(imgs[rater.img]), alts = [full, thumbUrl(full)].filter((x, i, a) => x && a.indexOf(x) === i);
     let k = 0;
@@ -2837,12 +2858,19 @@
     if (n >= rater.ids.length) { toast(`Fertig – ${rater.done} Einträge bewertet.`, 'ok'); closeRater(); return; }
     rater.i = n; rater.cat = 0; rater.last = null; raterShow();
   }
+  function raterCover() {
+    const e = raterEntry(); if (!e || rater.peek) return;
+    const u = images(e)[rater.img];
+    if (coverAction(e, u)) rater.img = Math.max(0, images(e).indexOf(u));
+    raterImgShow();
+  }
   function raterKey(ev) {
     const k = ev.key;
     // Beim Tippen in den Notizen keine Tastenkürzel; Esc verlässt das Feld
     if (ev.target && ev.target.closest && ev.target.closest('.rt-notes')) { if (k === 'Escape') { ev.preventDefault(); rater.saveNote(); ev.target.blur(); } return; }
     if (k === 'Escape') { closeRater(); return; }
     if (k === 'n' || k === 'N') { ev.preventDefault(); $('.rt-notes textarea', rater.el).focus(); return; }
+    if (k === 'k' || k === 'K') { ev.preventDefault(); raterCover(); return; }
     if (/^[1-5]$/.test(k)) { rater.preview = null; raterSet(rater.cat, Number(k), !!ui.raterAdvance); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
@@ -2994,10 +3022,12 @@
     }
     const rkPick = t.closest('[data-rk-pick]');
     if (rkPick) { sendReplacement(rkPick.dataset.rkPick, rkPick); return; }
+    const cchk = t.closest('[data-cover-chk]');
+    if (cchk) { const e = byId(cchk.dataset.coverChk); if (e) { coverAction(e, null); render(); showDetail(e._id); } return; }
     const setCover = t.closest('[data-set-cover]');
     if (setCover) {
       const e = byId(setCover.dataset.id);
-      if (e) { e.Cover = setCover.dataset.setCover; e._updated = Date.now(); saveQuiet(); render(); showDetail(e._id); }
+      if (e) { coverAction(e, setCover.dataset.setCover); render(); showDetail(e._id); }
       return;
     }
     const full = t.closest('img[data-full]');
