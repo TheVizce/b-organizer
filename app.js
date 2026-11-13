@@ -1764,7 +1764,7 @@
     }).join('');
     const r = ratingDiff(e);
     const bp = r.state === 'same' ? `<span class="fut-s ok" title="gleich meiner Babepedia-Note"><b>✓</b><i>BP</i></span>`
-      : r.state === 'diff' ? `<span class="fut-s diff" title="meine Babepedia-Note ${r.site} – Tool-Note gerundet ${r.mine}"><b>${r.site}</b><i>BP</i></span>`
+      : r.state === 'diff' ? `<span class="fut-s ${r.site > r.mine ? 'up' : 'down'}" title="meine Babepedia-Note ${r.site} – ${r.site > r.mine ? 'höher' : 'niedriger'} als die Tool-Note (gerundet ${r.mine})"><b>${r.site > r.mine ? '▲' : '▼'}${r.site}</b><i>BP</i></span>`
       : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
     const nat = fieldValues(e, 'Nationality')[0];
     return `<div class="fut" title="Tool-Note ${esc(v(e, 'Score'))}">
