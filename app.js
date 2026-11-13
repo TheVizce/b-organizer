@@ -543,11 +543,13 @@
     images(e).slice(0, 6).forEach(u => { const full = R(u); if (!full) return; const th = thumbUrl(full); tries.push(th); if (th !== full) tries.push(full); });
     return tries;
   }
+  // Vorschau- und großes Bild des Kachelbilds selbst (ohne Ersatzbilder)
+  const coverOwnTries = (e) => { const u = images(e)[0], full = u ? R(u) : ''; if (!full) return []; const th = thumbUrl(full); return th !== full ? [th, full] : [th]; };
   const coverTag = (e, cls = '') => {
     const tries = coverTries(e);
     const alt = v(e, 'Name');
     if (!tries.length) return `<div class="placeholder">${esc(initials(alt))}</div>`;
-    return `<img src="${esc(tries[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-eid="${esc(e._id)}" data-fallback="${esc(initials(alt))}" data-alts="${esc(tries.slice(1).join('\n'))}">`;
+    return `<img src="${esc(tries[0])}" alt="${esc(alt)}" class="${cls}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-eid="${esc(e._id)}"${isTrue(e['Cover Checked']) ? ` data-cov="${esc(coverOwnTries(e).join('\n'))}"` : ''} data-fallback="${esc(initials(alt))}" data-alts="${esc(tries.slice(1).join('\n'))}">`;
   };
 
   // ---------- Bildprüfung: lädt bei einem Eintrag überhaupt ein Bild? ----------
@@ -598,7 +600,21 @@
       return;
     }
     if (img.tagName === 'IMG' && img.dataset.eid && img.naturalWidth >= 40) recordImg(img.dataset.eid, 'ok');
+    if (img.tagName === 'IMG' && img.dataset.cov) coverLoaded(img);
   }, true);
+  // Geprüftes Kachelbild: Maße beim ersten Laden merken; später andere Maße oder Ersatzbild → „Bild prüfen“
+  function coverLoaded(img) {
+    const e = byId(img.dataset.eid); if (!e || !isTrue(e['Cover Checked']) || coverGone(e) || coverMissingHere(e)) return;
+    const own = img.dataset.cov.split('\n'), src = img.getAttribute('src');
+    const size = `${img.naturalWidth}x${img.naturalHeight}`;
+    let doubt = false;
+    if (!own.includes(src)) doubt = true;                       // Kachelbild lädt nicht – es wird ein Ersatzbild gezeigt
+    else if (src === own[0]) {                                  // Maße nur am Vorschaubild vergleichen (immer dieselbe Variante)
+      if (!e._coverSize) { e._coverSize = size; e._updated = Date.now(); saveQuiet(); }
+      else if (e._coverSize !== size) doubt = true;
+    }
+    if (doubt && !coverDoubt.has(e._id) && coverState(e) === 'ok') { coverDoubt.add(e._id); setCoverRibbon(e._id); }
+  }
   document.addEventListener('error', (ev) => {
     const img = ev.target;
     if (img.tagName === 'IMG' && nextAlt(img)) return;
@@ -1557,7 +1573,7 @@
   // Zusatzfilter: Kommazahlen-Noten in ganze Stufen zusammenfassen (9,0–9,9 statt jeder Einzelwert)
   const XF_BUCKET = { 'Score': 1, 'Global Rating': 2 };
   function xfValues(e, f) {
-    if (f === 'Cover Checked') return [coverChecked(e) ? 'ja' : coverElsewhere(e) ? 'ja – eigenes Bild auf anderem Gerät' : 'nein'];
+    if (f === 'Cover Checked') { const st = coverState(e); return [st === 'ok' ? 'ja' : st === 'elsewhere' ? 'ja – eigenes Bild auf anderem Gerät' : st === 'doubt' ? 'neu prüfen – Bild weg oder geändert' : 'nein']; }
     const vals = fieldValues(e, f);
     if (!(f in XF_BUCKET) || !vals.length) return vals;
     const x = num(vals[0]); if (x == null) return vals;
@@ -1731,12 +1747,11 @@
   }
   function cardHTML(e) {
     const fut = ui.cardBadges.includes('fut') ? futHTML(e) : '';
-    const coverOk = ui.cardBadges.includes('cover') && coverChecked(e);
-    const coverFar = ui.cardBadges.includes('cover') && coverElsewhere(e);
+    const ribbon = coverRibbonHTML(e);
     return `
       <article class="card" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
-        <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${coverOk ? '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>' : coverFar ? '<div class="cover-ok far" title="Geprüftes Kachelbild ist ein eigenes Bild auf einem anderen Gerät – hier wird ein Ersatzbild gezeigt"><span>📁 anderes Gerät</span></div>' : ''}${fut}
+        <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${ribbon}${fut}
           <div class="badges">
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
@@ -2277,7 +2292,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -2626,8 +2641,32 @@
   // Eigene Bilder liegen nur auf dem Gerät, auf dem sie hochgeladen wurden. Ist das Kachelbild so ein Bild und fehlt hier,
   // gilt „geprüft“ auf diesem Gerät nicht für das Ersatzbild.
   const coverMissingHere = (e) => { const c = v(e, 'Cover'); return !!c && isLocal(c) && !localUrls.has(localId(c)); };
-  const coverChecked = (e) => isTrue(e && e['Cover Checked']) && !coverMissingHere(e);
-  const coverElsewhere = (e) => isTrue(e && e['Cover Checked']) && coverMissingHere(e);
+  // Geprüftes Kachelbild weggefallen (Adresse nicht mehr unter den Bildern, z. B. nach einem Babepedia-Update)
+  const coverGone = (e) => { const c = v(e, 'Cover'); if (!c || isLocal(c)) return false; const imgs = images(e); return !imgs.includes(c); };
+  // In dieser Sitzung beobachtet: Kachelbild lädt nicht mehr oder hat andere Maße als beim Prüfen
+  const coverDoubt = new Set();
+  function coverState(e) {
+    if (!isTrue(e && e['Cover Checked'])) return 'none';
+    if (coverMissingHere(e)) return 'elsewhere';
+    if (coverGone(e) || coverDoubt.has(e._id)) return 'doubt';
+    return 'ok';
+  }
+  const coverChecked = (e) => coverState(e) === 'ok';
+  const coverElsewhere = (e) => coverState(e) === 'elsewhere';
+  function setCoverRibbon(id) {
+    const card = document.querySelector(`#main .card[data-id="${CSS.escape(id)}"] .img`), e = byId(id);
+    if (!card || !e) return;
+    const old = card.querySelector('.cover-ok'); if (old) old.remove();
+    card.insertAdjacentHTML('afterbegin', coverRibbonHTML(e));
+  }
+  function coverRibbonHTML(e) {
+    if (!ui.cardBadges.includes('cover')) return '';
+    const st = coverState(e);
+    if (st === 'ok') return '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>';
+    if (st === 'elsewhere') return '<div class="cover-ok far" title="Geprüftes Kachelbild ist ein eigenes Bild auf einem anderen Gerät – hier wird ein Ersatzbild gezeigt"><span>📁 anderes Gerät</span></div>';
+    if (st === 'doubt') return `<div class="cover-ok doubt" title="${coverGone(e) ? 'Das geprüfte Kachelbild gibt es nicht mehr – jetzt wird ein anderes Bild gezeigt' : 'Das geprüfte Kachelbild lädt nicht mehr oder hat sich verändert'} – bitte neu prüfen (K)"><span>⚠ Bild prüfen</span></div>`;
+    return '';
+  }
   // Kachelbild: anderes Bild → als Kachelbild setzen und als geprüft markieren; aktuelles Kachelbild → „geprüft“ umschalten
   function coverAction(e, u) {
     if (!e) return false;
@@ -2637,16 +2676,17 @@
       if (!confirm('Das Kachelbild ist ein eigenes Bild von einem anderen Gerät (hier nicht vorhanden).\nStattdessen dieses Bild als Kachelbild setzen? Das gilt dann auf allen Geräten.')) return false;
     }
     if (u && imgs.length && u !== imgs[0]) {
-      e.Cover = u; e['Cover Checked'] = 'true'; e._updated = Date.now();
+      e.Cover = u; e['Cover Checked'] = 'true'; e._coverSize = ''; e._updated = Date.now(); coverDoubt.delete(e._id);
       saveQuiet(); refreshItem(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
       return true;
     }
-    const on = !isTrue(e['Cover Checked']);
+    const on = coverState(e) === 'doubt' || !isTrue(e['Cover Checked']);
     e['Cover Checked'] = on ? 'true' : 'false'; e._updated = Date.now();
+    if (on) { if (imgs[0]) e.Cover = imgs[0]; e._coverSize = ''; coverDoubt.delete(e._id); }   // genau dieses Bild festhalten
     saveQuiet(); refreshItem(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
     return false;
   }
-  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : '★ Kachelbild – passt?';
+  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild geändert – passt?' : '★ Kachelbild – passt?';
   function viewerSetCover() {
     if (!viewer) return;
     const e = byId(viewer.ids[viewer.ei]), u = viewer.imgs[viewer.ii];

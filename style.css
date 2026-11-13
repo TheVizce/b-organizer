@@ -818,3 +818,4 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .cb-item-m { font-size: 13px; margin: 3px 0 8px; }
 .card .cover-ok.far { width: 92px; height: 92px; }
 .card .cover-ok.far span { background: var(--surface-3); color: var(--muted); top: 20px; left: -30px; width: 130px; font-weight: 600; }
+.card .cover-ok.doubt span { background: var(--warn); color: #1d1405; }
