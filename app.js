@@ -2783,6 +2783,218 @@
     openViewer(shown[0]._id, 0);
   }
 
+  // ---------- ▶ Diashow ----------
+  // Spielt die Bilder der aktuellen Liste automatisch ab. Einstellungen werden pro Gerät gemerkt (ui.slide).
+  const SLIDE_DEF = { sec: 5, per: 'all', perN: 3, order: 'list', mixImgs: false, trans: 'fade', fade: 0.8, kb: true, fit: 'contain', blurBg: true,
+    info: true, infoNote: true, bar: true, loop: true, fullscreen: true, coverFirst: true, onlyChecked: false };
+  let slide = null;
+  function showSlideSettings() {
+    if (!shown.length) { toast('Keine Einträge in der Liste.'); return; }
+    const c = Object.assign({}, SLIDE_DEF, ui.slide || {});
+    const opt = (name, val, label, cur) => `<label class="chk"><input type="radio" name="${name}" value="${val}" ${String(cur) === String(val) ? 'checked' : ''}> ${label}</label>`;
+    const chk = (name, label, on) => `<label class="chk"><input type="checkbox" name="${name}" ${on ? 'checked' : ''}> ${label}</label>`;
+    openModal(`
+      <div class="modal-head"><h2>▶ Diashow</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="help sl-cfg view-cfg" id="sl-cfg">
+        <p class="muted">Spielt die Bilder der aktuellen Liste ab (${shown.length} Einträge – Filter und Sortierung zählen).</p>
+        <div class="row2">
+          <div class="field"><label>Sekunden pro Bild</label><input type="number" name="sec" min="1" max="120" step="0.5" value="${c.sec}"></div>
+          <div class="field"><label>Überblenddauer (Sekunden)</label><input type="number" name="fade" min="0" max="5" step="0.1" value="${c.fade}"></div>
+        </div>
+        <h3>Welche Bilder</h3>
+        <div class="cfg-grid">
+          ${opt('per', 'all', 'alle Bilder je Eintrag', c.per)}${opt('per', 'cover', 'nur das Kachelbild', c.per)}${opt('per', 'n', 'die ersten …', c.per)}
+          <label class="chk">… <input type="number" name="perN" min="1" max="50" value="${c.perN}" style="width:64px"> Bilder je Eintrag</label>
+          ${chk('coverFirst', 'mit dem Kachelbild beginnen', c.coverFirst)}${chk('onlyChecked', 'nur Einträge mit geprüftem Kachelbild', c.onlyChecked)}
+        </div>
+        <h3>Reihenfolge</h3>
+        <div class="cfg-grid">
+          ${opt('order', 'list', 'wie in der Liste', c.order)}${opt('order', 'random', 'Einträge zufällig', c.order)}
+          ${chk('mixImgs', 'alle Bilder bunt mischen (nicht Eintrag für Eintrag)', c.mixImgs)}${chk('loop', 'am Ende von vorn beginnen', c.loop)}
+        </div>
+        <h3>Darstellung</h3>
+        <div class="cfg-grid">
+          ${opt('trans', 'none', 'kein Übergang', c.trans)}${opt('trans', 'fade', 'Überblenden', c.trans)}${opt('trans', 'slide', 'Schieben', c.trans)}
+          ${chk('kb', 'langsamer Zoom (Ken-Burns)', c.kb)}
+          ${opt('fit', 'contain', 'ganzes Bild zeigen', c.fit)}${opt('fit', 'cover', 'Bildschirm füllen (schneidet zu)', c.fit)}
+          ${chk('blurBg', 'unscharfer Hintergrund statt Schwarz', c.blurBg)}
+          ${chk('info', 'Name einblenden', c.info)}${chk('infoNote', 'Tool-Note und Angaben einblenden', c.infoNote)}
+          ${chk('bar', 'Fortschrittsbalken', c.bar)}${chk('fullscreen', 'im Vollbild starten', c.fullscreen)}
+        </div>
+        <p class="muted">Während der Show: <kbd>Leertaste</kbd> Pause · <kbd>←</kbd><kbd>→</kbd> Bild zurück/vor · <kbd>↑</kbd><kbd>↓</kbd> Eintrag zurück/vor · <kbd>+</kbd><kbd>−</kbd> schneller/langsamer · <kbd>I</kbd> Infos · <kbd>F</kbd> Vollbild · <kbd>D</kbd> Details · <kbd>Esc</kbd> beenden. Am Handy: wischen, tippen = Pause.</p>
+      </form>
+      <div class="form-foot"><button class="btn ghost" id="sl-def">Standard</button><button class="btn" data-action="close">Abbrechen</button><button class="btn primary" id="sl-go">▶ Starten</button></div>`);
+    const form = $('#sl-cfg');
+    $('#sl-def').addEventListener('click', () => { ui.slide = {}; saveUI(); closeModal(true); showSlideSettings(); });
+    $('#sl-go').addEventListener('click', () => {
+      const g = (n) => form.elements.namedItem(n), r = (n) => (form.querySelector(`input[name="${n}"]:checked`) || {}).value;
+      const cfg = {
+        sec: Math.min(120, Math.max(1, Number(g('sec').value) || 5)), fade: Math.min(5, Math.max(0, Number(g('fade').value) || 0)),
+        per: r('per') || 'all', perN: Math.max(1, parseInt(g('perN').value, 10) || 3), order: r('order') || 'list', trans: r('trans') || 'fade', fit: r('fit') || 'contain'
+      };
+      for (const k of ['mixImgs', 'loop', 'kb', 'blurBg', 'info', 'infoNote', 'bar', 'fullscreen', 'coverFirst', 'onlyChecked']) cfg[k] = g(k).checked;
+      ui.slide = cfg; saveUI(); closeModal(true);
+      startSlide(cfg);
+    });
+  }
+  function slidePlaylist(cfg) {
+    let list = shown.slice();
+    if (cfg.onlyChecked) list = list.filter(e => coverChecked(e));
+    if (cfg.order === 'random') list = list.map(e => [Math.random(), e]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    const items = [];
+    for (const e of list) {
+      let imgs = images(e).filter(u => R(u));
+      if (!cfg.coverFirst && imgs.length > 1) imgs = imgs.slice(1).concat(imgs[0]);
+      if (cfg.per === 'cover') imgs = imgs.slice(0, 1);
+      else if (cfg.per === 'n') imgs = imgs.slice(0, cfg.perN);
+      imgs.forEach((u, k) => items.push({ id: e._id, u, k, n: imgs.length }));
+    }
+    if (cfg.mixImgs) for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
+    return items;
+  }
+  function startSlide(cfg) {
+    const items = slidePlaylist(cfg);
+    if (!items.length) { toast('Keine Bilder für die Diashow gefunden.'); return; }
+    const el = document.createElement('div');
+    el.className = 'slide';
+    el.innerHTML = `<div class="sl-layer"><img alt="" referrerpolicy="no-referrer" draggable="false"></div><div class="sl-layer"><img alt="" referrerpolicy="no-referrer" draggable="false"></div>
+      <div class="sl-bar"></div>
+      <div class="sl-info"><button class="sl-name"></button><div class="sl-meta"></div></div>
+      <div class="sl-paused" hidden>❚❚</div>
+      <div class="sl-top"><span class="sl-count"></span>
+        <button class="btn small" data-sl="slower" title="langsamer (−)">−</button><span class="sl-speed"></span><button class="btn small" data-sl="faster" title="schneller (+)">+</button>
+        <button class="btn small" data-sl="play" title="Pause / weiter (Leertaste)">❚❚</button>
+        <button class="btn small" data-sl="info" title="Infos ein/aus (I)">ℹ︎</button>
+        <button class="btn small" data-sl="fs" title="Vollbild (F)">⛶</button>
+        <button class="vw-x" data-sl="close" aria-label="Beenden">×</button></div>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    slide = { el, cfg, items, i: -1, front: 0, timer: null, paused: false, t0: 0, raf: 0, hideT: 0, wake: null };
+    el.classList.toggle('tr-fade', cfg.trans === 'fade'); el.classList.toggle('tr-slide', cfg.trans === 'slide');
+    el.classList.toggle('kb', cfg.kb); el.classList.toggle('fit-cover', cfg.fit === 'cover'); el.classList.toggle('blurbg', cfg.blurBg && cfg.fit !== 'cover');
+    el.classList.toggle('no-info', !cfg.info); el.classList.toggle('no-bar', !cfg.bar);
+    el.style.setProperty('--sl-fade', (cfg.trans === 'none' ? 0 : cfg.fade) + 's');
+    if (cfg.fullscreen && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { if (slide) slide.wake = w; else w.release(); }).catch(() => {}); } catch {}
+    // Bedienelemente nach kurzer Zeit ausblenden
+    const poke = () => { el.classList.remove('hide-ui'); clearTimeout(slide.hideT); slide.hideT = setTimeout(() => slide && el.classList.add('hide-ui'), 2500); };
+    el.addEventListener('mousemove', poke); poke();
+    el.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-sl]');
+      if (b) {
+        const a = b.dataset.sl;
+        if (a === 'close') return stopSlide();
+        if (a === 'play') return slideToggle();
+        if (a === 'faster') return slideSpeed(-1);
+        if (a === 'slower') return slideSpeed(1);
+        if (a === 'info') return el.classList.toggle('no-info');
+        if (a === 'fs') return slideFs();
+        return;
+      }
+      if (ev.target.closest('.sl-name')) { const id = slide.items[slide.i].id; stopSlide(); showDetail(id); return; }
+      poke();
+      if (matchMedia('(hover: none)').matches) slideToggle();
+    });
+    // Wischen
+    let sx = null, sy = null;
+    el.addEventListener('touchstart', (ev) => { const t = ev.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+    el.addEventListener('touchend', (ev) => {
+      if (sx == null) return; const t = ev.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; sx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { ev.preventDefault(); slideGo(dx < 0 ? 1 : -1); }
+      else if (Math.abs(dy) > 60) { ev.preventDefault(); slideEntry(dy < 0 ? 1 : -1); }
+    });
+    slideGo(1);
+  }
+  function slideSpeedText() { $('.sl-speed', slide.el).textContent = `${String(slide.cfg.sec).replace('.', ',')} s`; }
+  function slideSpeed(d) {
+    const steps = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 90, 120];
+    let i = steps.findIndex(x => x >= slide.cfg.sec); if (i < 0) i = steps.length - 1;
+    slide.cfg.sec = steps[Math.max(0, Math.min(steps.length - 1, i + d))];
+    ui.slide = Object.assign({}, ui.slide || {}, { sec: slide.cfg.sec }); saveUI();
+    slideSpeedText(); slideSchedule();
+    toast(`${String(slide.cfg.sec).replace('.', ',')} Sekunden pro Bild`);
+  }
+  function slideFs() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  }
+  function slideToggle() {
+    slide.paused = !slide.paused;
+    $('.sl-paused', slide.el).hidden = !slide.paused;
+    $('[data-sl="play"]', slide.el).textContent = slide.paused ? '▶' : '❚❚';
+    $$('.sl-layer img', slide.el).forEach(im => { im.style.animationPlayState = slide.paused ? 'paused' : 'running'; });
+    if (slide.paused) { clearTimeout(slide.timer); slide.left = Math.max(0, slide.cfg.sec * 1000 - (performance.now() - slide.t0)); }
+    else slideSchedule(slide.left);
+  }
+  function slideSchedule(ms) {
+    clearTimeout(slide.timer); cancelAnimationFrame(slide.raf);
+    if (slide.paused) return;
+    const dur = ms != null ? ms : slide.cfg.sec * 1000, total = slide.cfg.sec * 1000;
+    slide.t0 = performance.now() - (total - dur);
+    slide.timer = setTimeout(() => slideGo(1), dur);
+    const bar = $('.sl-bar', slide.el);
+    const tick = () => { if (!slide || slide.paused) return; bar.style.width = Math.min(100, (performance.now() - slide.t0) / total * 100) + '%'; slide.raf = requestAnimationFrame(tick); };
+    tick();
+  }
+  function slideEntry(d) {
+    // zum ersten Bild des nächsten/vorigen Eintrags springen
+    const it = slide.items, cur = it[slide.i]; let j = slide.i;
+    if (d > 0) { while (j < it.length && it[j].id === cur.id) j++; if (j >= it.length) j = 0; }
+    else { while (j > 0 && it[j - 1].id === cur.id) j--; j = Math.max(0, j - 1); const id = it[j].id; while (j > 0 && it[j - 1].id === id) j--; }
+    slideShow(j);
+  }
+  function slideGo(d, tries = 0) {
+    const n = slide.items.length;
+    let j = slide.i + d;
+    if (j >= n) { if (!slide.cfg.loop) { slideToggle(); toast('Diashow zu Ende.'); return; } j = 0; }
+    if (j < 0) j = n - 1;
+    slideShow(j, d, tries);
+  }
+  function slideShow(j, d = 1, tries = 0) {
+    const s = slide; if (!s) return;
+    s.i = j;
+    const it = s.items[j], e = byId(it.id);
+    const layers = $$('.sl-layer', s.el), back = layers[1 - s.front], img = back.querySelector('img');
+    const src = R(it.u);
+    img.onload = () => {
+      clearTimeout(s.loadT);
+      if (!slide || slide.i !== j) return;
+      if (s.cfg.kb) { img.style.setProperty('--kx', (Math.random() * 6 - 3).toFixed(1) + '%'); img.style.setProperty('--ky', (Math.random() * 6 - 3).toFixed(1) + '%'); s.el.style.setProperty('--sl-dur', (s.cfg.sec + s.cfg.fade) + 's'); img.style.animation = 'none'; void img.offsetWidth; img.style.animation = ''; }
+      back.style.setProperty('--sl-bg', `url("${src.replace(/"/g, '%22')}")`);
+      back.classList.add('on'); layers[s.front].classList.remove('on'); s.front = 1 - s.front;
+      // Infos
+      const nameB = $('.sl-name', s.el); nameB.textContent = v(e, 'Name'); nameB.title = 'Details öffnen (D)';
+      const sc = scoreOf(e);
+      $('.sl-meta', s.el).textContent = s.cfg.infoNote ? [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', sc ? `Tool-Note ${sc.ten.toFixed(1).replace('.', ',')}` : '', it.n > 1 ? `Bild ${it.k + 1}/${it.n}` : ''].filter(Boolean).join(' · ') : '';
+      const entriesTotal = new Set(s.items.map(x => x.id)).size;
+      $('.sl-count', s.el).textContent = `${j + 1} / ${s.items.length} Bilder · ${entriesTotal} Einträge`;
+      slideSpeedText();
+      slideSchedule();
+      // nächstes Bild vorladen
+      const nx = s.items[(j + 1) % s.items.length]; if (nx) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(nx.u); }
+    };
+    img.onerror = () => { clearTimeout(s.loadT); if (!slide || slide.i !== j) return; if (tries < 20) slideGo(d >= 0 ? 1 : -1, tries + 1); };
+    // Hängt ein Bild, nach 10 s überspringen
+    clearTimeout(s.loadT); s.loadT = setTimeout(() => { if (slide && slide.i === j && !img.complete) img.onerror(); }, 10000);
+    img.src = src;
+  }
+  function stopSlide() {
+    if (!slide) return;
+    clearTimeout(slide.timer); cancelAnimationFrame(slide.raf); clearTimeout(slide.hideT); clearTimeout(slide.loadT);
+    try { if (slide.wake) slide.wake.release(); } catch {}
+    slide.el.remove(); slide = null;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (overlay.hidden) document.body.style.overflow = '';
+  }
+  function slideKey(ev) {
+    const k = ev.key;
+    const map = { 'Escape': () => stopSlide(), ' ': () => slideToggle(), 'ArrowRight': () => slideGo(1), 'ArrowLeft': () => slideGo(-1),
+      'ArrowDown': () => slideEntry(1), 'ArrowUp': () => slideEntry(-1), '+': () => slideSpeed(-1), '-': () => slideSpeed(1),
+      'i': () => slide.el.classList.toggle('no-info'), 'I': () => slide.el.classList.toggle('no-info'), 'f': () => slideFs(), 'F': () => slideFs(),
+      'd': () => { const id = slide.items[slide.i].id; stopSlide(); showDetail(id); }, 'D': () => { const id = slide.items[slide.i].id; stopSlide(); showDetail(id); } };
+    if (map[k]) { ev.preventDefault(); map[k](); if (slide) { slide.el.classList.remove('hide-ui'); clearTimeout(slide.hideT); slide.hideT = setTimeout(() => slide && slide.el.classList.add('hide-ui'), 2500); } }
+  }
+
   // ---------- ⭐ Bewertungsmodus ----------
   // Eintrag für Eintrag: Bild groß, Kategorien per Ziffer. Tasten: 1–5 = Wert für die markierte Kategorie
   // (springt weiter), . oder , = +½ auf den zuletzt gesetzten Wert, ↑/↓ bzw. G B H C S = Kategorie wählen,
@@ -3480,6 +3692,7 @@
   });
 
   document.addEventListener('keydown', (ev) => {
+    if (slide) { slideKey(ev); return; }
     if (calib) { calibKey(ev); return; }
     if (rater) { raterKey(ev); return; }
     if (viewer) {
@@ -3531,6 +3744,7 @@
   $('#btn-pending').addEventListener('click', showPending);
   $('#btn-random').addEventListener('click', randomEntry);
   $('#btn-rate').addEventListener('click', openRater);
+  $('#btn-slide').addEventListener('click', showSlideSettings);
   // Desktop: Werkzeug-Knöpfe in der Kopfzeile (lösen dieselben Aktionen aus wie die in der Leiste)
   document.querySelector('.top-tools').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-proxy]'); if (!b) return;

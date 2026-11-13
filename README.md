@@ -317,3 +317,8 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Einmalig beim Start: Links in „User Upload Image URLs“, die nicht von babepedia.com oder web.archive.org stammen, wandern automatisch dorthin.
 - „Aktualisierungen prüfen“: Jedes als entfernt angezeigte Bild hat „behalten“ – verschiebt den Link in „Eigene Bild-Links“, danach kann die Bild-Änderung gefahrlos übernommen werden.
 - Eigene Bild-Links bearbeiten: Im Bearbeiten-Formular als Bildkacheln mit ✕ (entfernen) und ★ (Kachelbild); neue Adressen einfügen (Einfügen, Enter oder „Hinzufügen“, mehrere mit Leerzeichen/Komma). In der Detailansicht haben eigene Links 🔗 und ein ✕ oben links zum direkten Entfernen.
+
+## Tool – Diashow
+- **▶ Diashow** (Kopfzeile am Desktop, sonst in der Leiste): spielt die Bilder der aktuellen Liste ab (Filter und Sortierung zählen).
+- Einstellungen (pro Gerät gemerkt): Sekunden pro Bild, Überblenddauer; alle Bilder / nur Kachelbild / die ersten N je Eintrag; mit Kachelbild beginnen; nur Einträge mit geprüftem Kachelbild; Reihenfolge wie Liste oder zufällig, alle Bilder mischen, Endlosschleife; Übergang keiner/Überblenden/Schieben, Ken-Burns-Zoom, ganzes Bild oder Bildschirm füllen, unscharfer Hintergrund, Name und Angaben, Fortschrittsbalken, Vollbild.
+- Bedienung: Leertaste Pause, ←/→ Bild, ↑/↓ Eintrag, +/− Tempo, I Infos, F Vollbild, D Details, Esc beenden; am Handy wischen (seitlich Bild, hoch/runter Eintrag), tippen = Pause. Bedienleiste blendet sich nach 2,5 s aus; Bildschirm bleibt an (Wake Lock, wo verfügbar). Bilder, die nicht laden, werden übersprungen.
