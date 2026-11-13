@@ -289,3 +289,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 
 ## Tool – Babepedia-Note bei gelöschten Profilen
 - Bei gelöschten Babepedia-Profilen wird „Meine Babepedia-Note“ ignoriert: keine Vergleichsfilter (≠, =, nur eine/keine Note), kein Vergleich in der Statistik, keine Anzeige auf Kachel und im Bewertungsmodus, kein Angleichen. Der Wert bleibt in den Daten erhalten; Babepedia Ø, Votes usw. bleiben sichtbar.
+
+## Tool – Statistik neu geordnet
+- Gruppen (einklappbar, Zustand wird gemerkt): Bewertungen · Herkunft · Person & Beruf · Aussehen · Sammlung & Daten.
+- Geordnete Werte (Alter, Geburtsjahrzehnt, Größe, Gewicht, Cup, Tool-Note, Babepedia Ø in 0,1-Schritten, meine Babepedia-Note) als Säulendiagramme mit mehr Platz; Prozent bezogen auf Einträge mit Wert. Klick auf eine Säule filtert.
+- Kategorien-Bewertungen (Gesicht, Body, Hot, Cute, Sympathie) als eine Tabelle: Anzahl je Wert, Ø und Anzahl bewertet.
+- Volle Bezeichnung als Tooltip bei abgeschnittenen Zeilen; Geburtsjahrzehnt ohne Tausenderpunkt.

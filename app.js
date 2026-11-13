@@ -1738,10 +1738,6 @@
     const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return [];
     const last = bp.split(',').pop().trim(); return last ? [COUNTRY_ALIAS[last.toLowerCase()] || last] : [];
   }
-  const STAT_NUMS = [
-    ['Alter', 'Alter', 5, ' J.'], ['Geburtsjahr', 'Geburtsjahrzehnt', 10, 'er'], ['Height', 'Größe', 5, ' cm'], ['Weight', 'Gewicht', 5, ' kg'],
-    ['Global Rating', 'Babepedia Ø (alle Nutzer)', 0.5, ''], ['User Rating', 'Meine Babepedia-Note', 1, ''],
-    ['Score', 'Tool-Note (aus Kategorien)', 0.5, ''], ['Face Score', 'Gesicht', 0.5, ''], ['Body Score', 'Body', 0.5, ''], ['Hot Score', 'Hot', 0.5, ''], ['Cute Score', 'Cute', 0.5, ''], ['Sympathy Score', 'Sympathie', 1, '']];
   const CUP_ORDER = 'AA A B C D DD DDD E F FF G GG H HH I J K L M N'.split(' ');
   function statSection(title, rows, total, empty, opts = {}) {
     if (!rows.length) return '';
@@ -1750,14 +1746,55 @@
     const bar = (r) => {
       const i = statRefs.push(r) - 1;
       const pct = total ? (r.n / total * 100) : 0;
-      return `<button class="st-row" data-sf="${i}" title="Liste danach filtern"><span class="st-lbl">${r.html || esc(r.label)}</span><span class="st-bar"><i style="width:${(r.n / max * 100).toFixed(1)}%"></i></span><span class="st-n">${r.n}</span><span class="st-p">${pct < 1 && pct > 0 ? '<1' : Math.round(pct)} %</span></button>`;
+      return `<button class="st-row" data-sf="${i}" title="${esc(r.label)} – Klick filtert die Liste"><span class="st-lbl">${r.html || esc(r.label)}</span><span class="st-bar"><i style="width:${(r.n / max * 100).toFixed(1)}%"></i></span><span class="st-n">${r.n}</span><span class="st-p">${pct < 1 && pct > 0 ? '<1' : Math.round(pct)} %</span></button>`;
     };
     const head = rows.slice(0, limit), rest = rows.slice(limit);
-    return `<section class="st-card${opts.wide ? ' wide' : ''}">
+    return `<section class="st-card${opts.wide ? ' wide' : ''}${opts.span ? ' span2' : ''}">
       <h3>${esc(title)} <span class="muted">${rows.length} Wert${rows.length === 1 ? '' : 'e'}${empty ? ` · ${empty} ohne Angabe` : ''}</span></h3>
       ${head.map(bar).join('')}
       ${rest.length ? `<details><summary>alle ${rows.length} zeigen</summary>${rest.map(bar).join('')}</details>` : ''}
       ${opts.emptyRow ? `<div class="st-empty">${bar(opts.emptyRow)}</div>` : ''}
+    </section>`;
+  }
+  // Säulendiagramm für geordnete Werte (Alter, Größe, Cup, Noten …); Prozent bezogen auf Einträge mit Wert
+  function histSection(title, rows, base, empty, opts = {}) {
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map(r => r.n));
+    const p = (n) => { const x = base ? n / base * 100 : 0; return x > 0 && x < 1 ? '<1' : Math.round(x); };
+    const cols = rows.map(r => {
+      const i = statRefs.push(r) - 1;
+      return `<button class="st-col" data-sf="${i}" title="${esc(r.label)}: ${r.n} (${p(r.n)} %) – Klick filtert die Liste"><span class="st-cn">${r.n}</span><span class="st-cb"><i style="height:${Math.max(r.n / max * 100, 1.5).toFixed(1)}%"></i></span><span class="st-cl">${esc(r.short != null ? r.short : r.label)}</span></button>`;
+    }).join('');
+    return `<section class="st-card st-hist${opts.span ? ' span2' : ''}">
+      <h3>${esc(title)} <span class="muted">${base} ${opts.unit || 'mit Wert'}${empty && !opts.unit ? ` · ${empty} ohne` : ''}${opts.note ? ' · ' + opts.note : ''}</span></h3>
+      <div class="st-cols${rows.length > 18 ? ' dense' : ''}">${cols}</div>
+    </section>`;
+  }
+  // Kategorien-Bewertungen als Tabelle: Zeile = Kategorie, Spalte = Wert
+  function scoreMatrixHTML(list) {
+    const steps = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+    const fmt = (x) => String(x).replace('.', ',');
+    let rowsHTML = '', any = false;
+    for (const c of SCORE_CATS) {
+      const f = c.f, vals = list.map(e => num(v(e, f))).filter(x => x != null);
+      if (!vals.length) continue;
+      any = true;
+      const cnt = new Map(); vals.forEach(x => cnt.set(x, (cnt.get(x) || 0) + 1));
+      const mx = Math.max(...cnt.values());
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const cells = steps.map(x => {
+        const n = cnt.get(x) || 0;
+        if (!n) return `<td class="st-mx0">·</td>`;
+        const i = statRefs.push({ label: `${c.label} ${fmt(x)}`, flabel: `${c.label}: ${fmt(x)}`, test: e => num(v(e, f)) === x }) - 1;
+        return `<td><button data-sf="${i}" style="--a:${(0.15 + 0.85 * n / mx).toFixed(2)}" title="${esc(c.label)} ${fmt(x)}: ${n} – Klick filtert">${n}</button></td>`;
+      }).join('');
+      rowsHTML += `<tr><th>${esc(c.label)}</th>${cells}<td class="st-mxavg">${avg.toFixed(2).replace('.', ',')}</td><td class="st-mxn">${vals.length}</td></tr>`;
+    }
+    if (!any) return '';
+    return `<section class="st-card span2 st-mx">
+      <h3>Kategorien <span class="muted">Anzahl je Wert · Ø · bewertet</span></h3>
+      <div class="st-mx-wrap"><table><thead><tr><th></th>${steps.map(x => `<th>${fmt(x)}</th>`).join('')}<th>Ø</th><th>n</th></tr></thead><tbody>${rowsHTML}</tbody></table></div>
+      <p class="muted st-mx-note">Sympathie leer zählt in der Tool-Note als 2,5 und steht hier nicht mit drin.</p>
     </section>`;
   }
   // ---------- Weltkarte (Statistik) ----------
@@ -1897,32 +1934,42 @@
       if (f === 'Bra/Cup') rows.sort((a, b) => { const ia = CUP_ORDER.indexOf(a.label.toUpperCase()), ib = CUP_ORDER.indexOf(b.label.toUpperCase()); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label); });
       else rows.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'de'));
       if (f === 'Nationality') rows.forEach(r => { r.html = `${flagFor(r.label) || ''} ${esc(r.label)}`; });
+      if (f === 'Bra/Cup') return histSection('Cup', rows, total - empty, empty, { span: true });
       return statSection(title, rows, total, empty, { limit: f === 'Bra/Cup' ? 30 : 15,
         emptyRow: empty ? { label: '(ohne Angabe)', n: empty, test: e => !statValues(e, f).length, flabel: `${title}: ohne Angabe` } : null });
     });
 
-    // Zahlen: in Stufen einteilen
-    const nums = STAT_NUMS.map(([f, title, step, unit]) => {
-      const counts = new Map(); let empty = 0;
-      for (const e of list) {
-        let x = f === 'Alter' ? age(e) : num(fieldValues(e, f)[0]);
-        if (x == null || (f === 'Height' && (x < 100 || x > 230)) || (f === 'Weight' && (x < 25 || x > 200))) { empty++; continue; }
-        const b = Math.floor(x / step + 1e-9) * step;
-        counts.set(b, (counts.get(b) || 0) + 1);
-      }
+    // Zahlen: in Stufen einteilen → Säulendiagramm
+    const NUMDEF = {
+      'Alter': ['Alter', 5, ' J.'], 'Geburtsjahr': ['Geburtsjahrzehnt', 10, 'er'], 'Height': ['Größe', 5, ' cm'], 'Weight': ['Gewicht', 5, ' kg'],
+      'Global Rating': ['Babepedia Ø (alle Nutzer)', 0.1, ''], 'User Rating': ['Meine Babepedia-Note', 1, ''], 'Score': ['Tool-Note (aus Kategorien)', 0.5, '']
+    };
+    const numVal = (e, f) => f === 'Alter' ? age(e) : num(fieldValues(e, f)[0]);
+    const numOk = (f, x) => x != null && !(f === 'Height' && (x < 100 || x > 230)) && !(f === 'Weight' && (x < 25 || x > 200)) && !(f === 'User Rating' && false);
+    const binOf = (x, step) => Math.round(Math.floor(x / step + 1e-9) * step * 100) / 100;
+    const hist = (f, opts = {}) => {
+      const [title, step, unit] = NUMDEF[f];
+      const counts = new Map(); let empty = 0, base = 0;
+      const val = (e) => f === 'User Rating' ? siteRating(e) : numVal(e, f);
+      for (const e of list) { const x = val(e); if (!numOk(f, x)) { empty++; continue; } base++; const b = binOf(x, step); counts.set(b, (counts.get(b) || 0) + 1); }
       const keys = [...counts.keys()].sort((a, b) => a - b);
-      const lbl = (b) => step === 1 || f === 'Geburtsjahr' ? `${f1(b, 1)}${unit}` : `${f1(b, 1)}–${f1(b + step - (step < 1 ? 0.01 : 1), 2)}${unit}`;
-      const rows = keys.map(b => ({ label: lbl(b), n: counts.get(b), flabel: `${title}: ${lbl(b)}`,
-        test: e => { const x = f === 'Alter' ? age(e) : num(fieldValues(e, f)[0]); return x != null && Math.floor(x / step + 1e-9) * step === b; } }));
-      return statSection(title, rows, total, empty, { limit: 40 });
-    });
+      if (!keys.length) return '';
+      // Lücken auffüllen, damit die Achse gleichmäßig bleibt
+      const all = [];
+      for (let b = keys[0]; b <= keys[keys.length - 1] + 1e-9; b = Math.round((b + step) * 100) / 100) all.push(b);
+      const nf = (b) => f === 'Geburtsjahr' ? String(b) : f1(b, step < 1 ? 2 : 0);
+      const lbl = (b) => step === 1 || f === 'Geburtsjahr' ? `${nf(b)}${unit}` : step === 0.1 ? `${nf(b)}–${f1(b + 0.09, 2)}` : `${nf(b)}–${f1(b + step - (step < 1 ? 0.1 : 1), 1)}${unit}`;
+      const rows = all.map(b => ({ label: lbl(b), short: f === 'Geburtsjahr' ? `'${String(b).slice(2)}` : nf(b), n: counts.get(b) || 0, flabel: `${title}: ${lbl(b)}`,
+        test: e => { const x = val(e); return numOk(f, x) && binOf(x, step) === b; } }));
+      return histSection(title, rows, base, empty, opts);
+    };
 
     // Image Ranker: Tiers
     const tiers = new Map();
     list.forEach(e => { if (e._ranker && e._ranker.tier) tiers.set(e._ranker.tier, (tiers.get(e._ranker.tier) || 0) + 1); });
     // Kategorien-Note gegen Babepedia-Bewertung
     const dTest = (lo, hi) => (e) => { if (!hasScore(e) || siteRating(e) == null) return false; const d = Math.round(num(e.Score)) - siteRating(e); return d >= lo && d <= hi; };
-    const cmpDefs = [['≤ −2 (Tool-Note niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (Tool-Note höher)', 2, 99]];
+    const cmpDefs = [['≤ −2 (niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (höher)', 2, 99]];
     const cmpRows = cmpDefs.map(([label, lo, hi]) => ({ label, n: list.filter(dTest(lo, hi)).length, flabel: `Tool-Note vs. Babepedia-Note: ${label}`, test: dTest(lo, hi) })).filter(r => r.n);
     const cmpN = list.filter(e => hasScore(e) && siteRating(e) != null).length;
     const tierRows = RK_TIERS.map(([, t]) => t).filter(t => tiers.has(t)).map(t => ({ label: t, n: tiers.get(t), flabel: `Ranker-Tier: ${t}`,
@@ -1932,20 +1979,32 @@
     const COMPLETE = ['Main Image URL', 'Born', 'Nationality', 'Professions', 'Hair color', 'Eye color', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Body type', 'Ethnicity', 'Babe ID', 'My Rating'];
     const compRows = COMPLETE.map(f => {
       const n = list.filter(e => f === 'Main Image URL' ? imgState(e) !== 'none' : fieldValues(e, f).length).length;
-      return { label: f === 'Main Image URL' ? 'Bild' : f, n, flabel: `${f === 'Main Image URL' ? 'Bild' : f}: fehlt`, test: e => f === 'Main Image URL' ? imgState(e) === 'none' : !fieldValues(e, f).length, title: 'Klick: Einträge, bei denen es fehlt' };
+      const L = f === 'Main Image URL' ? 'Bild' : f === 'My Rating' ? 'Tool-Note' : lab(f);
+      return { label: L, n, flabel: `${L}: fehlt`, test: e => f === 'Main Image URL' ? imgState(e) === 'none' : !fieldValues(e, f).length, title: 'Klick: Einträge, bei denen es fehlt' };
     });
 
+    const catBy = {}; STAT_CATS.forEach(([f], k) => { catBy[f] = cats[k]; });
+    const group = (id, title, html) => {
+      const body = html.filter(Boolean).join('');
+      if (!body) return '';
+      const closed = (ui.statsClosed || []).includes(id);
+      return `<details class="st-group" data-stg="${id}"${closed ? '' : ' open'}><summary><h2>${esc(title)}</h2></summary><div class="st-grid">${body}</div></details>`;
+    };
     return `<div class="stats">
       <div class="st-tiles">${tiles}</div>
-      <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile filtert die Liste danach.</p>
-      ${mapSectionHTML()}
-      <div class="st-grid">
-        ${cats.join('')}
-        ${statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })}
-        ${statSection(`♥ Tool-Note vs. meine Babepedia-Note (${cmpN})`, cmpRows, cmpN, 0, { limit: 10 })}
-        ${nums.join('')}
-        ${statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })}
-      </div>
+      <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile oder Säule filtert die Liste danach.</p>
+      ${group('rating', 'Bewertungen', [
+        scoreMatrixHTML(list),
+        hist('Score', { span: true, unit: 'bewertet' }),
+        statSection(`Tool-Note vs. meine Babepedia-Note (${cmpN})`, cmpRows, cmpN, 0, { limit: 10 }),
+        statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 }),
+        hist('Global Rating', { span: true }),
+        hist('User Rating', { note: 'ohne gelöschte Profile' })])}
+      ${group('origin', 'Herkunft', [mapSectionHTML(), catBy['Nationality'], catBy['Geburtsland'], catBy['Birthplace'], catBy['Ethnicity']])}
+      ${group('person', 'Person & Beruf', [hist('Alter', { span: true }), hist('Geburtsjahr'), catBy['Profession Category'], catBy['Professions'], catBy['Sexuality'], catBy['Active']])}
+      ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type'], catBy['Boobs'], hist('Height', { span: true }), hist('Weight', { span: true }),
+        catBy['Bra/Cup'], catBy['Tattoos'], catBy['Piercings']])}
+      ${group('data', 'Sammlung & Daten', [catBy['__status'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}
     </div>`;
   }
   function renderStatChip() {
@@ -3131,6 +3190,13 @@
   });
   $$('.seg button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.view; if (ui.view !== 'stats') ui.lastListView = ui.view; saveUI(); render(); }));
   $('#btn-to-ranker').addEventListener('click', () => openRankerSend(filtered()));
+  // Statistik: auf-/zugeklappte Gruppen merken
+  document.addEventListener('toggle', (ev) => {
+    const d = ev.target; if (!d.matches || !d.matches('details.st-group')) return;
+    const id = d.dataset.stg, set = new Set(ui.statsClosed || []);
+    d.open ? set.delete(id) : set.add(id);
+    ui.statsClosed = [...set]; saveUI();
+  }, true);
   $('#main').addEventListener('click', (ev) => {
     if (ui.view === 'stats') {
       const mm = ev.target.closest('[data-map-mode]'), mv = ev.target.closest('[data-map-view]'), cty = ev.target.closest('#map-box [data-iso]');
@@ -3146,6 +3212,7 @@
       if (cty) { mapPick(cty.dataset.iso); return; }
     }
     const b = ev.target.closest('[data-sf]'); if (!b || ui.view !== 'stats') return;
+    if (b.closest('summary')) return;
     const r = statRefs[Number(b.dataset.sf)]; if (!r || !r.test) return;
     statFilter = { label: r.flabel || r.label, test: r.test };
     ui.view = ui.lastListView || 'grid'; saveUI(); render(); window.scrollTo(0, 0);
