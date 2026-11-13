@@ -816,3 +816,5 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .cb-item-h { font-size: 14px; }
 .cb-item-h .linklike { background: none; border: 0; padding: 0; color: var(--accent-2); font: inherit; cursor: pointer; }
 .cb-item-m { font-size: 13px; margin: 3px 0 8px; }
+.card .cover-ok.far { width: 92px; height: 92px; }
+.card .cover-ok.far span { background: var(--surface-3); color: var(--muted); top: 20px; left: -30px; width: 130px; font-weight: 600; }

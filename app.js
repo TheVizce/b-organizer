@@ -1557,7 +1557,7 @@
   // Zusatzfilter: Kommazahlen-Noten in ganze Stufen zusammenfassen (9,0–9,9 statt jeder Einzelwert)
   const XF_BUCKET = { 'Score': 1, 'Global Rating': 2 };
   function xfValues(e, f) {
-    if (f === 'Cover Checked') return [isTrue(e[f]) ? 'ja' : 'nein'];
+    if (f === 'Cover Checked') return [coverChecked(e) ? 'ja' : coverElsewhere(e) ? 'ja – eigenes Bild auf anderem Gerät' : 'nein'];
     const vals = fieldValues(e, f);
     if (!(f in XF_BUCKET) || !vals.length) return vals;
     const x = num(vals[0]); if (x == null) return vals;
@@ -1731,11 +1731,12 @@
   }
   function cardHTML(e) {
     const fut = ui.cardBadges.includes('fut') ? futHTML(e) : '';
-    const coverOk = ui.cardBadges.includes('cover') && isTrue(e['Cover Checked']);
+    const coverOk = ui.cardBadges.includes('cover') && coverChecked(e);
+    const coverFar = ui.cardBadges.includes('cover') && coverElsewhere(e);
     return `
       <article class="card" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
-        <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${coverOk ? '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>' : ''}${fut}
+        <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${coverOk ? '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>' : coverFar ? '<div class="cover-ok far" title="Geprüftes Kachelbild ist ein eigenes Bild auf einem anderen Gerät – hier wird ein Ersatzbild gezeigt"><span>📁 anderes Gerät</span></div>' : ''}${fut}
           <div class="badges">
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
@@ -2276,7 +2277,7 @@
           ${sec('Allgemein', GROUPS[0].fields)}
           ${sec('Aussehen', GROUPS[1].fields)}
           ${sec('Babepedia', GROUPS[3].fields)}
-          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${isTrue(e['Cover Checked']) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren / Markierung entfernen">${isTrue(e['Cover Checked']) ? '✓ Kachelbild geprüft' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
+          ${imgs.length ? `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${imgs.map((u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`).join('')}</div></div>` : ''}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -2614,7 +2615,7 @@
     cb.hidden = !imgs.length;
     const ve = byId(viewer.ids[viewer.ei]);
     cb.classList.toggle('on', !!isCover);
-    cb.classList.toggle('checked', !!isCover && isTrue(ve && ve['Cover Checked']));
+    cb.classList.toggle('checked', !!isCover && coverChecked(ve));
     cb.textContent = coverBtnText(ve, isCover);
     cb.title = isCover ? 'Kachelbild als geprüft markieren / Markierung entfernen (K)' : 'Dieses Bild als Kachelbild verwenden (K)';
     $('.vw-dots', el).innerHTML = imgs.length > 1 && imgs.length <= 30 ? imgs.map((_, i) => `<button data-dot="${i}" class="${i === ii ? 'on' : ''}" aria-label="Bild ${i + 1}"></button>`).join('') : '';
@@ -2622,10 +2623,19 @@
     $('.vw-arrow.prev', el).disabled = first; $('.vw-arrow.next', el).disabled = last;
     $$('[data-vwe]', el).forEach(b => { b.hidden = ids.length < 2; b.disabled = (b.dataset.vwe === '-1' ? ei === 0 : ei === ids.length - 1); });
   }
+  // Eigene Bilder liegen nur auf dem Gerät, auf dem sie hochgeladen wurden. Ist das Kachelbild so ein Bild und fehlt hier,
+  // gilt „geprüft“ auf diesem Gerät nicht für das Ersatzbild.
+  const coverMissingHere = (e) => { const c = v(e, 'Cover'); return !!c && isLocal(c) && !localUrls.has(localId(c)); };
+  const coverChecked = (e) => isTrue(e && e['Cover Checked']) && !coverMissingHere(e);
+  const coverElsewhere = (e) => isTrue(e && e['Cover Checked']) && coverMissingHere(e);
   // Kachelbild: anderes Bild → als Kachelbild setzen und als geprüft markieren; aktuelles Kachelbild → „geprüft“ umschalten
   function coverAction(e, u) {
     if (!e) return false;
     const imgs = images(e);
+    if (coverMissingHere(e)) {
+      if (!u || u === imgs[0]) { toast('Das Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt – dort prüfen oder hier ein anderes Bild wählen.'); return false; }
+      if (!confirm('Das Kachelbild ist ein eigenes Bild von einem anderen Gerät (hier nicht vorhanden).\nStattdessen dieses Bild als Kachelbild setzen? Das gilt dann auf allen Geräten.')) return false;
+    }
     if (u && imgs.length && u !== imgs[0]) {
       e.Cover = u; e['Cover Checked'] = 'true'; e._updated = Date.now();
       saveQuiet(); refreshItem(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
@@ -2636,7 +2646,7 @@
     saveQuiet(); refreshItem(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
     return false;
   }
-  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : isTrue(e && e['Cover Checked']) ? '✓ Kachelbild geprüft' : '★ Kachelbild – passt?';
+  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : '★ Kachelbild – passt?';
   function viewerSetCover() {
     if (!viewer) return;
     const e = byId(viewer.ids[viewer.ei]), u = viewer.imgs[viewer.ii];
@@ -3103,7 +3113,7 @@
     $('.rt-imgc', el).textContent = imgs.length > 1 ? `${rater.img + 1} / ${imgs.length}` : '';
     const cb = $('.rt-cover', el), isCover = imgs.length && rater.img === 0;
     cb.hidden = !imgs.length;
-    cb.classList.toggle('on', !!isCover); cb.classList.toggle('checked', !!isCover && isTrue(e['Cover Checked']));
+    cb.classList.toggle('on', !!isCover); cb.classList.toggle('checked', !!isCover && coverChecked(e));
     cb.textContent = coverBtnText(e, isCover) + ' (K)';
     if (!imgs.length) { err.hidden = false; err.textContent = 'Keine Bilder'; return; }
     const full = R(imgs[rater.img]), alts = [full, thumbUrl(full)].filter((x, i, a) => x && a.indexOf(x) === i);
