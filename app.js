@@ -23,7 +23,7 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
@@ -234,6 +234,32 @@
   }
 
   const catList = (e) => String(e[IS_CHARS ? 'Medium' : 'Profession Category'] || '').split(',').map(x => x.trim()).filter(Boolean);
+  // ---- Hauptbereich (Personen): von Hand gesetzt ('Primary Category') oder automatisch über eine Rangfolge ----
+  // Die Rangfolge (primaryOrder) wird in der IndexedDB gespeichert und mitsynchronisiert; automatische Werte werden nie gespeichert.
+  const PRIMARY_DEFAULT = ['Adult Industry', 'Music', 'Athletics & Sports', 'Acting & Performing', 'TV & Media', 'Business / Law / Politics',
+    'Science / Health / Education', 'Creative & Design', 'Modeling', 'Digital Content', 'Service & Hospitality', 'Sonstige'];
+  const PRIMARY_SHORT = { 'Adult Industry': ['🔞', 'Adult'], 'Music': ['🎤', 'Musik'], 'Athletics & Sports': ['🏅', 'Sport'], 'Acting & Performing': ['🎬', 'Schauspiel'],
+    'TV & Media': ['📺', 'TV/Medien'], 'Business / Law / Politics': ['💼', 'Business'], 'Science / Health / Education': ['🔬', 'Wissenschaft'],
+    'Creative & Design': ['🎨', 'Kreativ'], 'Modeling': ['📸', 'Model'], 'Digital Content': ['📱', 'Content'], 'Service & Hospitality': ['🍸', 'Service'], 'Sonstige': ['•', 'Sonstige'] };
+  const normPrimaryOrder = (o) => { const ok = Array.isArray(o) ? o.filter(c => PRIMARY_DEFAULT.includes(c)) : []; return [...new Set([...ok, ...PRIMARY_DEFAULT])]; };
+  let primaryOrder = PRIMARY_DEFAULT.slice();
+  // { cat, manual } oder null
+  function primaryCat(e) {
+    if (IS_CHARS || !e) return null;
+    const cats = catList(e); if (!cats.length) return null;
+    const m = String(e['Primary Category'] || '').trim();
+    if (m && cats.includes(m)) return { cat: m, manual: true };
+    const cat = primaryOrder.find(c => cats.includes(c)) || cats[0];
+    return { cat, manual: false };
+  }
+  const primaryLabel = (c) => (PRIMARY_SHORT[c] || ['', c])[1];
+  const primaryIcon = (c) => (PRIMARY_SHORT[c] || [''])[0];
+  function setPrimary(e, cat) {
+    const cur = primaryCat(e);
+    if (cur && cur.manual && cur.cat === cat) delete e['Primary Category'];   // erneut antippen = zurück auf automatisch
+    else e['Primary Category'] = cat;
+    e._updated = Date.now(); saveQuiet(); refreshItem(e._id);
+  }
   // ---- Measurements: werden immer in cm gespeichert (Format Brust-Taille-Hüfte) ----
   const INCH = 2.54;
   function parseMeas(str) {
@@ -1562,8 +1588,10 @@
       return;
     }
     const cats = PROFESSION_CATEGORIES.map(c => c[0]).filter(c => present.has(c));
-    sel.innerHTML = sel.options[0].outerHTML + cats.map(c => `<option>${esc(c)}</option>`).join('');
-    sel.value = present.has(cur) ? cur : '';
+    const prim = primaryOrder.filter(c => present.has(c));
+    sel.innerHTML = sel.options[0].outerHTML + `<optgroup label="Bereich (einer davon)">${cats.map(c => `<option>${esc(c)}</option>`).join('')}</optgroup>`
+      + `<optgroup label="Hauptbereich">${prim.map(c => `<option value="P:${esc(c)}">★ ${esc(c)}</option>`).join('')}</optgroup>`;
+    sel.value = present.has(cur.replace(/^P:/, '')) ? cur : '';
   }
 
   const collator = new Intl.Collator('de');
@@ -1636,7 +1664,7 @@
         const vals = xfValues(e, f);
         if (want === '__empty' ? vals.length : !vals.includes(want)) return false;
       }
-      if (cf && !catList(e).includes(cf)) return false;
+      if (cf && (cf.startsWith('P:') ? (primaryCat(e) || {}).cat !== cf.slice(2) : !catList(e).includes(cf))) return false;
       if (sf) { const st = profileStatus(e); if (sf === 'gone-any' ? !st.startsWith('gone') : st !== sf) return false; }
       if (mf) {
         const miss = CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([f]) => f);
@@ -1689,6 +1717,7 @@
       site: (e) => -(num(e['User Rating']) ?? -1),
       diff: (e) => { const d = ratingDiff(e).d; return d === undefined ? 1 : -Math.abs(d); },
       random: (e) => shuffleKey(e._id),
+      primary: (e) => { const pc = primaryCat(e); return pc ? primaryOrder.indexOf(pc.cat) : 99; },
       scraped: (e) => /babepedia\.com\/babe\//i.test(v(e, 'Profile URL')) && !isTrue(e['Profile Deleted']) ? scrapedTs(e) : 9e15   // wie „🔁 Update (älteste)“
     }[ui.sort] || (() => 0);
     return list.map(e => ({ e, k: key(e), n: v(e, 'Name') }))
@@ -1716,7 +1745,7 @@
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
   const CARD_BADGES = IS_CHARS ? [['rating', '♥ Tool-Note'], ['ranker', '🏆 Ranker-Tier'], ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“']]
     : [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier'],
-    ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“']];
+    ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“'], ['primary', '★ Hauptbereich']];
   const BUILTIN_FILTERS = IS_CHARS ? [['f-nationality', 'Universum'], ['f-cat', 'Medium'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Spezies'], ['f-body', 'Stil'],
     ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']]
     : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
@@ -1730,6 +1759,7 @@
   if (!Array.isArray(ui.cardFields)) ui.cardFields = DEF_CARD_FIELDS.slice();
   if (!Array.isArray(ui.cardBadges)) ui.cardBadges = CARD_BADGES.map(b => b[0]);
   if (!ui.cardBadgesV2) { for (const k of ['fut', 'cover']) if (!ui.cardBadges.includes(k)) ui.cardBadges.push(k); ui.cardBadgesV2 = true; }
+  if (!ui.cardBadgesV3) { if (!IS_CHARS && !ui.cardBadges.includes('primary')) ui.cardBadges.push('primary'); ui.cardBadgesV3 = true; }
   if (!ui.hiddenFilters || typeof ui.hiddenFilters !== 'object') ui.hiddenFilters = {};
   if (!Array.isArray(ui.extraFilters)) ui.extraFilters = [];
   const xfVals = {};   // aktuelle Auswahl der Zusatzfilter (nicht gespeichert)
@@ -1823,6 +1853,9 @@
         </div>
         <h3>Abzeichen auf dem Bild</h3>
         <div class="cfg-grid">${CARD_BADGES.map(([k, l]) => chk('badge', k, ui.cardBadges.includes(k), l)).join('')}</div>
+        ${IS_CHARS ? '' : `<h3>Hauptbereich: Rangfolge für die Automatik</h3>
+        <p class="muted">Hat jemand mehrere Bereiche, gilt automatisch der oberste. Von dir gesetzte Hauptbereiche bleiben davon unberührt. Die Rangfolge wird mit der Cloud abgeglichen.</p>
+        <ol class="prim-order" id="prim-order"></ol>`}
         <h3>Filter in der Leiste</h3>
         <div class="cfg-grid">${BUILTIN_FILTERS.map(([id, l]) => chk('filter', id, !ui.hiddenFilters[id], l)).join('')}</div>
         <h3>Zusätzliche Filter</h3>
@@ -1836,6 +1869,14 @@
       </div>`);
     const form = $('#view-cfg');
     let order = ui.cardFields.slice();
+    let pOrder = primaryOrder.slice();
+    const drawP = () => { const ol = $('#prim-order'); if (ol) ol.innerHTML = pOrder.map((c, i) => `<li><span>${primaryIcon(c)} ${esc(c)}</span><button type="button" class="btn small" data-pmove="${i}" data-dir="-1" ${i ? '' : 'disabled'} aria-label="nach oben">↑</button><button type="button" class="btn small" data-pmove="${i}" data-dir="1" ${i < pOrder.length - 1 ? '' : 'disabled'} aria-label="nach unten">↓</button></li>`).join(''); };
+    drawP();
+    form.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-pmove]'); if (!b) return;
+      const i = +b.dataset.pmove, j = i + +b.dataset.dir; if (j < 0 || j >= pOrder.length) return;
+      [pOrder[i], pOrder[j]] = [pOrder[j], pOrder[i]]; drawP();
+    });
     const showOrder = () => { $('#cfg-order').textContent = order.length ? 'Reihenfolge: ' + order.map(lab).join(' · ') : 'Keine Angaben ausgewählt.'; };
     showOrder();
     form.addEventListener('change', (ev) => {
@@ -1848,6 +1889,7 @@
     $('#cfg-default').addEventListener('click', () => {
       ui.cardFields = DEF_CARD_FIELDS.slice(); ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
       ui.cardSize = 'm'; ui.cardImgTop = false; ui.cardNoName = false; applyCardLook();
+      if (!IS_CHARS && primaryOrder.join() !== PRIMARY_DEFAULT.join()) savePrimaryOrder(PRIMARY_DEFAULT.slice());
       saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
     });
     $('#cfg-save').addEventListener('click', () => {
@@ -1861,11 +1903,18 @@
       const shown = new Set(vals('filter'));
       ui.hiddenFilters = Object.fromEntries(BUILTIN_FILTERS.filter(([id]) => !shown.has(id)).map(([id]) => [id, true]));
       ui.extraFilters = vals('extra');
+      if (!IS_CHARS && pOrder.join() !== primaryOrder.join()) savePrimaryOrder(pOrder);
       saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
       toast('Ansicht gespeichert (gilt für dieses Gerät).', 'ok');
     });
   }
 
+  async function savePrimaryOrder(o) {
+    primaryOrder = normPrimaryOrder(o);
+    try { await idbSet('primaryOrder', primaryOrder); if (SYNC) SYNC.changed(); }
+    catch (err) { toast('Speichern der Rangfolge fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+    refreshCatFilter(); render();
+  }
   function ratingBadge(e) {
     const r = ratingDiff(e);
     const tn = v(e, 'Score').replace('.', ',');
@@ -1951,7 +2000,7 @@
       : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
     const nat = IS_CHARS ? '' : fieldValues(e, 'Nationality')[0];
     return `<div class="fut" title="Tool-Note ${esc(v(e, 'Score'))}">
-      <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}</span></div>
+      <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}${(() => { const pc = ui.cardBadges.includes('primary') && primaryCat(e); return pc ? `<i class="fut-pos${pc.manual ? '' : ' auto'}" title="Hauptbereich: ${esc(pc.cat)}${pc.manual ? '' : ' (automatisch)'}">${primaryIcon(pc.cat)}</i>` : ''; })()}</span></div>
       <div class="fut-grid">${st}${bp}</div></div>`;
   }
   function cardHTML(e) {
@@ -1965,7 +2014,7 @@
             ${ui.cardBadges.includes('global') && v(e, 'Global Rating') ? `<span class="badge rating" title="Babepedia Ø (alle Nutzer)">Ø ${esc(v(e, 'Global Rating'))}</span>` : ''}
             ${ui.cardBadges.includes('rank') && v(e, 'Rank') ? `<span class="badge">#${esc(v(e, 'Rank'))}</span>` : ''}
             ${ui.cardBadges.includes('rating') && !fut ? ratingBadge(e) : ''}
-            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${profileStatus(e).startsWith('gone') ? `<span class="badge gone" title="${esc(STATUS_LABEL[profileStatus(e)])}">${profileStatus(e) === 'gone' ? '⚠︎ gelöscht' : '🏛️ gelöscht'}</span>` : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
+            ${ui.cardBadges.includes('ranker') && e._ranker ? rankerBadge(e) : ''}${!fut && ui.cardBadges.includes('primary') && primaryCat(e) ? (pc => `<span class="badge primary${pc.manual ? '' : ' auto'}" title="Hauptbereich: ${esc(pc.cat)}${pc.manual ? '' : ' (automatisch)'}">${primaryIcon(pc.cat)} ${esc(primaryLabel(pc.cat))}</span>`)(primaryCat(e)) : ''}${profileStatus(e).startsWith('gone') ? `<span class="badge gone" title="${esc(STATUS_LABEL[profileStatus(e)])}">${profileStatus(e) === 'gone' ? '⚠︎ gelöscht' : '🏛️ gelöscht'}</span>` : ''}${rankerStale.has(e._id) ? `<span class="badge rk-stale" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Ranker</span>` : ''}
           </div>
         </div>
         <div class="body">
@@ -1985,12 +2034,13 @@
     ['Universe', 'Universum'], ['Origin', 'Ursprünglich (Titel)'], ['Medium', 'Medium'], ['Style', 'Stil'], ['Species', 'Spezies'], ['Gender', 'Geschlecht'], ['Role', 'Rolle'],
     ['Adult', 'Volljährig (Kanon)'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'], ['Body type', 'Figur'], ['Bra/Cup', 'Cup'], ['Voice Actor', 'Sprecherin'],
     ['Favorite', 'Favorit'], ['Tags', 'Tags']] : [
-    ['Nationality', 'Nationalität'], ['Profession Category', 'Bereich'], ['Professions', 'Professions'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'],
+    ['Nationality', 'Nationalität'], ['__primary', 'Hauptbereich'], ['Profession Category', 'Bereich'], ['Professions', 'Professions'], ['Hair color', 'Haarfarbe'], ['Eye color', 'Augenfarbe'],
     ['Body type', 'Figur'], ['Ethnicity', 'Ethnicity'], ['Bra/Cup', 'Cup'], ['Boobs', 'Boobs'], ['Sexuality', 'Sexuality'], ['Tattoos', 'Tattoos'],
     ['Piercings', 'Piercings'], ['Active', 'Aktiv'], ['__status', 'Profil-Status'], ['Favorite', 'Favorit'], ['Tags', 'Tags'], ['Geburtsland', 'Geburtsland'], ['Birthplace', 'Geburtsort']];
   const COUNTRY_ALIAS = { 'usa': 'United States', 'us': 'United States', 'u.s.': 'United States', 'uk': 'United Kingdom', 'england': 'United Kingdom', 'russian federation': 'Russia' };
   function statValues(e, f) {
     if (f === '__status') return [STATUS_LABEL[profileStatus(e)]];
+    if (f === '__primary') { const pc = primaryCat(e); return pc ? [pc.cat] : []; }
     if (f !== 'Geburtsland') return fieldValues(e, f);
     const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return [];
     const last = bp.split(',').pop().trim(); return last ? [COUNTRY_ALIAS[last.toLowerCase()] || last] : [];
@@ -2270,7 +2320,7 @@
         hist('Global Rating', { span: true }),
         hist('User Rating', { note: 'ohne gelöschte Profile' })])}
       ${group('origin', 'Herkunft', [mapSectionHTML(), catBy['Nationality'], catBy['Geburtsland'], catBy['Birthplace'], catBy['Ethnicity']])}
-      ${group('person', 'Person & Beruf', [hist('Alter', { span: true }), hist('Geburtsjahr'), catBy['Profession Category'], catBy['Professions'], catBy['Sexuality'], catBy['Active']])}
+      ${group('person', 'Person & Beruf', [hist('Alter', { span: true }), hist('Geburtsjahr'), catBy['__primary'], catBy['Profession Category'], catBy['Professions'], catBy['Sexuality'], catBy['Active']])}
       ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type'], catBy['Boobs'], hist('Height', { span: true }), hist('Weight', { span: true }),
         catBy['Bra/Cup'], catBy['Tattoos'], catBy['Piercings']])}
       ${group('data', 'Sammlung & Daten', [catBy['__status'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}`}
@@ -2510,7 +2560,7 @@
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
-            ${catList(e).map(c => `<button class="chip cat" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button>`).join('')}
+            ${(() => { const pc = primaryCat(e); return catList(e).map(c => { const on = pc && pc.cat === c; return `<span class="chip-pair"><button class="chip-star${on ? ' on' : ''}${on && !pc.manual ? ' auto' : ''}" data-primary="${esc(c)}" data-id="${esc(e._id)}" title="${on ? (pc.manual ? 'Hauptbereich (von dir gesetzt) – antippen = wieder automatisch' : 'Hauptbereich (automatisch) – antippen = so festlegen') : 'Als Hauptbereich festlegen'}">${on ? '★' : '☆'}</button><button class="chip cat${on ? ' primary' : ''}" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button></span>`; }).join(''); })()}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${profileStatus(e).startsWith('gone') ? `<div class="sec gone-box">⚠︎ <b>${esc(STATUS_LABEL[profileStatus(e)])}</b>${v(e, 'Deleted Since') ? ` <span class="muted">(festgestellt ${esc(fmtDate(v(e, 'Deleted Since')))})</span>` : ''}<br><span class="muted">Daten und Bilder bleiben erhalten; das rollierende Update fragt dieses Profil nicht mehr ab.${profileStatus(e) === 'gone' ? ' Bilder von Babepedia können nach und nach nicht mehr laden – eigene Bilder hochladen sichert sie.' : ''} Taucht das Profil wieder auf, wird der Status beim nächsten Holen automatisch zurückgesetzt.</span></div>` : ''}
@@ -2544,6 +2594,12 @@
     setKindOn(formGet(form), (f, val) => { const h = form.elements.namedItem(f); if (h) h.value = val; }, r, k); dirty = true;
   }
   const kindHiddenHTML = (e) => IS_CHARS ? IMG_KINDS.filter(x => x.field).map(x => `<input type="hidden" name="${x.field}" value="${esc(splitList(v(e, x.field)).join(', '))}">`).join('') : '';
+  function primaryOptions(catStr, manual) {
+    const cats = String(catStr || '').split(',').map(x => x.trim()).filter(Boolean);
+    const auto = primaryOrder.find(c => cats.includes(c)) || cats[0] || '';
+    const list = cats.slice(); if (manual && !list.includes(manual)) list.push(manual);
+    return `<option value="">automatisch${auto ? ` (${esc(auto)})` : ''}</option>` + list.map(c => `<option value="${esc(c)}" ${c === manual ? 'selected' : ''}>${esc(c)}${cats.includes(c) ? '' : ' (passt nicht mehr zu Professions)'}</option>`).join('');
+  }
   function ownItemsHTML(refs, cover, kinds) {
     return refs.map(r => `<div class="own-item ${r === cover ? 'is-cover' : ''} ${kindCls(r, kinds)}" data-ref="${esc(r)}">
       <img src="${esc(R(r))}" alt="" data-full="${esc(r)}">${kindBtn(r, kinds)}
@@ -2579,7 +2635,8 @@
         <span class="hint">Werden verkleinert nur in diesem Browser gespeichert (nicht im Repo). Im JSON-Backup sind sie enthalten.</span></div>`;
     }
     if (f === 'Profession Category') {
-      return `<div class="field"><label>${esc(f)}</label><input type="text" value="${esc(v(e, f))}" readonly tabindex="-1" class="ro" data-derived="cat"><span class="hint">wird automatisch aus Professions gebildet</span></div>`;
+      return `<div class="field"><label>${esc(f)}</label><input type="text" value="${esc(v(e, f))}" readonly tabindex="-1" class="ro" data-derived="cat"><span class="hint">wird automatisch aus Professions gebildet</span></div>
+        <div class="field"><label for="fld-primary">Hauptbereich</label><select name="Primary Category" id="fld-primary" data-primary-sel>${primaryOptions(v(e, 'Profession Category'), v(e, 'Primary Category'))}</select><span class="hint">automatisch nach deiner Rangfolge (Ansicht anpassen), außer du wählst selbst</span></div>`;
     }
     if (f === 'Measurements') {
       const id = 'fld-' + ALL_FIELDS.indexOf(f), val = v(e, f), inch = measInches(val);
@@ -2650,7 +2707,7 @@
         else if (unit === 'in') hintEl.textContent = `wird gespeichert als ${measToCm(inp.value, 'in')} cm`;
         else hintEl.textContent = `≈ ${measInches(measToCm(inp.value, 'cm'))} in`;
       }
-      if (ev.target.name === 'Professions') { const ro = $('[data-derived="cat"]', form); if (ro) ro.value = professionCategories(ev.target.value); }
+      if (ev.target.name === 'Professions') { const ro = $('[data-derived="cat"]', form); if (ro) ro.value = professionCategories(ev.target.value); const ps = $('[data-primary-sel]', form); if (ps) { const cur = ps.value; ps.innerHTML = primaryOptions(ro ? ro.value : '', cur); } }
       const box = $(`[data-prev-for="${CSS.escape(ev.target.name || '')}"]`, form);
       if (box) box.innerHTML = previewHTML(ev.target.value);
     });
@@ -3926,6 +3983,8 @@
     const full = t.closest('img[data-full]');
     if (full && !t.closest('.own-list')) { lightbox(R(full.dataset.full) || full.src); return; }
     if (full) { lightbox(full.src); return; }
+    const pBtn = t.closest('[data-primary]');
+    if (pBtn) { const e = byId(pBtn.dataset.id); if (e) { setPrimary(e, pBtn.dataset.primary); showDetail(e._id); } return; }
     const catBtn = t.closest('[data-cat]');
     if (catBtn) { closeModal(true); $('#f-cat').value = catBtn.dataset.cat; render(); return; }
     const tag = t.closest('[data-tag]');
@@ -4086,12 +4145,14 @@
     SYNC = ToolSync.create({
       tool: IS_CHARS ? 'b-organizer-chars' : 'b-organizer',   // Charaktere: eigener Ordner tool-daten/b-organizer-chars/
       collections: { entries: { type: 'array', id: '_id' }, duels: { type: 'array', id: 'id' } },
+      fields: ['primaryOrder'],
       shards: IS_CHARS ? 8 : 32,
       stampDelay: 1500,
-      get: () => ({ entries, duels }),
+      get: () => ({ entries, duels, primaryOrder }),
       apply: async (d) => {
         entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
         if (Array.isArray(d.duels)) duels = d.duels.filter(x => x && x.id);
+        if (Array.isArray(d.primaryOrder)) { primaryOrder = normPrimaryOrder(d.primaryOrder); try { await idbSet('primaryOrder', primaryOrder); } catch {} }
         try { await save(); await idbSet('duels', duels); } catch { return false; }
         refreshFilters(); render();
         return true;
@@ -4714,7 +4775,7 @@
       <optgroup label="nur dieser fehlt">${CORE_FIELDS.map(([f, l]) => `<option value="only:${esc(f)}">nur ${esc(l)} fehlt</option>`).join('')}</optgroup>`;
     $('#q').placeholder = 'Suchen: Name, Universum, Tags, Notizen…';
     const pl = $('#btn-pending .lbl'); if (pl) pl.textContent = ' Vorschläge';
-    if (['global', 'site', 'diff', 'rank', 'scraped'].includes(ui.sort)) ui.sort = 'name';
+    if (['global', 'site', 'diff', 'rank', 'scraped', 'primary'].includes(ui.sort)) ui.sort = 'name';
     ui.reviewUpdates = false;   // keine Babepedia-Aktualisierungen: Importe direkt übernehmen
   }
   initKind();
@@ -4727,6 +4788,7 @@
       await loadImgCheck();
       await loadPending();
       try { duels = (await idbGet('duels')) || []; } catch { duels = []; }
+      try { primaryOrder = normPrimaryOrder(await idbGet('primaryOrder')); } catch {}
       // Einmalig: Einträge mit Archiv-Kopie gelten als auf Babepedia gelöscht (Archiv-Übernahme = Original weg)
       if (!IS_CHARS) try {
         if (!localStorage.getItem('bp-organizer-archmig1')) {

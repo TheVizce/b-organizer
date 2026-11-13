@@ -896,3 +896,20 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .own-item.is-alt { border-style: dashed; }
 .sl-kinds { grid-column: 1 / -1; font-size: 12px; margin-top: 4px; }
 .field .unit-row select[data-ownurl-kind] { width: 96px; }
+
+/* Hauptbereich: von Hand gesetzt = durchgezogen/kräftig, automatisch = gestrichelt/blass */
+.badge.primary { border: 1px solid #e3b341; color: #ffe08a; }
+.badge.primary.auto { border-style: dashed; border-color: rgba(255,255,255,.35); color: rgba(255,255,255,.75); }
+.fut-main .fut-pos { font-style: normal; font-size: 11px; line-height: 1; margin-left: 4px; padding: 1px 2px; border-radius: 5px; border: 1px solid #e3b341; vertical-align: 1px; }
+.fut-pos.auto { border: 1px dashed rgba(255,255,255,.35); opacity: .6; }
+.chip-pair { display: inline-flex; align-items: center; gap: 0; }
+.chip-pair .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.chip-star { border: 1px solid #3b4560; border-right: 0; background: transparent; color: var(--muted); border-radius: 999px 0 0 999px; padding: 0 6px 0 8px; align-self: stretch; cursor: pointer; font-size: 13px; }
+.chip-star.on { color: #e3b341; border-color: #e3b341; }
+.chip-star.on.auto { color: rgba(227,179,65,.55); border-style: dashed; border-color: rgba(227,179,65,.55); }
+.chip.cat.primary { border-color: #e3b341; color: #ffe08a; }
+.chip-star.on.auto + .chip.cat.primary { border-style: dashed; border-color: rgba(227,179,65,.55); color: #d8cfa8; }
+.prim-order { margin: 6px 0 10px; padding-left: 22px; }
+.prim-order li { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.prim-order li span { flex: 1; }
+.prim-order .btn.small { padding: 2px 8px; }
