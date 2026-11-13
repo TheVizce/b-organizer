@@ -476,9 +476,10 @@ button.st-tile:hover { border-color: var(--accent); }
 .vw-count { color: #aab; font-size: 13px; margin-left: auto; white-space: nowrap; }
 .vw-x { background: none; border: 0; color: #fff; font-size: 30px; line-height: 1; cursor: pointer; padding: 0 4px; }
 .vw-stage { position: relative; display: grid; place-items: center; overflow: hidden; min-height: 0; }
-.vw-stage img { max-width: 100vw; max-height: 100%; object-fit: contain; transition: transform .2s, opacity .2s; cursor: zoom-in; }
+/* Bild füllt die Bühne und wird darin eingepasst (absolute Größe statt max-height:100% – das löst Firefox in einer auto-Zeile nicht auf und zeigt sonst nur einen Ausschnitt) */
+.vw-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: transform .2s, opacity .2s; cursor: zoom-in; }
 .viewer.zoom .vw-stage { overflow: auto; place-items: start; touch-action: pan-x pan-y; }
-.viewer.zoom .vw-stage img { max-width: none; max-height: none; width: 220%; cursor: zoom-out; }
+.viewer.zoom .vw-stage img { position: static; height: auto; max-width: none; max-height: none; width: 220%; cursor: zoom-out; }
 .vw-err { color: var(--muted); }
 .vw-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 52px; height: 84px; border: 0; border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; font-size: 40px; cursor: pointer; }
 .vw-arrow:hover { background: rgba(255,255,255,.18); }
@@ -566,7 +567,7 @@ button.chip.rk-stale { cursor: pointer; font: inherit; }
 .rater .vw-x { color: var(--text); }
 .rt-body { display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
 .rt-stage { position: relative; display: grid; place-items: center; background: #000; min-height: 0; overflow: hidden; }
-.rt-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.rt-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .rt-imgc { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: #fff; background: rgba(0,0,0,.55); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
 .rt-imgc:empty { display: none; }
 .rt-panel { overflow-y: auto; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; }
