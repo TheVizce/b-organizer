@@ -323,7 +323,10 @@
   }
 
   // Bewertungsvergleich: My Rating (Tool) vs. User Rating (Babepedia)
+  // Bei gelöschten Profilen ist die alte Babepedia-Note bedeutungslos (nicht mehr änderbar, oft nur Platzhalter) → ignorieren
+  const siteRating = (e) => isTrue(e['Profile Deleted']) ? null : num(e['User Rating']);
   function ratingDiff(e) {
+    if (isTrue(e['Profile Deleted'])) return { state: 'gone' };
     const mine = num(e['My Rating']), site = num(e['User Rating']);
     if (mine === null && site === null) return { state: 'none' };
     if (mine === null) return { state: 'site-only', site };
@@ -1433,7 +1436,7 @@
         if (rf === 'none' && st !== 'none') return false;
         if (rf === 'scored' && !hasScore(e)) return false;
         if (rf === 'unscored' && hasScore(e)) return false;
-        if (rf === 'sc-diff' && !(hasScore(e) && num(e['User Rating']) != null && Number(v(e, 'My Rating')) !== num(e['User Rating']))) return false;
+        if (rf === 'sc-diff' && !(hasScore(e) && siteRating(e) != null && Number(v(e, 'My Rating')) !== siteRating(e))) return false;
       }
       if (act && String(v(e, 'Active') || 'false') !== act) return false;
       for (const [f, val] of Object.entries(fv)) {
@@ -1515,7 +1518,7 @@
     if (f === 'Scraped At') return v(e, f) ? '🔁 ' + fmtDate(v(e, f), true) : '';
     if (f === 'Nationality') return natDisplay(e);
     if (f === 'Global Rating') return v(e, f) ? `BP Ø ${v(e, f).replace('.', ',')}` : '';
-    if (f === 'User Rating') return v(e, f) ? `Meine BP ${v(e, f)}` : '';
+    if (f === 'User Rating') return v(e, f) && !isTrue(e['Profile Deleted']) ? `Meine BP ${v(e, f)}` : '';
     if (f === 'My Rating' || f === 'Score') return v(e, 'Score') ? `♥ ${v(e, 'Score').replace('.', ',')}` : '';
     if (f === '__cats') { const t = SCORE_CATS.map(c => v(e, c.f) ? c.key + fmtScoreVal(v(e, c.f)) : '').filter(Boolean).join(' '); return t; }
     if (/ Score$/.test(f)) return v(e, f) ? `${lab(f)} ${fmtScoreVal(v(e, f))}` : '';
@@ -1635,6 +1638,7 @@
     if (r.state === 'same') return `<span class="badge mine" title="Tool-Note ${tn} – gerundet gleich meiner Babepedia-Note">♥ ${tn} ✓</span>`;
     if (r.state === 'diff') return `<span class="badge diff" title="Tool-Note ${tn} (gerundet ${r.mine}) – meine Babepedia-Note ${r.site}">♥ ${tn} · BP ${r.site}</span>`;
     if (r.state === 'mine-only') return `<span class="badge mine" title="Tool-Note – auf Babepedia noch nicht bewertet">♥ ${tn}</span>`;
+    if (r.state === 'gone') return hasScore(e) ? `<span class="badge mine" title="Tool-Note – Babepedia-Profil gelöscht, kein Abgleich">♥ ${tn}</span>` : '';
     if (r.state === 'site-only') return `<span class="badge site" title="Nur meine Babepedia-Note, noch keine Tool-Note">BP ${r.site}</span>`;
     return '';
   }
@@ -1917,10 +1921,10 @@
     const tiers = new Map();
     list.forEach(e => { if (e._ranker && e._ranker.tier) tiers.set(e._ranker.tier, (tiers.get(e._ranker.tier) || 0) + 1); });
     // Kategorien-Note gegen Babepedia-Bewertung
-    const dTest = (lo, hi) => (e) => { if (!hasScore(e) || num(e['User Rating']) == null) return false; const d = Math.round(num(e.Score)) - num(e['User Rating']); return d >= lo && d <= hi; };
+    const dTest = (lo, hi) => (e) => { if (!hasScore(e) || siteRating(e) == null) return false; const d = Math.round(num(e.Score)) - siteRating(e); return d >= lo && d <= hi; };
     const cmpDefs = [['≤ −2 (Tool-Note niedriger)', -99, -2], ['−1', -1, -1], ['= gleich', 0, 0], ['+1', 1, 1], ['≥ +2 (Tool-Note höher)', 2, 99]];
     const cmpRows = cmpDefs.map(([label, lo, hi]) => ({ label, n: list.filter(dTest(lo, hi)).length, flabel: `Tool-Note vs. Babepedia-Note: ${label}`, test: dTest(lo, hi) })).filter(r => r.n);
-    const cmpN = list.filter(e => hasScore(e) && num(e['User Rating']) != null).length;
+    const cmpN = list.filter(e => hasScore(e) && siteRating(e) != null).length;
     const tierRows = RK_TIERS.map(([, t]) => t).filter(t => tiers.has(t)).map(t => ({ label: t, n: tiers.get(t), flabel: `Ranker-Tier: ${t}`,
       html: `<span class="badge rk-tier" style="--rk:${rkColor(t)}">${esc(t)}</span>`, test: e => e._ranker && e._ranker.tier === t }));
 
@@ -2018,6 +2022,7 @@
     if (!s) return `<div class="sc-sum muted">Gesicht, Body und Hot oder Cute bewerten – dann wird die Tool-Note berechnet.</div>`;
     const site = num(e['User Rating']), old = num(e['My Rating (old)']);
     const r = Math.round(s.ten);
+    if (isTrue(e['Profile Deleted'])) return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''} · Babepedia-Profil gelöscht – kein Abgleich mehr</span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
     const bp = site == null ? 'auf Babepedia noch nicht bewertet' : site === r ? 'stimmt mit meiner Babepedia-Note überein ✓' : `meine Babepedia-Note ist ${site} – ändern`;
     return `<div class="sc-sum"><span class="muted">Tool-Note</span> <b class="sc-ten">${s.ten.toFixed(1).replace('.', ',')}</b> <span class="muted">/ 10 · Kategorien-Schnitt ${s.total.toFixed(2).replace('.', ',')} / 5${s.symAssumed ? ' · Sympathie nicht gesetzt (2,5)' : ''}</span>
       <span class="sc-bp ${site != null && site !== r ? 'diff' : ''}" title="Gerundete Tool-Note zum Eintragen auf Babepedia">Auf Babepedia eintragen: <b>${r}</b> <span class="muted">(${bp})</span></span>${old != null ? `<span class="sc-cmp muted">alte eigene Note ${old}</span>` : ''}</div>`;
@@ -2776,7 +2781,7 @@
     const { el } = rater;
     $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
     $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
-    $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), num(e['User Rating']) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
+    $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), siteRating(e) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
     rater.img = 0; rater.refOpen = {}; rater.preview = null;
     const ta = $('.rt-notes textarea', el); ta.value = e.Notes || ''; ta.dataset.eid = e._id;
     raterImgShow(); raterCats();

@@ -286,3 +286,6 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 ## Tool – Kachelbild geprüft
 - Neues eigenes Feld **„Kachelbild geprüft“** (`Cover Checked`, ja/nein). Wird ein anderes Bild als Kachelbild gesetzt, gilt es automatisch als geprüft. Passt das vorhandene Bild, markiert man es mit **K** (Bewerten, Durchblättern) bzw. dem Knopf „☐ Kachelbild geprüft“ an der Bilder-Überschrift in der Detailansicht; nochmal K/Klick nimmt die Markierung zurück.
 - Filter über Ansicht → Zusatzfilter „Kachelbild geprüft“ (ja/nein); als Kachel-Feld wählbar.
+
+## Tool – Babepedia-Note bei gelöschten Profilen
+- Bei gelöschten Babepedia-Profilen wird „Meine Babepedia-Note“ ignoriert: keine Vergleichsfilter (≠, =, nur eine/keine Note), kein Vergleich in der Statistik, keine Anzeige auf Kachel und im Bewertungsmodus, kein Angleichen. Der Wert bleibt in den Daten erhalten; Babepedia Ø, Votes usw. bleiben sichtbar.
