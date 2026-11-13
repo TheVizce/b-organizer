@@ -15,7 +15,7 @@
     'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
-  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Cover',
+  const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
@@ -25,7 +25,7 @@
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
-    { title: 'Bilder', fields: ['Own Images', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
+    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
   ];
   const LINK_FIELDS = GROUPS[5].fields;
@@ -39,12 +39,12 @@
     'Rank': 'num', 'Highest Rank': 'num', 'Peakdays': 'num', 'Years active': 'num', 'Active till': 'num',
     'My Rating': 'num', 'My Rating (old)': 'num', 'Score': 'num',
     'Face Score': 'score', 'Body Score': 'score', 'Hot Score': 'score', 'Cute Score': 'score', 'Sympathy Score': 'score',
-    'User Upload Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area'
+    'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area'
   };
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
-    'User Upload Image URLs': 'kommagetrennt', 'Gallery Links': 'kommagetrennt',
+    'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'kommagetrennt – Bild-Adressen, die du selbst einträgst; Babepedia-Updates ändern sie nie', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia'
   };
   const IMAGE_FIELDS = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs'];
@@ -301,6 +301,16 @@
     return v(e, 'Archive URL') ? 'gone-archive' : 'gone';
   }
   const STATUS_LABEL = { none: 'kein Babepedia-Profil', ok: 'Profil vorhanden', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
+  // Links, die nicht von Babepedia (oder dem Internet Archive) stammen, hat der Nutzer selbst eingetragen →
+  // in „Eigene Bild-Links“, damit Babepedia-Updates sie nicht überschreiben
+  function moveForeignUploads(e) {
+    const ups = splitList(e['User Upload Image URLs']);
+    const foreign = ups.filter(u => /^https?:/i.test(u) && !/babepedia\.com|web\.archive\.org/i.test(u));
+    if (!foreign.length) return;
+    e['User Upload Image URLs'] = ups.filter(u => !foreign.includes(u)).join(', ');
+    e['Own Image URLs'] = [...new Set([...splitList(e['Own Image URLs']), ...foreign])].join(', ');
+    deriveChanged = true;
+  }
   // Ältere Archiv-Einträge hatten die Archiv-Adresse als Profil-Adresse → Original-Adresse herausziehen, Status setzen
   function normalizeArchiveEntry(e) {
     const u = v(e, 'Profile URL');
@@ -319,6 +329,7 @@
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
+    moveForeignUploads(e);
     e['Profession Category'] = professionCategories(e.Professions);
     if (looksLikeInches(e.Measurements)) e.Measurements = measToCm(e.Measurements, 'in');
     return e;
@@ -523,6 +534,7 @@
   function images(e) {
     const list = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'].map(f => v(e, f)).filter(Boolean);
     splitList(e['User Upload Image URLs']).forEach(u => list.push(u));
+    splitList(e['Own Image URLs']).forEach(u => list.push(u));
     splitList(e['Own Images']).forEach(u => list.push(u));
     const cover = v(e, 'Cover');
     if (cover && list.includes(cover)) list.unshift(cover);
@@ -983,9 +995,11 @@
     const LBL = { '__images': 'Bilder' };
     const short = (x) => x.length > 80 ? esc(x.slice(0, 80)) + '…' : esc(x);
     const thumbs = (urls, cls) => urls.slice(0, 8).map(u => `<img class="${cls}" src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join('') + (urls.length > 8 ? ` +${urls.length - 8}` : '');
-    const row = (c, i) => c.f === '__images'
+    // entfernte Bilder: jedes einzeln als eigenen Bild-Link behalten
+    const remThumbs = (urls, id) => urls.map(u => `<span class="pu-keepwrap"><img class="rem" src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer" title="${esc(u)}"><button type="button" class="pu-keep" data-pu-keep="${esc(u)}" data-id="${esc(id)}" title="Diesen Link unter „Eigene Bild-Links“ behalten – Babepedia-Updates ändern ihn dann nicht mehr">behalten</button></span>`).join('');
+    const row = (c, i, id) => c.f === '__images'
       ? `<label class="pu-row"><input type="checkbox" data-f="__images" checked><span class="pu-f">Bilder</span>
-          <span class="pu-img">${c.added.length ? `<span class="pu-new">+${c.added.length}</span> ${thumbs(c.added, 'add')}` : ''}${c.removed.length ? ` <span class="pu-old">−${c.removed.length}</span> ${thumbs(c.removed, 'rem')}` : ''}${!c.added.length && !c.removed.length ? 'anderes Titelbild' : ''}</span></label>`
+          <span class="pu-img">${c.added.length ? `<span class="pu-new">+${c.added.length}</span> ${thumbs(c.added, 'add')}` : ''}${c.removed.length ? ` <span class="pu-old">−${c.removed.length}</span> ${remThumbs(c.removed, id)}` : ''}${!c.added.length && !c.removed.length ? 'anderes Titelbild' : ''}</span></label>`
       : `<label class="pu-row"><input type="checkbox" data-f="${esc(c.f)}" checked><span class="pu-f">${esc(LBL[c.f] || c.f)}</span>
           <span class="pu-v">${c.old ? `<s class="pu-old">${short(c.old)}</s> → ` : '<span class="muted">(leer)</span> → '}<span class="pu-new">${short(c.neu)}</span></span></label>`;
     openModal(`
@@ -1006,7 +1020,7 @@
               <div class="pu-title"><button class="linklike" data-pu-open="${esc(p.id)}">${esc(v(e, 'Name'))}</button><span class="muted">${d.length} Änderung${d.length === 1 ? '' : 'en'} · ${new Date(p.at).toLocaleDateString('de-DE')}</span></div>
               <div class="pu-acts"><button class="btn small primary" data-pu-ok>Übernehmen</button><button class="btn small" data-pu-no>Ablehnen</button></div>
             </div>
-            ${d.map(row).join('')}
+            ${d.map((c, i) => row(c, i, p.id)).join('')}
           </section>`; }).join('')}</div>
       </div>`);
     const box = $('.pu', modal);
@@ -1037,6 +1051,18 @@
     box.addEventListener('click', async (ev) => {
       const t = ev.target;
       const card = t.closest('.pu-card');
+      const keep = t.closest('[data-pu-keep]');
+      if (keep) {
+        ev.preventDefault();
+        const e = byId(keep.dataset.id), u = keep.dataset.puKeep;
+        if (e && !splitList(e['Own Image URLs']).includes(u)) {
+          e['Own Image URLs'] = [...splitList(e['Own Image URLs']), u].join(', '); e._updated = Date.now();
+          try { await save(); } catch { return; }
+          refreshItem(e._id);
+        }
+        keep.textContent = '✓ behalten'; keep.disabled = true; keep.closest('.pu-keepwrap').classList.add('kept');
+        return;
+      }
       if (t.closest('[data-pu-ok]')) { decide(card, true); await finish(); count(); }
       else if (t.closest('[data-pu-no]')) { decide(card, false); await finish(); count(); }
       else if (t.closest('[data-pu-open]')) { const id = t.closest('[data-pu-open]').dataset.puOpen; showDetail(id); }
@@ -1505,7 +1531,7 @@
   const FIELD_LABELS = {
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft'
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links'
   };
   const lab = (f) => FIELD_LABELS[f] || f;
   const CARD_FIELD_CHOICES = ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',

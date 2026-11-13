@@ -819,3 +819,8 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .card .cover-ok.far { width: 92px; height: 92px; }
 .card .cover-ok.far span { background: var(--surface-3); color: var(--muted); top: 20px; left: -30px; width: 130px; font-weight: 600; }
 .card .cover-ok.doubt span { background: var(--warn); color: #1d1405; }
+.pu-keepwrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; margin: 0 2px; vertical-align: top; }
+.pu-keep { font: inherit; font-size: 10.5px; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.pu-keep:hover { border-color: var(--accent); }
+.pu-keepwrap.kept img.rem { opacity: 1; outline-color: var(--good); }
+.pu-keepwrap.kept .pu-keep { color: var(--good); border-color: var(--good); cursor: default; }
