@@ -880,3 +880,14 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .lk-row input[type=text] { width: 100%; }
 @media (max-width: 600px) { .lk-row { grid-template-columns: 24px 44px 1fr; } .lk-row input[type=text] { grid-column: 1 / -1; } .lk-img img { width: 44px; height: 44px; } }
 .bp-hide { display: none !important; }
+
+/* Charaktere: offizielle Artworks / Fan-Art */
+.img-sec h4 { margin: 4px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.img-sec + .img-sec { margin-top: 12px; }
+.img-cell .img-kind-btn { position: absolute; right: 6px; bottom: 6px; border: 0; border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; background: rgba(10,11,15,.75); color: var(--muted); }
+.img-cell .img-kind-btn.fan { color: #c9a3ff; }
+.img-cell .img-kind-btn:hover { color: var(--text); }
+.own-btn.kind { top: auto; bottom: 4px; left: 4px; width: auto; height: 20px; border-radius: 6px; padding: 0 6px; font-size: 10px; }
+.own-btn.kind.fan, .own-item.is-fan .own-btn.kind { color: #c9a3ff; }
+.own-item.is-fan { border-style: dashed; }
+.field .unit-row select[data-ownurl-kind] { width: 96px; }
