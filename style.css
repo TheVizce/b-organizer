@@ -783,6 +783,7 @@ body.cards-noname .card .body { display: none; }
 @media (min-width: 1100px) {
   .top-tools { display: flex; }
   #btn-rate, #btn-random, #btn-browse, #btn-to-ranker { display: none; }
+  .menu .menu-mobile-only { display: none; }
 }
 
 /* Kachel: Ecke „Kachelbild geprüft“ */
