@@ -55,14 +55,35 @@
     'Face Score': 'score', 'Body Score': 'score', 'Hot Score': 'score', 'Cute Score': 'score', 'Sympathy Score': 'score',
     'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area',
     // Charaktere
-    'Medium': ['', 'Game', 'Anime', 'Manga', 'Comic', 'Cartoon', 'Serie', 'Film', 'Buch', 'Sonstiges'],
-    'Style': ['', '2D Anime/Manga', '2D Cartoon/Comic', '2D Pixel', '3D Game/CGI', 'Realfilm', 'Sonstiges'],
+    'Medium': ['', 'Spiel', 'Anime', 'Manga', 'Comic', 'Cartoon', 'Serie', 'Film', 'Buch', 'Sonstiges'],
+    'Style': ['', '2D Anime/Manga', '2D Cartoon/Comic', '2D Pixel', '3D Spiel/CGI', 'Realfilm', 'Sonstiges'],
     'Gender': ['', 'weiblich', 'männlich', 'divers'],
     'Role': ['', 'Hauptfigur', 'Nebenfigur', 'Antagonistin', 'spielbare Figur', 'Begleiterin'],
     'Adult': ['', 'ja', 'nein', 'unklar'],
     'First Appearance': 'num'
   };
-  if (IS_CHARS) TYPES['Height'] = 'num';
+  // Charaktere: Werte auf Deutsch (wie im Ranker-Reiter „Charaktere“) und als feste Auswahl, damit nichts zerfasert
+  if (IS_CHARS) Object.assign(TYPES, {
+    'Hair color': ['', 'Schwarz', 'Braun', 'Blond', 'Rot', 'Kupfer', 'Orange', 'Rosa', 'Lila', 'Blau', 'Hellblau', 'Grün', 'Weiß', 'Silber', 'Grau', 'Mehrfarbig', 'Sonstiges'],
+    'Eye color': ['', 'Braun', 'Blau', 'Grün', 'Grau', 'Haselnuss', 'Rot', 'Gelb/Gold', 'Lila', 'Rosa', 'Orange', 'Weiß', 'Schwarz', 'Mehrfarbig', 'Sonstiges'],
+    'Body type': ['', 'Zierlich', 'Schlank', 'Durchschnittlich', 'Athletisch', 'Muskulös', 'Kurvig', 'Mollig'],
+    'Height': 'num'
+  });
+  // Einmalige Umstellung englischer Werte (Notion-Import) auf Deutsch
+  const CHAR_DE = {
+    'Species': { 'human': 'Mensch', 'humanoid': 'Humanoid' },
+    'Hair color': { 'black': 'Schwarz', 'brown': 'Braun', 'blonde': 'Blond', 'blond': 'Blond', 'red': 'Rot', 'copper': 'Kupfer', 'orange': 'Orange', 'pink': 'Rosa', 'purple': 'Lila',
+      'blue': 'Blau', 'light blue': 'Hellblau', 'green': 'Grün', 'white': 'Weiß', 'silver': 'Silber', 'grey': 'Grau', 'gray': 'Grau' },
+    'Eye color': { 'brown': 'Braun', 'blue': 'Blau', 'green': 'Grün', 'grey': 'Grau', 'gray': 'Grau', 'hazel': 'Haselnuss', 'red': 'Rot', 'purple': 'Lila', 'black': 'Schwarz' },
+    'Medium': { 'game': 'Spiel', 'videospiel': 'Spiel', 'videogame': 'Spiel', 'video game': 'Spiel', 'series': 'Serie', 'book': 'Buch', 'movie': 'Film' },
+    'Style': { '3d game/cgi': '3D Spiel/CGI' }
+  };
+  function germanizeChar(e) {
+    for (const [f, map] of Object.entries(CHAR_DE)) {
+      const cur = v(e, f), de = cur && map[cur.toLowerCase()];
+      if (de && de !== cur) { e[f] = de; deriveChanged = true; }
+    }
+  }
   const HINTS = {
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
@@ -351,7 +372,7 @@
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
-    if (IS_CHARS) return e;   // Babepedia-Bereinigungen gelten nur für Personen
+    if (IS_CHARS) { germanizeChar(e); return e; }   // Babepedia-Bereinigungen gelten nur für Personen
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
@@ -2486,7 +2507,9 @@
       input = `<textarea ${name}>${esc(val)}</textarea>`;
     } else {
       const type = /URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly|Thronly/.test(f) ? 'url' : 'text';
-      input = `<input type="${type}" ${name} value="${esc(val)}" ${f === 'Name' ? 'required' : ''}>`;
+      const sug = IS_CHARS && ['Universe', 'Origin', 'Species', 'Voice Actor', 'Actress'].includes(f)
+        ? [...new Set(entries.map(x => v(x, f)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de')) : null;
+      input = `<input type="${type}" ${name} value="${esc(val)}" ${f === 'Name' ? 'required' : ''}${sug ? ` list="dl-${id}" autocomplete="off"` : ''}>${sug ? `<datalist id="dl-${id}">${sug.map(x => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}`;
     }
     const wide = t === 'area' || f === 'Notes' ? ' wide' : '';
     if (IMAGE_FIELDS.includes(f)) {
@@ -4535,7 +4558,7 @@
           for (const f of ALL_FIELDS) if (e[f] === undefined) e[f] = '';
           e.Name = im.name || 'Ohne Namen';
           e.Universe = rkTagVal(im, 'Herkunft').join(', '); e.Species = rkTagVal(im, 'Spezies').join(', '); e['Hair color'] = rkTagVal(im, 'Haarfarbe').join(', ');
-          const grp = rkTagVal(im, '👥 Gruppen').find(g => TYPES['Medium'].includes(g)); if (grp) e.Medium = grp;
+          const grp = rkTagVal(im, '👥 Gruppen').map(g => CHAR_DE.Medium[g.toLowerCase()] || g).find(g => TYPES['Medium'].includes(g)); if (grp) e.Medium = grp;
           entries.push(derive(e)); created++;
         }
         used.add(e._id);
