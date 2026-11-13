@@ -296,3 +296,9 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Kategorien-Bewertungen (Gesicht, Body, Hot, Cute, Sympathie) als eine Tabelle: Anzahl je Wert, Ø und Anzahl bewertet.
 - Volle Bezeichnung als Tooltip bei abgeschnittenen Zeilen; Geburtsjahrzehnt ohne Tausenderpunkt.
 - Profil-Status „kein Babepedia-Profil“: Einträge ohne Babepedia- und Archiv-Adresse (von Hand angelegt) – eigener Punkt im Filter „Profil-Status“ und in der Statistik statt „Profil vorhanden“.
+
+## Tool – Kategorie-Abgleich
+- **Daten → ⚖️ Kategorie-Abgleich…**: zwei Einträge aus der aktuellen Liste mit gleichem oder benachbartem Wert in einer Kategorie (Gesicht, Body, Hot, Cute, Sympathie) nebeneinander. Werte sind verdeckt, bis du entschieden hast (← links · ↓ gleich · → rechts, Leertaste überspringen, G/B/H/C/S Kategorie, Q/P bzw. Klick aufs Bild = nächstes Bild).
+- Danach zeigt das Tool, ob die Bewertung standhält; bei Widerspruch oder Gleichstand mit klarem Sieger schlägt es vor, einen der beiden Werte anzupassen (nur auf Klick, Tool-Note rechnet sich neu).
+- Paare: zuerst selten verglichene Einträge, nie dasselbe Paar zweimal in einer Kategorie; Sympathie 2,5 („unbekannt“) nimmt nicht teil.
+- Ergebnisse liegen in IndexedDB (`duels`), werden synchronisiert (`collections.duels`, ID `id`) und sind im JSON-Backup enthalten.

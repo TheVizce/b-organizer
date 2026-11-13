@@ -345,6 +345,7 @@
   // Daten liegen in IndexedDB (viel mehr Platz als localStorage, das sich alle *.github.io-Seiten
   // eines Kontos teilen). Der localStorage wird nur noch für kleine UI-Einstellungen genutzt.
   let entries = [];
+  let duels = [];   // Kategorie-Abgleich: { id, cat, a, b, va, vb, r: 'a'|'b'|'=', ts } – eigene Liste, wird mit synchronisiert
   let ready = false;
   let SYNC = null;   // GitHub-Sync, siehe initSync()
   const ui = Object.assign({ view: 'grid', sort: 'name' }, safeJSON(localStorage.getItem(UI_KEY), {}));
@@ -1188,6 +1189,11 @@
       if (/\.json$/i.test(file.name) || /^\s*[\[{]/.test(text)) {
         const data = JSON.parse(text);
         items = Array.isArray(data) ? data : (data.entries || []);
+        if (data && Array.isArray(data.duels) && data.duels.length) {
+          const have = new Set(duels.map(x => x.id)); let n = 0;
+          for (const x of data.duels) if (x && x.id && !have.has(x.id)) { duels.push(x); n++; }
+          if (n) { await saveDuels(); toast(`${n} Abgleich-Ergebnisse aus dem Backup übernommen.`, 'ok'); }
+        }
         if (data && data.images && typeof data.images === 'object') {
           let n = 0;
           for (const [id, dataUrl] of Object.entries(data.images)) {
@@ -2829,6 +2835,179 @@
     window.postMessage({ type: 'BP_VOTE_DONE_ACK', id: d.id }, location.origin);
   }
 
+  // ===================== KATEGORIE-ABGLEICH =====================
+  // Zwei Einträge mit gleichem oder benachbartem Wert in einer Kategorie gegeneinander: hält die Bewertung stand?
+  let calib = null;
+  async function saveDuels() {
+    try { await idbSet('duels', duels); if (SYNC) SYNC.changed(); }
+    catch (err) { toast('Abgleich konnte nicht gespeichert werden: ' + (err && err.message || err), 'err'); }
+  }
+  const catSteps = (c) => c.vals || [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+  const stepFrom = (c, x, d) => { const st = catSteps(c), i = st.indexOf(x); if (i < 0) return x; return st[Math.max(0, Math.min(st.length - 1, i + d))]; };
+  const fmtV = (x) => String(x).replace('.', ',');
+  // Kandidaten: aktuelle Liste, Wert in der Kategorie gesetzt (Sympathie 2,5 = „unbekannt“ zählt nicht)
+  function calibPool(c) {
+    return shown.filter(e => { const x = num(v(e, c.f)); return x != null && !(c.f === 'Sympathy Score' && x === 2.5); });
+  }
+  function calibPick() {
+    const c = SCORE_CATS[calib.cat], pool = calibPool(c);
+    if (pool.length < 2) return null;
+    const cnt = new Map(), seen = new Set();
+    for (const d of duels) if (d.cat === c.f) { cnt.set(d.a, (cnt.get(d.a) || 0) + 1); cnt.set(d.b, (cnt.get(d.b) || 0) + 1); seen.add([d.a, d.b].sort().join('|')); }
+    const skip = calib.skip;
+    const val = (e) => num(v(e, c.f));
+    const rnd = () => Math.random();
+    // A: möglichst selten verglichen; dann B mit gleichem/benachbartem Wert, noch nie gegen A
+    const order = pool.slice().sort((x, y) => (cnt.get(x._id) || 0) - (cnt.get(y._id) || 0) || rnd() - .5);
+    for (const a of order.slice(0, 60)) {
+      const va = val(a);
+      const opts = pool.filter(b => b !== a && Math.abs(val(b) - va) <= (c.vals ? 1 : 0.5) && !seen.has([a._id, b._id].sort().join('|')) && !skip.has([a._id, b._id].sort().join('|')));
+      if (!opts.length) continue;
+      // gleiche Werte etwas bevorzugen – dort ist die Frage „hält das?“ am klarsten
+      opts.sort((x, y) => (Math.abs(val(x) - va) - Math.abs(val(y) - va)) * 0.5 + ((cnt.get(x._id) || 0) - (cnt.get(y._id) || 0)) * 0.3 + (rnd() - .5));
+      const b = opts[0];
+      return rnd() < .5 ? [a, b] : [b, a];
+    }
+    return null;
+  }
+  function openCalib() {
+    if (calib) return;
+    const el = document.createElement('div');
+    el.className = 'calib';
+    el.innerHTML = `
+      <div class="cb-top">
+        <b class="cb-title">⚖️ Kategorie-Abgleich</b>
+        <div class="seg cb-cats">${SCORE_CATS.map((c, i) => `<button data-cbcat="${i}" title="Taste ${c.key}">${esc(c.label)}</button>`).join('')}</div>
+        <span class="cb-count muted"></span>
+        <button class="vw-x" aria-label="Beenden">×</button>
+      </div>
+      <div class="cb-q"></div>
+      <div class="cb-body"></div>
+      <div class="cb-foot"></div>`;
+    document.body.appendChild(el);
+    document.body.style.overflow = 'hidden';
+    calib = { el, cat: Math.max(0, Math.min(SCORE_CATS.length - 1, ui.calibCat || 0)), pair: null, img: [0, 0], answer: null, skip: new Set(), n: 0 };
+    el.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t.closest('.vw-x')) return closeCalib();
+      const cc = t.closest('[data-cbcat]'); if (cc) return calibSetCat(Number(cc.dataset.cbcat));
+      const an = t.closest('[data-cbans]'); if (an) return calibAnswer(an.dataset.cbans);
+      const im = t.closest('[data-cbimg]'); if (im) return calibImg(Number(im.dataset.cbimg), ev.shiftKey ? -1 : 1);
+      const fx = t.closest('[data-cbfix]'); if (fx) return calibFix(fx.dataset.cbfix, Number(fx.dataset.val));
+      if (t.closest('[data-cbnext]')) return calibNext();
+      if (t.closest('[data-cbskip]')) { calib.skip.add(calib.pair.map(e => e._id).sort().join('|')); return calibNext(); }
+      const nm = t.closest('[data-cbopen]'); if (nm) { const id = nm.dataset.cbopen; closeCalib(); showDetail(id); }
+    });
+    calibNext();
+  }
+  function closeCalib() {
+    if (!calib) return;
+    calib.el.remove(); calib = null;
+    if (overlay.hidden) document.body.style.overflow = '';
+    render();
+  }
+  function calibSetCat(i) { calib.cat = i; ui.calibCat = i; saveUI(); calibNext(); }
+  function calibNext() {
+    calib.pair = calibPick(); calib.img = [0, 0]; calib.answer = null;
+    calibRender();
+  }
+  function calibImg(side, d) {
+    const e = calib.pair && calib.pair[side]; if (!e) return;
+    const n = images(e).length; if (n < 2) return;
+    calib.img[side] = (calib.img[side] + d + n) % n;
+    calibRender();
+  }
+  function calibPaneHTML(e, side, reveal) {
+    const c = SCORE_CATS[calib.cat], imgs = images(e), k = calib.img[side];
+    const src = imgs.length ? R(imgs[k]) : '';
+    const x = num(v(e, c.f));
+    const mark = calib.answer && ((calib.answer === 'a' && side === 0) || (calib.answer === 'b' && side === 1)) ? ' win' : calib.answer === '=' ? ' tie' : '';
+    return `<div class="cb-pane${mark}">
+      <button class="cb-img" data-cbimg="${side}" title="Klick: nächstes Bild (Shift: vorheriges)">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" draggable="false" onerror="this.onerror=null;this.src='${esc(thumbUrl(src) || '')}'">` : '<span class="muted">Keine Bilder</span>'}${imgs.length > 1 ? `<span class="cb-imgc">${k + 1} / ${imgs.length}</span>` : ''}</button>
+      <div class="cb-name"><button class="linklike" data-cbopen="${esc(e._id)}" title="Details öffnen">${esc(v(e, 'Name'))}</button>
+        <span class="cb-val">${reveal ? `${esc(c.label)}: <b>${fmtV(x)}</b>` : `${esc(c.label)}: <span class="muted">verdeckt</span>`}</span></div>
+    </div>`;
+  }
+  function calibVerdict() {
+    const c = SCORE_CATS[calib.cat], [A, B] = calib.pair, r = calib.answer;
+    const va = num(v(A, c.f)), vb = num(v(B, c.f));
+    const nA = v(A, 'Name'), nB = v(B, 'Name');
+    const fix = (e, val, txt) => `<button class="btn small" data-cbfix="${esc(e._id)}" data-val="${val}">${esc(txt)}</button>`;
+    let ok = false, msg = '', fixes = [];
+    const win = r === 'a' ? A : r === 'b' ? B : null, lose = r === 'a' ? B : r === 'b' ? A : null;
+    if (r === '=') {
+      ok = va === vb;
+      if (ok) msg = 'Gleich eingeschätzt und gleich bewertet – hält.';
+      else {
+        const hi = va > vb ? A : B, lo = va > vb ? B : A, vh = Math.max(va, vb), vl = Math.min(va, vb);
+        msg = vh - vl <= 0.5 && !c.vals ? `Gleich eingeschätzt, bewertet ${fmtV(vh)} gegen ${fmtV(vl)} – knapp, angleichen?` : `Gleich eingeschätzt, aber ${fmtV(vh)} gegen ${fmtV(vl)}.`;
+        fixes = [fix(hi, vl, `${v(hi, 'Name')} auf ${fmtV(vl)}`), fix(lo, vh, `${v(lo, 'Name')} auf ${fmtV(vh)}`)];
+      }
+    } else {
+      const vw = num(v(win, c.f)), vl = num(v(lose, c.f));
+      if (vw > vl) { ok = true; msg = `${v(win, 'Name')} vorne und auch höher bewertet – hält.`; }
+      else if (vw === vl) {
+        msg = `${v(win, 'Name')} vorne, aber beide ${fmtV(vw)}.`;
+        const up = stepFrom(c, vw, 1), dn = stepFrom(c, vl, -1);
+        if (up !== vw) fixes.push(fix(win, up, `${v(win, 'Name')} auf ${fmtV(up)}`));
+        if (dn !== vl) fixes.push(fix(lose, dn, `${v(lose, 'Name')} auf ${fmtV(dn)}`));
+      } else {
+        msg = `Widerspruch: ${v(win, 'Name')} vorne, aber niedriger bewertet (${fmtV(vw)} gegen ${fmtV(vl)}).`;
+        fixes = [fix(win, vl, `${v(win, 'Name')} auf ${fmtV(vl)}`), fix(lose, vw, `${v(lose, 'Name')} auf ${fmtV(vw)}`)];
+      }
+    }
+    return `<div class="cb-verdict ${ok ? 'ok' : 'warn'}"><span>${ok ? '✓ ' : '⚠︎ '}${esc(msg)}</span>
+      <span class="cb-fixes">${fixes.join('')}${fixes.length ? '<span class="muted">oder</span>' : ''}<button class="btn small ${ok ? 'primary' : ''}" data-cbnext>${fixes.length ? 'so lassen' : 'Weiter'} <kbd>Enter</kbd></button></span></div>`;
+  }
+  function calibRender() {
+    const { el } = calib, c = SCORE_CATS[calib.cat];
+    $$('.cb-cats button', el).forEach((b, i) => b.classList.toggle('on', i === calib.cat));
+    const done = duels.filter(d => d.cat === c.f).length, pool = calibPool(c).length;
+    $('.cb-count', el).textContent = `${done} Duell${done === 1 ? '' : 'e'} in ${c.label}${calib.n ? ` · ${calib.n} in dieser Runde` : ''} · ${pool} bewertet`;
+    if (!calib.pair) {
+      $('.cb-q', el).innerHTML = '';
+      $('.cb-body', el).innerHTML = `<div class="cb-empty"><p>${pool < 2 ? `In der aktuellen Liste sind in „${esc(c.label)}“ weniger als zwei Einträge bewertet.` : `Für „${esc(c.label)}“ gibt es gerade keine neuen Paare mit gleichem oder benachbartem Wert.`}</p><p class="muted">Andere Kategorie wählen oder später mit mehr Bewertungen wiederkommen.</p></div>`;
+      $('.cb-foot', el).innerHTML = '';
+      return;
+    }
+    const [A, B] = calib.pair, rev = !!calib.answer;
+    $('.cb-q', el).innerHTML = `Wer ist in <b>${esc(c.label)}</b>${c.hint ? ` <span class="muted">(${esc(c.hint)})</span>` : ''} stärker?`;
+    $('.cb-body', el).innerHTML = calibPaneHTML(A, 0, rev) + calibPaneHTML(B, 1, rev);
+    $('.cb-foot', el).innerHTML = rev ? calibVerdict()
+      : `<div class="cb-ans"><button class="btn" data-cbans="a"><kbd>←</kbd> links</button><button class="btn" data-cbans="="><kbd>↓</kbd> gleich</button><button class="btn" data-cbans="b">rechts <kbd>→</kbd></button></div>
+         <p class="muted cb-help">Werte sind verdeckt, bis du entschieden hast · Bild anklicken bzw. <kbd>Q</kbd>/<kbd>P</kbd> = nächstes Bild links/rechts · ${SCORE_CATS.map(x => `<kbd>${x.key}</kbd>`).join('')} Kategorie · <kbd>Leertaste</kbd> überspringen · <kbd>Esc</kbd> beenden</p>`;
+  }
+  function calibAnswer(r) {
+    if (!calib.pair || calib.answer) return;
+    const c = SCORE_CATS[calib.cat], [A, B] = calib.pair;
+    calib.answer = r; calib.n++;
+    duels.push({ id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cat: c.f, a: A._id, b: B._id, va: num(v(A, c.f)), vb: num(v(B, c.f)), r, ts: Date.now() });
+    saveDuels();
+    calibRender();
+  }
+  function calibFix(id, val) {
+    const c = SCORE_CATS[calib.cat];
+    setScore(id, c.f, val);
+    toast(`${v(byId(id), 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok');
+    calibNext();
+  }
+  function calibKey(ev) {
+    if (ev.target.closest && ev.target.closest('input, textarea, select')) return;
+    const k = ev.key;
+    if (k === 'Escape') { ev.preventDefault(); return closeCalib(); }
+    const ci = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
+    if (ci >= 0 && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); return calibSetCat(ci); }
+    if (!calib.pair) return;
+    if (!calib.answer) {
+      if (k === 'ArrowLeft') { ev.preventDefault(); return calibAnswer('a'); }
+      if (k === 'ArrowRight') { ev.preventDefault(); return calibAnswer('b'); }
+      if (k === 'ArrowDown' || k === '=' || k === '0') { ev.preventDefault(); return calibAnswer('='); }
+      if (k === ' ') { ev.preventDefault(); calib.skip.add(calib.pair.map(e => e._id).sort().join('|')); return calibNext(); }
+    } else if (k === 'Enter' || k === ' ') { ev.preventDefault(); return calibNext(); }
+    if (k === 'q' || k === 'Q') { ev.preventDefault(); return calibImg(0, 1); }
+    if (k === 'p' || k === 'P') { ev.preventDefault(); return calibImg(1, 1); }
+  }
+
   function openRaterFor(id) {
     const keep = ui.raterOnlyOpen; ui.raterOnlyOpen = false;
     closeModal(true);
@@ -3028,7 +3207,7 @@
             const blob = await idbGet('img:' + id).catch(() => null);
             if (blob instanceof Blob) images[id] = await blobToDataUrl(blob);
           }
-          download(`babe-organizer-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', version: 2, exported: new Date().toISOString(), entries, images }, null, 1), 'application/json');
+          download(`babe-organizer-backup-${stamp()}.json`, JSON.stringify({ app: 'bp-organizer', version: 2, exported: new Date().toISOString(), entries, duels, images }, null, 1), 'application/json');
           const n = Object.keys(images).length;
           if (n) toast(`Backup mit ${n} eigenen Bildern erstellt.`, 'ok');
         })().catch(err => toast('Backup fehlgeschlagen: ' + (err.message || err), 'err'));
@@ -3044,6 +3223,7 @@
       case 'help': showHelp(); break;
       case 'clear-scores': clearScores(); break;
       case 'vote-sync': showVoteSync(); break;
+      case 'calib': openCalib(); break;
       case 'upd-cfg': showUpdateSettings(); break;
       case 'clear-all':
         if (entries.length && confirm(`Alle ${entries.length} Einträge löschen? Mach vorher am besten ein Backup.`) && confirm('Wirklich sicher? Das lässt sich nicht rückgängig machen.')) {
@@ -3109,6 +3289,7 @@
   });
 
   document.addEventListener('keydown', (ev) => {
+    if (calib) { calibKey(ev); return; }
     if (rater) { raterKey(ev); return; }
     if (viewer) {
       const k = ev.key;
@@ -3249,13 +3430,14 @@
     if (!window.ToolSync) return;
     SYNC = ToolSync.create({
       tool: 'b-organizer',
-      collections: { entries: { type: 'array', id: '_id' } },
+      collections: { entries: { type: 'array', id: '_id' }, duels: { type: 'array', id: 'id' } },
       shards: 32,
       stampDelay: 1500,
-      get: () => ({ entries }),
+      get: () => ({ entries, duels }),
       apply: async (d) => {
         entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
-        try { await save(); } catch { return false; }
+        if (Array.isArray(d.duels)) duels = d.duels.filter(x => x && x.id);
+        try { await save(); await idbSet('duels', duels); } catch { return false; }
         refreshFilters(); render();
         return true;
       }
@@ -3754,6 +3936,7 @@
       await loadLocalImages().catch(() => {});
       await loadImgCheck();
       await loadPending();
+      try { duels = (await idbGet('duels')) || []; } catch { duels = []; }
       // Einmalig: Einträge mit Archiv-Kopie gelten als auf Babepedia gelöscht (Archiv-Übernahme = Original weg)
       try {
         if (!localStorage.getItem('bp-organizer-archmig1')) {
