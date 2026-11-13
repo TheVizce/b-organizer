@@ -1012,7 +1012,7 @@
   }
   function updatePendingBtn() {
     const b = $('#btn-pending'); if (!b) return;
-    if (IS_CHARS) { b.hidden = true; b.style.display = 'none'; return; }
+    if (IS_CHARS) b.title = 'Vorschläge zum Ergänzen prüfen';
     const n = pendingUpdates.filter(p => byId(p.id) && pendingDiff(p).length).length;
     b.hidden = !n; b.style.display = n ? '' : 'none'; b.querySelector('.n').textContent = n;
   }
@@ -1071,6 +1071,7 @@
     const list = pendingUpdates.filter(p => byId(p.id)).map(p => ({ p, d: pendingDiff(p) })).filter(x => x.d.length);
     if (!list.length) { pendingUpdates = []; savePendingUpdates().catch(() => {}); toast('Keine offenen Aktualisierungen.'); return; }
     const LBL = { '__images': 'Bilder' };
+    const fl = (f) => LBL[f] || (IS_CHARS ? lab(f) : f);
     const short = (x) => x.length > 80 ? esc(x.slice(0, 80)) + '…' : esc(x);
     const thumbs = (urls, cls) => urls.slice(0, 8).map(u => `<img class="${cls}" src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join('') + (urls.length > 8 ? ` +${urls.length - 8}` : '');
     // entfernte Bilder: jedes einzeln als eigenen Bild-Link behalten
@@ -1078,19 +1079,20 @@
     const row = (c, i, id) => c.f === '__images'
       ? `<label class="pu-row"><input type="checkbox" data-f="__images" checked><span class="pu-f">Bilder</span>
           <span class="pu-img">${c.added.length ? `<span class="pu-new">+${c.added.length}</span> ${thumbs(c.added, 'add')}` : ''}${c.removed.length ? ` <span class="pu-old">−${c.removed.length}</span> ${remThumbs(c.removed, id)}` : ''}${!c.added.length && !c.removed.length ? 'anderes Titelbild' : ''}</span></label>`
-      : `<label class="pu-row"><input type="checkbox" data-f="${esc(c.f)}" checked><span class="pu-f">${esc(LBL[c.f] || c.f)}</span>
+      : `<label class="pu-row"><input type="checkbox" data-f="${esc(c.f)}" checked><span class="pu-f">${esc(fl(c.f))}</span>
           <span class="pu-v">${c.old ? `<s class="pu-old">${short(c.old)}</s> → ` : '<span class="muted">(leer)</span> → '}<span class="pu-new">${short(c.neu)}</span></span></label>`;
     openModal(`
-      <div class="modal-head"><h2>Aktualisierungen prüfen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="modal-head"><h2>${IS_CHARS ? 'Vorschläge prüfen' : 'Aktualisierungen prüfen'}</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
       <div class="help pu">
-        <p class="muted">Diese Änderungen kamen beim Holen bekannter Profile von Babepedia. Häkchen = Feld übernehmen. Abgelehnte Werte werden gemerkt und beim nächsten Holen nicht wieder angeboten (erst wenn Babepedia etwas anderes liefert). Was du nicht entscheidest, bleibt hier offen.</p>
+        ${IS_CHARS ? '<p class="muted">Vorschläge aus einer Ergänzungs-Datei – nur für bisher leere Felder. Häkchen = Feld übernehmen. Abgelehnte Werte werden gemerkt und nicht wieder angeboten. Was du nicht entscheidest, bleibt hier offen (Knopf „⟳ Änderungen“ oben).</p>' : ''}
+        <p class="muted${IS_CHARS ? ' bp-hide' : ''}">Diese Änderungen kamen beim Holen bekannter Profile von Babepedia. Häkchen = Feld übernehmen. Abgelehnte Werte werden gemerkt und beim nächsten Holen nicht wieder angeboten (erst wenn Babepedia etwas anderes liefert). Was du nicht entscheidest, bleibt hier offen.</p>
         <div class="pu-bar">
           <span id="pu-count"></span>
           <button class="btn primary small" id="pu-all">Alle übernehmen</button>
           <button class="btn small" id="pu-none">Alle ablehnen</button>
         </div>
-        <label class="chk"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes, Global Rating, Peakdays und Scraped At automatisch übernehmen</label>
-        <label class="chk"><input type="checkbox" id="pu-off" ${ui.reviewUpdates ? '' : 'checked'}> Künftig nicht mehr fragen – alle Änderungen direkt übernehmen</label>
+        <label class="chk${IS_CHARS ? ' bp-hide' : ''}"><input type="checkbox" id="pu-auto" ${ui.autoVolatile ? 'checked' : ''}> Rank, Votes, Global Rating, Peakdays und Scraped At automatisch übernehmen</label>
+        <label class="chk${IS_CHARS ? ' bp-hide' : ''}"><input type="checkbox" id="pu-off" ${ui.reviewUpdates ? '' : 'checked'}> Künftig nicht mehr fragen – alle Änderungen direkt übernehmen</label>
         <div class="pu-list">${list.map(({ p, d }) => { const e = byId(p.id); return `
           <section class="pu-card" data-pu="${esc(p.id)}">
             <div class="pu-head">
@@ -1316,6 +1318,26 @@
         const isCharFile = data && data.kind === 'chars', looksBp = items.some(x => x && /babepedia\.com/i.test(String(x['Profile URL'] || '')));
         if (isCharFile && !IS_CHARS) { toast('Das ist eine Charakter-Datei – bitte im Reiter „Charaktere“ importieren.', 'err'); return; }
         if (IS_CHARS && !isCharFile && looksBp) { toast('Das ist ein Personen-Backup (Babepedia) – bitte im Reiter „Personen“ importieren.', 'err'); return; }
+        if (data && data.fillEmpty && IS_CHARS) {
+          // Ergänzungen als Vorschläge zur Prüfung (wie die Babepedia-Aktualisierungen): nur leere Felder
+          let n = 0;
+          for (const it of items) {
+            const e = it && byId(it._id); if (!e) continue;
+            const vals = {};
+            for (const [f, val] of Object.entries(it)) if (ALL_FIELDS.includes(f) && f !== 'Name' && val && !v(e, f)) vals[f] = String(val);
+            const rej = rejectedUpdates[e._id];
+            if (rej) for (const f of Object.keys(vals)) if (rej[f] !== undefined && normVal(rej[f]) === normVal(vals[f])) delete vals[f];
+            if (!Object.keys(vals).length) continue;
+            const old = pendingUpdates.find(x => x.id === e._id);
+            if (old) Object.assign(old.item, vals); else pendingUpdates.push({ id: e._id, at: Date.now(), name: v(e, 'Name'), item: vals });
+            n++;
+          }
+          if (!n) { toast('Nichts zu ergänzen – die Felder sind schon ausgefüllt.'); return; }
+          try { await savePendingUpdates(); } catch { return; }
+          toast(`${n} Einträge mit Vorschlägen – bitte prüfen.`, 'ok');
+          showPending();
+          return;
+        }
         if (data && data.fillEmpty) {
           // Ergänzungen: nur leere Felder bestehender Einträge füllen
           const cnt = {}; let n = 0;
@@ -4613,6 +4635,7 @@
       <optgroup label="fehlt (evtl. auch andere)">${CORE_FIELDS.map(([f, l]) => `<option value="${esc(f)}">fehlt: ${esc(l)}</option>`).join('')}</optgroup>
       <optgroup label="nur dieser fehlt">${CORE_FIELDS.map(([f, l]) => `<option value="only:${esc(f)}">nur ${esc(l)} fehlt</option>`).join('')}</optgroup>`;
     $('#q').placeholder = 'Suchen: Name, Universum, Tags, Notizen…';
+    const pl = $('#btn-pending .lbl'); if (pl) pl.textContent = ' Vorschläge';
     if (['global', 'site', 'diff', 'rank', 'scraped'].includes(ui.sort)) ui.sort = 'name';
     ui.reviewUpdates = false;   // keine Babepedia-Aktualisierungen: Importe direkt übernehmen
   }

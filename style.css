@@ -879,3 +879,4 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .lk-name b, .lk-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lk-row input[type=text] { width: 100%; }
 @media (max-width: 600px) { .lk-row { grid-template-columns: 24px 44px 1fr; } .lk-row input[type=text] { grid-column: 1 / -1; } .lk-img img { width: 44px; height: 44px; } }
+.bp-hide { display: none !important; }
