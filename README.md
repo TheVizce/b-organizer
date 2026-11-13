@@ -295,3 +295,4 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Geordnete Werte (Alter, Geburtsjahrzehnt, Größe, Gewicht, Cup, Tool-Note, Babepedia Ø in 0,1-Schritten, meine Babepedia-Note) als Säulendiagramme mit mehr Platz; Prozent bezogen auf Einträge mit Wert. Klick auf eine Säule filtert.
 - Kategorien-Bewertungen (Gesicht, Body, Hot, Cute, Sympathie) als eine Tabelle: Anzahl je Wert, Ø und Anzahl bewertet.
 - Volle Bezeichnung als Tooltip bei abgeschnittenen Zeilen; Geburtsjahrzehnt ohne Tausenderpunkt.
+- Profil-Status „kein Babepedia-Profil“: Einträge ohne Babepedia- und Archiv-Adresse (von Hand angelegt) – eigener Punkt im Filter „Profil-Status“ und in der Statistik statt „Profil vorhanden“.

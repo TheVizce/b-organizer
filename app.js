@@ -295,10 +295,12 @@
   // Profil-Status: ok · gone-archive (gelöscht, Archiv vorhanden) · gone (gelöscht, kein Archiv)
   // Ein Eintrag aus dem Internet Archive heißt immer: das Babepedia-Profil gab es und es ist gelöscht.
   function profileStatus(e) {
+    // von Hand angelegt, nie auf Babepedia (z. B. Personen, die Babepedia nicht aufnimmt)
+    if (!/babepedia\.com\/babe\//i.test(v(e, 'Profile URL')) && !v(e, 'Archive URL') && !isTrue(e['Profile Deleted'])) return 'none';
     if (!isTrue(e['Profile Deleted'])) return 'ok';
     return v(e, 'Archive URL') ? 'gone-archive' : 'gone';
   }
-  const STATUS_LABEL = { ok: 'Profil vorhanden', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
+  const STATUS_LABEL = { none: 'kein Babepedia-Profil', ok: 'Profil vorhanden', 'gone-archive': 'auf Babepedia gelöscht – Archiv vorhanden', gone: 'auf Babepedia gelöscht – kein Archiv' };
   // Ältere Archiv-Einträge hatten die Archiv-Adresse als Profil-Adresse → Original-Adresse herausziehen, Status setzen
   function normalizeArchiveEntry(e) {
     const u = v(e, 'Profile URL');
