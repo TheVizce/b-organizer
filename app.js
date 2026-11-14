@@ -23,7 +23,7 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder'];
   const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
@@ -32,14 +32,14 @@
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'Tags', 'Notes', 'Cover Checked'] },
     { title: 'Darstellung', fields: ['Voice Actor', 'Actress'] },
-    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'] },
+    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'] },
     { title: 'Links', fields: ['Wiki URL'] }
   ] : [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
-    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
+    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'Reddit', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
   ];
   const LINK_FIELDS = GROUPS[5].fields;
@@ -511,7 +511,178 @@
   const isLocal = (u) => String(u || '').startsWith(LOCAL);
   const localId = (u) => String(u).slice(LOCAL.length);
   // Liefert eine anzeigbare Adresse ('' wenn ein lokales Bild fehlt)
-  const R = (u) => isLocal(u) ? (localUrls.get(localId(u)) || '') : u;
+  const R = (u) => isLocal(u) ? (localUrls.get(localId(u)) || '') : isDir(u) ? dirUrl(u) : u;
+  // ---------- Bilder-Ordner auf dem PC (nur lesen, nur für diese Sitzung) ----------
+  // Hauptordner wählen (<input webkitdirectory>, geht auch in Firefox) → Unterordner = Personen/Charaktere, darunter beliebig tief (z. B. Shoots).
+  // Nichts wird kopiert oder gespeichert; am Eintrag steht nur der Ordnername ('Image Folder'). Verweise „dir:<Pfad>“ gelten nur, solange der Ordner gewählt ist.
+  const IMG_EXT = /\.(jpe?g|jfif|png|webp|gif|avif|bmp)$/i;
+  let folderIdx = null;            // { root, files: Map(path → File), persons: Map(norm → { name, items: [{ ref, sub, name }] }), total }
+  const dirUrls = new Map();
+  function isDir(u) { return typeof u === 'string' && u.startsWith('dir:'); }
+  const normFolder = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function dirUrl(u) {
+    let x = dirUrls.get(u);
+    if (!x) { const f = folderIdx && folderIdx.files.get(u.slice(4)); if (!f) return ''; x = URL.createObjectURL(f); dirUrls.set(u, x); }
+    return x;
+  }
+  function buildFolderIdx(fileList) {
+    const files = new Map(), persons = new Map(); let root = '', total = 0;
+    const coll = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+    for (const f of fileList) {
+      const rel = f.webkitRelativePath || f.name; const parts = rel.split('/');
+      if (parts.length < 3 || !IMG_EXT.test(f.name) || parts.some(p => p.startsWith('.'))) continue;
+      root = parts[0];
+      const person = parts[1], key = normFolder(person);
+      if (!persons.has(key)) persons.set(key, { name: person, items: [] });
+      files.set(rel, f); total++;
+      persons.get(key).items.push({ ref: 'dir:' + rel, sub: parts.slice(2, -1).join(' / '), name: f.name, path: rel });
+    }
+    for (const p of persons.values()) p.items.sort((a, b) => coll.compare(a.sub, b.sub) || coll.compare(a.name, b.name));
+    return { root, files, persons, total };
+  }
+  const folderOf = (e) => { const n = v(e, 'Image Folder'); return n && folderIdx ? folderIdx.persons.get(normFolder(n)) || null : null; };
+  const folderImgs = (e) => { const p = folderOf(e); return p ? p.items : []; };
+  function pickFolder() {
+    const inp = $('#folder-input'); inp.value = ''; inp.click();
+  }
+  function onFolderPicked(fileList) {
+    if (!fileList || !fileList.length) return;
+    dirUrls.forEach(u => URL.revokeObjectURL(u)); dirUrls.clear();
+    const idx = buildFolderIdx(fileList);
+    if (!idx.total) { toast('In diesem Ordner wurden keine Bilder in Unterordnern gefunden. Erwartet: Hauptordner → Ordner je Person → Bilder (auch in weiteren Unterordnern).', 'err'); return; }
+    folderIdx = idx; ui.folderRoot = idx.root; saveUI();
+    const linked = entries.filter(e => folderOf(e)).length;
+    toast(`📁 „${idx.root}“: ${idx.total} Bilder in ${idx.persons.size} Ordnern · ${linked} Einträge verknüpft.`, 'ok');
+    folderBtnUI(); render();
+    const open = [...idx.persons.keys()].filter(k => !entries.some(e => normFolder(v(e, 'Image Folder')) === k)).length;
+    if (open) showFolderMatch();
+    const dt = !overlay.hidden && $('.detail', modal); if (dt) showDetail(dt.dataset.detail);
+  }
+  function folderBtnUI() {
+    const b = $('#btn-folder'); if (!b) return;
+    b.textContent = folderIdx ? '📁 ✓' : '📁';
+    b.title = folderIdx ? `Bilder-Ordner „${folderIdx.root}“ geladen (${folderIdx.total} Bilder) – klicken: zuordnen / neu wählen` : `Bilder-Ordner auf dem PC wählen (nur lesen, für diese Sitzung)${ui.folderRoot ? ` – zuletzt „${ui.folderRoot}“` : ''}`;
+    b.classList.toggle('on', !!folderIdx);
+  }
+  // Zuordnung Ordner → Eintrag: gleicher Name (oder AKA) wird nur vorgeschlagen, gespeichert wird erst nach Bestätigung
+  function showFolderMatch() {
+    if (!folderIdx) { pickFolder(); return; }
+    const label = (e) => `${v(e, 'Name')}${IS_CHARS && v(e, 'Universe') ? ' (' + v(e, 'Universe') + ')' : ''}`;
+    const byLabel = new Map(entries.map(e => [label(e), e]));
+    const linkedKeys = new Set(entries.map(e => normFolder(v(e, 'Image Folder'))).filter(Boolean));
+    const free = entries.filter(e => !v(e, 'Image Folder'));
+    const open = [...folderIdx.persons.entries()].filter(([k]) => !linkedKeys.has(k)).sort((a, b) => a[1].name.localeCompare(b[1].name, 'de'));
+    const missing = entries.filter(e => v(e, 'Image Folder') && !folderOf(e));
+    const rows = open.map(([k, p]) => {
+      const cand = free.filter(e => normFolder(v(e, 'Name')) === k || splitList(v(e, 'AKA')).some(a => normFolder(a) === k));
+      const sug = cand.length === 1 ? cand[0] : null;
+      const th = p.items[0] ? dirUrl(p.items[0].ref) : '';
+      return `<div class="lk-row" data-fold="${esc(p.name)}"><label class="chk"><input type="checkbox" data-fd-on ${sug ? 'checked' : ''}></label>
+        <span class="lk-img">${th ? `<img src="${esc(th)}" alt="" loading="lazy">` : ''}</span>
+        <span class="lk-name"><b>${esc(p.name)}</b><small class="muted">${p.items.length} Bilder${cand.length > 1 ? ` · ${cand.length} mögliche Einträge` : ''}</small></span>
+        <input type="text" list="fd-list" data-fd-to value="${esc(sug ? label(sug) : '')}" placeholder="${IS_CHARS ? 'Charakter' : 'Person'} wählen"></div>`;
+    }).join('');
+    openModal(`
+      <div class="modal-head"><h2>📁 Ordner zuordnen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="help lk">
+        <p>Hauptordner <b>„${esc(folderIdx.root)}“</b>: ${folderIdx.total} Bilder in ${folderIdx.persons.size} Ordnern · ${folderIdx.persons.size - open.length} schon verknüpft.
+        Gleiche Namen sind vorausgewählt – bitte kurz prüfen. Gespeichert wird nur der Ordnername am Eintrag; die Bilder bleiben auf dem PC.</p>
+        ${missing.length ? `<p class="muted">⚠︎ ${missing.length} Einträge sind mit einem Ordner verknüpft, der hier fehlt: ${missing.slice(0, 8).map(e => esc(v(e, 'Name') + ' → ' + v(e, 'Image Folder'))).join(', ')}${missing.length > 8 ? ' …' : ''}</p>` : ''}
+        <div id="fd-body" class="lk-body">${rows || '<p class="muted">Alle Ordner sind schon verknüpft.</p>'}</div>
+        <datalist id="fd-list">${free.map(e => `<option value="${esc(label(e))}">`).join('')}</datalist>
+        <div class="form-foot"><button class="btn" data-fd-pick>Anderen Ordner wählen…</button><span style="flex:1"></span><button class="btn" data-action="close">Abbrechen</button>${rows ? `<button class="btn primary" data-fd-save>Ausgewählte verknüpfen</button>` : ''}</div>
+      </div>`);
+    const body = $('#fd-body');
+    body.addEventListener('input', (ev) => { const r = ev.target.closest('.lk-row'); if (r && ev.target.matches('[data-fd-to]')) $('[data-fd-on]', r).checked = byLabel.has(ev.target.value); });
+    modal.querySelector('[data-fd-pick]').addEventListener('click', () => { closeModal(true); pickFolder(); });
+    const sv = modal.querySelector('[data-fd-save]');
+    if (sv) sv.addEventListener('click', () => {
+      let n = 0, bad = 0; const used = new Set();
+      for (const r of $$('.lk-row', body)) {
+        if (!$('[data-fd-on]', r).checked) continue;
+        const e = byLabel.get($('[data-fd-to]', r).value);
+        if (!e || used.has(e._id)) { bad++; continue; }
+        used.add(e._id); e['Image Folder'] = r.dataset.fold; e._updated = Date.now(); n++;
+      }
+      if (n) save();
+      closeModal(true); render();
+      toast(`${n} Ordner verknüpft${bad ? ` · ${bad} ohne passenden Eintrag übersprungen` : ''}.`, n ? 'ok' : '');
+    });
+  }
+  // Eigener kleiner Betrachter für Ordner-Bilder (Pfeile, Esc; Bild als Kachelbild/eigenes Bild übernehmen)
+  let fview = null;
+  function openFolderViewer(e, i) {
+    const items = folderImgs(e); if (!items.length) return;
+    const el = document.createElement('div'); el.className = 'fv';
+    el.innerHTML = `<div class="fv-top"><b class="fv-name"></b><span class="fv-sub muted"></span><span class="fv-count muted"></span>
+      <button class="btn small" data-fv="own" title="Kopie dieses Bildes in die eigenen Bilder übernehmen (wird dann im Browser gespeichert)">＋ zu eigenen Bildern</button>
+      <button class="btn small primary" data-fv="cover" title="Als Kachelbild übernehmen (Kopie in die eigenen Bilder)">★ als Kachelbild</button>
+      <button class="vw-x" data-fv="close" aria-label="Schließen">×</button></div>
+      <div class="fv-stage"><button class="vw-arrow prev" data-fv="prev" aria-label="zurück">‹</button><img alt="" draggable="false"><button class="vw-arrow next" data-fv="next" aria-label="weiter">›</button></div>`;
+    document.body.appendChild(el);
+    fview = { el, id: e._id, items, i };
+    el.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-fv]'); if (!b) return;
+      const a = b.dataset.fv;
+      if (a === 'close') return closeFolderViewer();
+      if (a === 'prev') return fvStep(-1);
+      if (a === 'next') return fvStep(1);
+      if (a === 'own' || a === 'cover') return fvAdopt(a === 'cover');
+    });
+    let x0 = null;
+    el.addEventListener('touchstart', (ev) => { x0 = ev.touches[0].clientX; }, { passive: true });
+    el.addEventListener('touchend', (ev) => { if (x0 == null) return; const dx = ev.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) fvStep(dx < 0 ? 1 : -1); });
+    fvShow();
+  }
+  function fvShow() {
+    const f = fview, it = f.items[f.i], e = byId(f.id);
+    $('img', f.el).src = dirUrl(it.ref);
+    $('.fv-name', f.el).textContent = e ? v(e, 'Name') : '';
+    $('.fv-sub', f.el).textContent = it.sub ? '📂 ' + it.sub : '';
+    $('.fv-count', f.el).textContent = `${f.i + 1} / ${f.items.length}`;
+    [f.items[f.i + 1], f.items[f.i - 1]].filter(Boolean).forEach(x => { const p = new Image(); p.src = dirUrl(x.ref); });
+  }
+  function fvStep(d) { const f = fview; f.i = (f.i + d + f.items.length) % f.items.length; fvShow(); }
+  function closeFolderViewer() { if (!fview) return; fview.el.remove(); fview = null; }
+  async function fvAdopt(asCover) {
+    const f = fview, e = byId(f.id), it = f.items[f.i], file = folderIdx && folderIdx.files.get(it.path);
+    if (!e || !file) return;
+    try {
+      const ref = await storeLocalImage(file);
+      e['Own Images'] = [...splitList(e['Own Images']), ref].join(', ');
+      if (asCover) e.Cover = ref;
+      e._updated = Date.now(); save(); refreshItem(e._id);
+      toast(asCover ? 'Als Kachelbild übernommen.' : 'Zu den eigenen Bildern hinzugefügt.', 'ok');
+      const dt = !overlay.hidden && $('.detail', modal); if (dt && dt.dataset.detail === e._id) showDetail(e._id);
+    } catch (err) { toast('Übernehmen fehlgeschlagen: ' + (err && err.message || err), 'err'); }
+  }
+  function fviewKey(ev) {
+    const k = ev.key;
+    if (k === 'Escape') { ev.preventDefault(); closeFolderViewer(); }
+    else if (k === 'ArrowRight' || k === ' ') { ev.preventDefault(); fvStep(1); }
+    else if (k === 'ArrowLeft') { ev.preventDefault(); fvStep(-1); }
+    else if (k === 'k' || k === 'K') { ev.preventDefault(); fvAdopt(true); }
+  }
+  // Detailansicht: aufklappbare Galerie „Weitere Bilder“, gruppiert nach Unterordner
+  const FD_PAGE = 48;
+  function folderSecHTML(e) {
+    const name = v(e, 'Image Folder');
+    if (!name) return '';
+    if (!folderIdx) return `<div class="sec fd-off">📁 Bilder-Ordner „${esc(name)}“ verknüpft – <button class="linklike" data-fd-choose>Hauptordner wählen</button>, um die Bilder hier zu sehen (nur am PC).</div>`;
+    const p = folderOf(e);
+    if (!p) return `<div class="sec fd-off">📁 Ordner „${esc(name)}“ ist im gewählten Hauptordner „${esc(folderIdx.root)}“ nicht vorhanden.</div>`;
+    const groups = new Map(); p.items.forEach((it, i) => { if (!groups.has(it.sub)) groups.set(it.sub, []); groups.get(it.sub).push([it, i]); });
+    const more = (fdMore.get(e._id) || new Set());
+    const grp = [...groups.entries()].map(([sub, list]) => {
+      const show = more.has(sub) ? list : list.slice(0, FD_PAGE);
+      return `<div class="fd-grp">${groups.size > 1 || sub ? `<h4>📂 ${esc(sub || 'ohne Unterordner')} <span class="muted">(${list.length})</span></h4>` : ''}
+        <div class="fd-grid">${show.map(([it, i]) => `<button class="fd-th" data-fd-i="${i}" data-id="${esc(e._id)}" title="${esc(it.name)}"><img src="${esc(dirUrl(it.ref))}" alt="" loading="lazy" decoding="async"></button>`).join('')}
+        ${list.length > show.length ? `<button class="fd-more" data-fd-more="${esc(sub)}" data-id="${esc(e._id)}">alle ${list.length} zeigen</button>` : ''}</div></div>`;
+    }).join('');
+    return `<details class="sec fd-sec" ${ui.fdOpen ? 'open' : ''}><summary><h3>📁 Weitere Bilder (${p.items.length}) <span class="muted">Ordner „${esc(p.name)}“${groups.size > 1 ? ` · ${groups.size} Unterordner` : ''}</span></h3></summary>${grp}</details>`;
+  }
+  const fdMore = new Map();
+  document.addEventListener('toggle', (ev) => { if (ev.target.classList && ev.target.classList.contains('fd-sec')) { ui.fdOpen = ev.target.open; saveUI(); } }, true);
 
   async function loadLocalImages() {
     const d = await db();
@@ -1769,6 +1940,7 @@
   const DERIVED = ['Alter', 'Geburtsjahr'];
   // Anzeige-Namen (die Feldnamen in den Daten bleiben englisch)
   const FIELD_LABELS = {
+    'Image Folder': 'Bilder-Ordner (PC)',
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
@@ -2648,6 +2820,7 @@
             return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3></div>`
               + IMG_KINDS.map(x => { const g = all.filter(([u]) => imgKind(e, u) === x.k); return g.length ? `<div class="sec img-sec"><h4>${x.title} (${g.length})</h4><div class="img-grid">${g.map(([u, i]) => cell(u, i)).join('')}</div></div>` : ''; }).join('');
           })() : ''}
+          ${folderSecHTML(e)}
           ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
           ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
@@ -2686,6 +2859,12 @@
   }
   function fieldInput(f, e) {
     if (f === 'Cover') return '';
+    if (f === 'Image Folder') {
+      const names = folderIdx ? [...folderIdx.persons.values()].map(p => p.name).sort((a, b) => a.localeCompare(b, 'de')) : [];
+      return `<div class="field"><label>Bilder-Ordner (PC)</label><input type="text" name="Image Folder" value="${esc(v(e, f))}" list="fd-names" autocomplete="off" placeholder="${folderIdx ? 'Ordner wählen' : 'Name des Unterordners'}">
+        ${names.length ? `<datalist id="fd-names">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>` : ''}
+        <span class="hint">Unterordner im Hauptordner ${folderIdx ? `„${esc(folderIdx.root)}“` : '(oben 📁 wählen)'} – die Bilder bleiben auf dem PC</span></div>`;
+    }
     if (f === 'Own Image URLs') {
       const urls = splitList(v(e, f));
       return `<div class="field wide own-field"><label>${IS_CHARS ? 'Bild-Links' : 'Eigene Bild-Links'}</label>
@@ -3165,6 +3344,9 @@
           <label class="chk">… <input type="number" name="perN" min="1" max="50" value="${c.perN}" style="width:64px"> Bilder je Eintrag</label>
           ${IS_CHARS ? `<span class="muted sl-kinds">Bildarten:</span>` + IMG_KINDS.map(x => chk('kind_' + x.k, x.title, slideKinds(c).includes(x.k))).join('') : ''}
           ${chk('coverFirst', 'mit dem Kachelbild beginnen', c.coverFirst)}${chk('onlyChecked', 'nur Einträge mit geprüftem Kachelbild', c.onlyChecked)}
+          <span class="muted sl-kinds">Bilder-Ordner ${folderIdx ? `(„${esc(folderIdx.root)}“ geladen)` : '(nicht gewählt – gilt erst, wenn du oben 📁 einen Ordner wählst)'}:</span>
+          ${opt('src', 'sel', 'nur ausgewählte Bilder', c.src || 'sel')}${opt('src', 'both', 'ausgewählte + Ordner', c.src || 'sel')}${opt('src', 'folder', 'nur Ordner-Bilder', c.src || 'sel')}
+          <label class="chk">aus dem Ordner höchstens <input type="number" name="folderN" min="1" max="500" value="${c.folderN || 20}" style="width:64px"> je Eintrag (zufällig)</label>
         </div>
         <h3>Reihenfolge</h3>
         <div class="cfg-grid">
@@ -3189,6 +3371,7 @@
       const g = (n) => form.elements.namedItem(n), r = (n) => (form.querySelector(`input[name="${n}"]:checked`) || {}).value;
       const cfg = {
         sec: Math.min(120, Math.max(1, Number(g('sec').value) || 5)), fade: Math.min(5, Math.max(0, Number(g('fade').value) || 0)),
+        src: r('src') || 'sel', folderN: Math.max(1, parseInt(g('folderN').value, 10) || 20),
         kinds: IS_CHARS ? IMG_KINDS.map(x => x.k).filter(k => g('kind_' + k).checked) : undefined, per: r('per') || 'all', perN: Math.max(1, parseInt(g('perN').value, 10) || 3), order: r('order') || 'list', trans: r('trans') || 'fade', fit: r('fit') || 'contain'
       };
       for (const k of ['mixImgs', 'loop', 'kb', 'blurBg', 'info', 'infoNote', 'bar', 'fullscreen', 'coverFirst', 'onlyChecked']) cfg[k] = g(k).checked;
@@ -3207,6 +3390,12 @@
       if (IS_CHARS) { const ks = slideKinds(cfg); imgs = imgs.filter(u => ks.includes(imgKind(e, u))); }
       if (cfg.per === 'cover') imgs = imgs.slice(0, 1);
       else if (cfg.per === 'n') imgs = imgs.slice(0, cfg.perN);
+      // Bilder-Ordner (nur wenn in dieser Sitzung gewählt): zusätzlich oder statt der ausgewählten Bilder, höchstens folderN je Eintrag (zufällige Auswahl)
+      if (folderIdx && cfg.src && cfg.src !== 'sel') {
+        let f = folderImgs(e).map(x => x.ref);
+        if (f.length > cfg.folderN) f = f.map(x => [Math.random(), x]).sort((a, b) => a[0] - b[0]).slice(0, cfg.folderN).map(x => x[1]);
+        imgs = cfg.src === 'folder' ? f : imgs.concat(f);
+      }
       imgs.forEach((u, k) => items.push({ id: e._id, u, k, n: imgs.length }));
     }
     if (cfg.mixImgs) for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
@@ -4148,6 +4337,8 @@
         break;
       }
       case 'import-file': $('#file-input').click(); break;
+      case 'folder': pickFolder(); break;
+      case 'folder-match': showFolderMatch(); break;
       case 'export-json':
         (async () => {
           const images = {};
@@ -4250,6 +4441,9 @@
     const full = t.closest('img[data-full]');
     if (full && !t.closest('.own-list')) { lightbox(R(full.dataset.full) || full.src); return; }
     if (full) { lightbox(full.src); return; }
+    const fdt = t.closest('[data-fd-i]'); if (fdt) { const e = byId(fdt.dataset.id); if (e) openFolderViewer(e, Number(fdt.dataset.fdI)); return; }
+    const fdm = t.closest('[data-fd-more]'); if (fdm) { const id = fdm.dataset.id; if (!fdMore.has(id)) fdMore.set(id, new Set()); fdMore.get(id).add(fdm.dataset.fdMore); showDetail(id); return; }
+    if (t.closest('[data-fd-choose]')) { pickFolder(); return; }
     const pBtn = t.closest('[data-primary]');
     if (pBtn) { const e = byId(pBtn.dataset.id); if (e) { setPrimary(e, pBtn.dataset.primary); showDetail(e._id); } return; }
     const catBtn = t.closest('[data-cat]');
@@ -4262,6 +4456,7 @@
   });
 
   document.addEventListener('keydown', (ev) => {
+    if (fview) { fviewKey(ev); return; }
     if (slide) { slideKey(ev); return; }
     if (calib) { calibKey(ev); return; }
     if (rater) { raterKey(ev); return; }
@@ -4385,6 +4580,9 @@
   $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
+  $('#folder-input').addEventListener('change', (ev) => onFolderPicked(ev.target.files));
+  $('#btn-folder').addEventListener('click', () => folderIdx ? showFolderMatch() : pickFolder());
+  folderBtnUI();
   // „Zu erledigen“-Auswahl
   {
     const dd = $('#f-todo'), btn = $('.todo-btn', dd), pop = $('.todo-pop', dd);

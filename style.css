@@ -783,7 +783,7 @@ body.cards-noname .card .body { display: none; }
 
 /* Desktop: Werkzeuge in der Kopfzeile, in der Leiste dann ausgeblendet */
 .top-tools { display: none; gap: 6px; align-items: center; margin-left: auto; }
-@media (min-width: 1100px) {
+@media (min-width: 1440px) {
   .top-tools { display: flex; }
   #btn-rate, #btn-random, #btn-browse, #btn-slide, #btn-to-ranker { display: none; }
   .menu .menu-mobile-only { display: none; }
@@ -1044,3 +1044,27 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
   .rt-top .rt-place { order: 5; }
   .rt-top .rt-undo { order: 6; padding: 4px 9px; }
 }
+
+/* Bilder-Ordner (PC) */
+#btn-folder.on { color: var(--accent-2); border-color: var(--accent); }
+@media (max-width: 760px), (hover: none) { #btn-folder, .menu .desktop-only { display: none; } }
+.fd-off { font-size: 13px; color: var(--muted); }
+.fd-sec > summary { list-style: none; cursor: pointer; }
+.fd-sec > summary::-webkit-details-marker { display: none; }
+.fd-sec > summary h3::before { content: '▸ '; }
+.fd-sec[open] > summary h3::before { content: '▾ '; }
+.fd-sec > summary h3 .muted { text-transform: none; letter-spacing: normal; font-weight: 400; margin-left: 6px; }
+.fd-grp { margin-top: 10px; }
+.fd-grp h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.fd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.fd-th { padding: 0; border: 0; background: var(--surface-2); border-radius: 8px; overflow: hidden; aspect-ratio: 3 / 4; cursor: zoom-in; }
+.fd-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fd-th:hover { outline: 2px solid var(--accent); }
+.fd-more { grid-column: 1 / -1; justify-self: start; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.fv { position: fixed; inset: 0; z-index: 95; background: #000; display: grid; grid-template-rows: auto 1fr; }
+.fv-top { display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: rgba(15,17,22,.95); }
+.fv-top .fv-count { margin-left: auto; }
+.fv-sub { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-stage { position: relative; min-height: 0; display: grid; place-items: center; }
+.fv-stage img { max-width: 100%; max-height: 100%; object-fit: contain; position: absolute; inset: 0; width: 100%; height: 100%; }
+.fv-stage .vw-arrow { z-index: 2; }

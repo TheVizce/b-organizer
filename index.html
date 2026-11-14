@@ -29,6 +29,7 @@
       <button class="btn ghost" data-proxy="#btn-slide" title="Diashow der aktuellen Liste">▶ Diashow</button>
       <button class="btn ghost" data-proxy="#btn-random" title="Zufälliger Eintrag aus der gefilterten Liste (Z)">🎲 Zufall</button>
       <button class="btn ghost" data-proxy="#btn-to-ranker" title="Alle angezeigten Einträge an den Image Ranker senden">🏆 An Ranker</button>
+      <button class="btn ghost" id="btn-folder" title="Bilder-Ordner auf dem PC wählen">📁 Ordner</button>
     </div>
     <div class="top-actions">
       <button class="btn warn bp-only" id="btn-pending" hidden style="display:none" title="Änderungen an bekannten Einträgen prüfen">⟳<span class="lbl"> Änderungen</span> (<span class="n">0</span>)</button>
@@ -37,6 +38,8 @@
         <button class="btn" id="btn-menu" aria-haspopup="true">Daten ▾</button>
         <div class="menu" id="menu" hidden>
           <button data-action="import-file">Importieren (CSV / JSON)…</button>
+          <button data-action="folder" class="desktop-only">📁 Bilder-Ordner wählen…</button>
+          <button data-action="folder-match" class="desktop-only">📁 Ordner zuordnen…</button>
           <button data-action="export-json">Backup exportieren (JSON)</button>
           <button class="bp-only" data-action="export-csv">Als CSV exportieren (Notion)</button>
           <button data-action="scan-images">Alle Bilder neu prüfen</button>
@@ -53,6 +56,7 @@
         </div>
       </div>
       <input type="file" id="file-input" accept=".csv,.json,text/csv,application/json" hidden>
+      <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
     </div>
   </header>
 
