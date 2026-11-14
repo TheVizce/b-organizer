@@ -2446,7 +2446,7 @@
   }
   function scoreBox(e) {
     if (!rateable(e)) return `<div class="sec score-box"><h3>Bewertung</h3>${adultAskHTML(e)}</div>`;
-    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><button class="btn small sc-open" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button>${hasScore(e) ? `<button class="btn small sc-open" data-place="${esc(e._id)}" title="Ein paar kurze Duelle nur mit diesem Eintrag gegen Gleichbewertete">⚖︎ Einordnen</button>` : ''}${undoBtnHTML('sc-open')}</h3>
+    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><span class="sc-actions"><button class="btn small" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button>${hasScore(e) ? `<button class="btn small" data-place="${esc(e._id)}" title="Ein paar kurze Duelle nur mit diesem Eintrag gegen Gleichbewertete">⚖️ Einordnen</button>` : ''}${undoBtnHTML()}</span></h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
       ${scoreSummary(e)}</div>`;
   }
@@ -3385,7 +3385,7 @@
           <div class="rt-sum"></div>
           <div class="rt-ref"></div>
           <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
-          <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn rt-placebtn" data-rt-place hidden title="Ein paar Duelle nur mit diesem Eintrag">⚖︎ Einordnen</button><button class="btn primary" data-rt="1">Weiter →</button></div>
+          <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn rt-placebtn" data-rt-place hidden title="Ein paar Duelle nur mit diesem Eintrag">⚖️ Einordnen</button><button class="btn primary" data-rt="1">Weiter →</button></div>
           <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>K</kbd> Kachelbild setzen/geprüft · <kbd>E</kbd> einordnen · <kbd>Strg</kbd>+<kbd>Z</kbd> rückgängig · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
       </div>`;

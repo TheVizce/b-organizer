@@ -679,7 +679,10 @@ body.cards-noname .card .body { display: none; }
 .rt-notes textarea { width: 100%; resize: vertical; min-height: 60px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13.5px; }
 .rt-notes textarea:focus { outline: none; border-color: var(--accent); }
 .score-box h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
-.score-box .sc-open { margin-left: auto; }
+.score-box .sc-actions { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.score-box .sc-actions .btn { color: var(--text); text-transform: none; letter-spacing: normal; font-weight: 500; }
+.score-box .sc-actions .undo-btn { color: var(--muted); }
+.score-box .sc-actions .undo-btn:hover { color: var(--text); }
 @media (max-width: 800px) { .rt-notes textarea { min-height: 44px; } }
 
 /* Vergleich: gleich / darüber / darunter */
