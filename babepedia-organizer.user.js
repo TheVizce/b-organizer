@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.27
+// @version      14.28
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -274,7 +274,7 @@
         'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup',
         'Boobs', 'Tattoos', 'Piercings',
         // External & Social Links
-        'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch',
+        'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'Reddit',
         'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'
     ];
 
@@ -920,6 +920,7 @@
                 else if (href.includes('tiktok.com/')) data['TikTok'] = href;
                 else if (href.includes('youtube.com/') || href.includes('youtu.be/')) data['YouTube'] = href;
                 else if (href.includes('twitch.tv/')) data['Twitch'] = href;
+                else if (/reddit\.com\/(user|u|r)\//.test(href)) data['Reddit'] = href;
                 else if (href.includes('imdb.com/')) data['IMDb'] = href;
                 else if (href.includes('fansly.com/')) data['Fansly'] = href;
                 else if (href.includes('thronly.com/')) data['Thronly'] = href;
@@ -945,7 +946,7 @@
             // Archiv-Kopie: Original-Adressen wiederherstellen, Bilder über das Archiv laden
             // (bei gelöschten Profilen gibt es die Originale auf Babepedia nicht mehr)
             for (const k of Object.keys(data)) {
-                if (/URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly|Thronly/.test(k) && typeof data[k] === 'string') {
+                if (/URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|Reddit|IMDb|OnlyFans|Fansly|Thronly/.test(k) && typeof data[k] === 'string') {
                     data[k] = data[k].split(', ').map(unwrapArchive).join(', ');
                 }
             }

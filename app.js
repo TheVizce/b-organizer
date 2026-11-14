@@ -18,7 +18,7 @@
     'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Hair color',
     'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup',
     'Boobs', 'Tattoos', 'Piercings',
-    'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch',
+    'Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'Reddit',
     'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
@@ -40,7 +40,7 @@
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
-    { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
+    { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'Reddit', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
   ];
   const LINK_FIELDS = GROUPS[5].fields;
 
@@ -2666,7 +2666,7 @@
     } else if (t === 'area') {
       input = `<textarea ${name}>${esc(val)}</textarea>`;
     } else {
-      const type = /URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|IMDb|OnlyFans|Fansly|Thronly/.test(f) ? 'url' : 'text';
+      const type = /URL|Link|Website|Instagram|Twitter|TikTok|YouTube|Twitch|Reddit|IMDb|OnlyFans|Fansly|Thronly/.test(f) ? 'url' : 'text';
       const sug = IS_CHARS && ['Universe', 'Origin', 'Species', 'Voice Actor', 'Actress'].includes(f)
         ? [...new Set(entries.map(x => v(x, f)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de')) : null;
       input = `<input type="${type}" ${name} value="${esc(val)}" ${f === 'Name' ? 'required' : ''}${sug ? ` list="dl-${id}" autocomplete="off"` : ''}>${sug ? `<datalist id="dl-${id}">${sug.map(x => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}`;
@@ -4802,6 +4802,27 @@
             if (ad && v(e, 'Scraped At') !== ad) { e['Scraped At'] = ad; e._updated = Date.now(); deriveChanged = true; }
           }
           localStorage.setItem('bp-organizer-archmig2', '1');
+        }
+        // Einmalig: Reddit-Links aus den Notizen (eigene Zeile, evtl. mit „Reddit:“ davor) bzw. aus „Website“ ins neue Feld „Reddit“
+        if (!localStorage.getItem('bp-organizer-redditmig1')) {
+          const RX = /(https?:\/\/(?:www\.|old\.|new\.)?reddit\.com\/(?:user|u|r)\/[^\s<>"')]+)/i;
+          for (const e of entries) {
+            if (v(e, 'Reddit')) continue;
+            const notes = String(e.Notes || '');
+            const m = notes.match(RX);
+            if (m) {
+              e.Reddit = m[1];
+              // steht der Link allein in seiner Zeile, wandert er ganz ins Feld; sonst bleibt die Notiz unverändert
+              const lines = notes.split('\n'), i = lines.findIndex(l => l.includes(m[1]));
+              if (i >= 0 && /^\s*(reddit\s*:?)?\s*$/i.test(lines[i].replace(m[1], ''))) {
+                lines.splice(i, 1);
+                e.Notes = lines.join('\n').replace(/^\s*\n+/, '').replace(/\n{3,}/g, '\n\n').trim();
+              }
+            } else if (RX.test(v(e, 'Website'))) e.Reddit = v(e, 'Website');   // Website bleibt (kommt von Babepedia)
+            else continue;
+            e._updated = Date.now(); deriveChanged = true;
+          }
+          localStorage.setItem('bp-organizer-redditmig1', '1');
         }
       } catch (_) {}
       // Einmalige Umstellung (z. B. English → British) dauerhaft speichern, sobald der Sync bereit ist
