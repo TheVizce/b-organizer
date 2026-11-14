@@ -1604,6 +1604,41 @@
   };
   const filterNeedsImages = (mf) => mf && (mf === 'any' || mf === 'none' || /__img$/.test(mf));
   const missingCore = (e) => CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([, label]) => label);
+  // ---- „Zu erledigen“: Aufgaben-Filter, mehrere Punkte = oder ----
+  const TODOS = [
+    { k: 'upimg', label: 'Kachelbild ist ein hochgeladenes Bild', hint: 'nur auf diesem Gerät gespeichert – besser durch einen Link ersetzen', test: e => { const i = images(e)[0]; return !!i && isLocal(i); } },
+    { k: 'cover', label: 'Kachelbild nicht bestätigt', hint: 'ohne ✓ oder mit Zweifel', test: e => images(e).length > 0 && coverState(e) !== 'ok' },
+    { k: 'score', label: 'Tool-Note nicht vergeben', test: e => rateable(e) && !hasScore(e) },
+    { k: 'sym', label: 'Sympathie fehlt (2,5 angenommen)', test: e => hasScore(e) && !(num(e['Sympathy Score']) >= 1) },
+    { k: 'primary', label: 'Hauptbereich nicht bestätigt', hint: 'mehrere Bereiche, Hauptbereich automatisch', bp: true, test: e => catList(e).length > 1 && !(primaryCat(e) || {}).manual },
+    { k: 'missing', label: 'Werte fehlen', hint: () => CORE_FIELDS.filter(([f]) => f !== '__img').map(([, l]) => l).join(', '), test: e => CORE_FIELDS.some(([f]) => f !== '__img' && isMissing(e, f)) },
+    { k: 'adult', label: 'Volljährig ungeklärt', chars: true, test: e => v(e, 'Adult') !== 'ja' && v(e, 'Adult') !== 'nein' },
+    { k: 'kind', label: 'Bilder mit unklarer Bildart', chars: true, test: e => images(e).some(u => imgKind(e, u) === 'unk') },
+    { k: 'pending', label: 'Babepedia-Update offen', bp: true, test: e => pendingUpdates.some(p => p.id === e._id) },
+    { k: 'bpvote', label: 'Babepedia-Note nicht angeglichen', hint: 'weicht von der Tool-Note ab oder fehlt (Profil vorhanden)', bp: true, test: e => { const st = ratingDiff(e).state; return st === 'diff' || (st === 'mine-only' && profileStatus(e) === 'ok'); } },
+    { k: 'calib', label: 'Offene Abgleich-Entscheidung', test: e => (todoOpenIds || (todoOpenIds = openDuelIds())).has(e._id) },
+    { k: 'ranker', label: 'Im Ranker veraltet', test: e => rankerStale.has(e._id) },
+    { k: 'noimg', label: 'Kein Bild', test: e => !images(e).length }
+  ].filter(t => IS_CHARS ? !t.bp : !t.chars);
+  let todoOpenIds = null;   // pro Filterdurchlauf einmal berechnet
+  const openDuelIds = () => { const s = new Set(); for (const d of duels) if (duelOpen(d)) { s.add(d.a); s.add(d.b); } return s; };
+  const todoSel = () => ui.hiddenFilters && ui.hiddenFilters['f-todo'] ? [] : (Array.isArray(ui.todo) ? ui.todo : []).filter(k => TODOS.some(t => t.k === k));
+  function todoTest(e) {
+    const sel = todoSel(); if (!sel.length) return true;
+    return TODOS.some(t => sel.includes(t.k) && t.test(e));
+  }
+  function todoButtonLabel() {
+    const sel = todoSel(), b = $('#f-todo .todo-btn'); if (!b) return;
+    b.textContent = sel.length ? `📝 Zu erledigen (${sel.length})` : '📝 Zu erledigen';
+    b.classList.toggle('on', sel.length > 0);
+  }
+  function todoPopRender() {
+    const pop = $('#f-todo .todo-pop'), sel = todoSel(); todoOpenIds = null;
+    const cnt = (t) => { let n = 0; for (const e of entries) if (t.test(e)) n++; return n; };
+    pop.innerHTML = `<div class="todo-h">Zeigt Einträge, auf die <b>mindestens einer</b> der Punkte zutrifft.</div>`
+      + TODOS.map(t => { const h = typeof t.hint === 'function' ? t.hint() : t.hint; return `<label class="todo-row"><input type="checkbox" value="${t.k}" ${sel.includes(t.k) ? 'checked' : ''}><span>${esc(t.label)}${h ? `<small>${esc(h)}</small>` : ''}</span><em>${cnt(t)}</em></label>`; }).join('')
+      + `<div class="todo-f"><button type="button" class="btn small" data-todo-clear>Keine</button><button type="button" class="btn small primary" data-todo-close>Fertig</button></div>`;
+  }
 
   let scanning = null;
   async function scanImages(all = false) {
@@ -1657,6 +1692,7 @@
     const sf = $('#f-status').value;
 
     const xf = Object.entries(xfVals).filter(([, x]) => x);
+    todoOpenIds = null;
     let list = entries.filter(e => {
       if (statFilter && !statFilter.test(e)) return false;
       if (fav && !isTrue(e.Favorite)) return false;
@@ -1666,6 +1702,7 @@
       }
       if (cf && (cf.startsWith('P:') ? (primaryCat(e) || {}).cat !== cf.slice(2) : !catList(e).includes(cf))) return false;
       if (sf) { const st = profileStatus(e); if (sf === 'gone-any' ? !st.startsWith('gone') : st !== sf) return false; }
+      if (!todoTest(e)) return false;
       if (mf) {
         const miss = CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([f]) => f);
         if (mf === 'any') { if (!miss.length) return false; }
@@ -1747,9 +1784,9 @@
     : [['global', 'Ø Babepedia Ø'], ['rank', '# Rank'], ['rating', '♥ Tool-Note (mit Babepedia-Note)'], ['ranker', '🏆 Ranker-Tier'],
     ['fut', '🃏 Kategorien als Karte (Tool-Note + Werte)'], ['cover', '✓ Ecke „Kachelbild geprüft“'], ['primary', '★ Hauptbereich']];
   const BUILTIN_FILTERS = IS_CHARS ? [['f-nationality', 'Universum'], ['f-cat', 'Medium'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Spezies'], ['f-body', 'Stil'],
-    ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-fav', 'nur Favoriten']]
+    ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']]
     : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
-    ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-fav', 'nur Favoriten']];
+    ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']];
   const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Gender', 'Role', 'Adult', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'First Appearance', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
     'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
@@ -3515,6 +3552,7 @@
         <div class="seg cb-cats">${SCORE_CATS.map((c, i) => `<button data-cbcat="${i}" title="Taste ${c.key}">${esc(c.label)}</button>`).join('')}</div>
         <span class="cb-count muted"></span>
         <button class="btn small cb-open" title="Duelle, bei denen du noch nicht entschieden hast">Offen (0)</button>
+        <button class="btn small cb-reset" title="Bereits verglichene Paare wieder freigeben (Werte bleiben)">↺ Paare</button>
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
       <div class="cb-q"></div>
@@ -3533,6 +3571,8 @@
       const kp = t.closest('[data-cbkeep]'); if (kp) return calibKeep(kp.dataset.cbkeep);
       const rd = t.closest('[data-cbredo]'); if (rd) { duels = duels.filter(x => x.id !== rd.dataset.cbredo); saveDuels(); return calibOpenList(); }
       if (t.closest('.cb-open')) return calib.list ? calibNext() : calibOpenList();
+      if (t.closest('.cb-reset')) return calibResetView();
+      const rs = t.closest('[data-cbreset]'); if (rs) return calibReset(rs.dataset.cbreset);
       if (t.closest('[data-cbback]')) return calibNext();
       if (t.closest('[data-cbnext]')) return calibNext();
       if (t.closest('[data-cbskip]')) { calib.skip.add(calib.pair.map(e => e._id).sort().join('|')); return calibNext(); }
@@ -3575,7 +3615,7 @@
     if (!c || !A || !B) return null;
     const va = num(v(A, c.f)), vb = num(v(B, c.f));
     if (va == null || vb == null) return null;
-    const fixes = [], fx = (e, val) => fixes.push({ id: e._id, val, txt: `${v(e, 'Name')} auf ${fmtV(val)}` });
+    const fixes = [], fx = (e, val) => fixes.push({ id: e._id, val, txt: `${v(e, 'Name')} auf ${fmtV(val)}`, eff: noteEffect(e, c.f, val) });
     let ok = false, msg = '';
     if (d.r === '=') {
       ok = va === vb;
@@ -3601,12 +3641,22 @@
     }
     return { ok, msg, fixes, c, A, B };
   }
+  // Auswirkung einer Änderung auf die Tool-Note (10er-Skala), z. B. „8,6 → 8,3“
+  function noteEffect(e, f, val) {
+    const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
+    const a = scoreOf(e), b = scoreOf(Object.assign({}, e, { [f]: String(val) }));
+    if (!a || !b) return '';
+    const d = Math.round((b.ten - a.ten) * 10) / 10;
+    const cap = !d && a.total !== b.total ? (a.ten >= 10 ? ' (bleibt am Maximum)' : a.ten <= 1 ? ' (bleibt am Minimum)' : ' (kaum Änderung)') : '';
+    return `Note ${fmt1(a.ten)} → ${fmt1(b.ten)}${d ? ` (${d > 0 ? '+' : '−'}${fmt1(Math.abs(d))})` : cap || ' (gleich)'}`;
+  }
+  const fixBtnHTML = (f, d) => `<button class="btn small cb-fix" data-cbfix="${esc(f.id)}" data-val="${f.val}" data-duel="${esc(d.id)}"><span>${esc(f.txt)}</span>${f.eff ? `<small>${esc(f.eff)}</small>` : ''}</button>`;
   // Offen = Duell passt (mit heutigen Werten) nicht und wurde weder angepasst noch „so gelassen“
   const duelOpen = (d) => !d.done && (() => { const r = duelEval(d); return r && !r.ok; })();
   function calibVerdict() {
     const d = calib.duel, r = duelEval(d);
     if (!r) return '';
-    const fixes = r.fixes.map(f => `<button class="btn small" data-cbfix="${esc(f.id)}" data-val="${f.val}" data-duel="${esc(d.id)}">${esc(f.txt)}</button>`).join('');
+    const fixes = r.fixes.map(f => fixBtnHTML(f, d)).join('');
     return `<div class="cb-verdict ${r.ok ? 'ok' : 'warn'}"><span>${r.ok ? '✓ ' : '⚠︎ '}${esc(r.msg)}</span>
       <span class="cb-fixes">${fixes}${fixes ? '<span class="muted">oder</span>' : ''}${fixes ? `<button class="btn small" data-cbkeep="${esc(d.id)}">so lassen</button>` : ''}<button class="btn small ${r.ok ? 'primary' : ''}" data-cbnext>${fixes ? 'später entscheiden' : 'Weiter'} <kbd>Enter</kbd></button></span></div>`;
   }
@@ -3621,7 +3671,7 @@
       const ans = d.r === '=' ? 'gleich' : `${esc(v(d.r === 'a' ? r.A : r.B, 'Name'))} vorne`;
       return `<div class="cb-item"><div class="cb-item-h"><b>${esc(r.c.label)}</b> · <button class="linklike" data-cbopen="${esc(r.A._id)}">${esc(v(r.A, 'Name'))}</button> (${fmtV(num(v(r.A, r.c.f)))}) gegen <button class="linklike" data-cbopen="${esc(r.B._id)}">${esc(v(r.B, 'Name'))}</button> (${fmtV(num(v(r.B, r.c.f)))}) · deine Wahl: ${ans} <span class="muted">· ${new Date(d.ts).toLocaleDateString('de-DE')}</span></div>
         <div class="cb-item-m muted">${esc(r.msg)}</div>
-        <div class="cb-fixes">${r.fixes.map(f => `<button class="btn small" data-cbfix="${esc(f.id)}" data-val="${f.val}" data-duel="${esc(d.id)}">${esc(f.txt)}</button>`).join('')}<button class="btn small" data-cbkeep="${esc(d.id)}">so lassen</button><button class="btn small ghost" data-cbredo="${esc(d.id)}" title="Duell löschen, das Paar kommt wieder dran">neu vergleichen</button></div></div>`;
+        <div class="cb-fixes">${r.fixes.map(f => fixBtnHTML(f, d)).join('')}<button class="btn small" data-cbkeep="${esc(d.id)}">so lassen</button><button class="btn small ghost" data-cbredo="${esc(d.id)}" title="Duell löschen, das Paar kommt wieder dran">neu vergleichen</button></div></div>`;
     }).join('') : '<p class="muted">Keine offenen Entscheidungen.</p>'}</div>`;
     $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
     calibCount();
@@ -3666,6 +3716,27 @@
     if (d) { d.done = 'fixed'; d.doneTs = Date.now(); saveDuels(); }
     toast(`${v(byId(id), 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok');
     calib.list ? calibOpenList() : calibNext();
+  }
+  // Verglichene Paare zurücksetzen: Duelle löschen (Werte bleiben); offene Entscheidungen auf Wunsch behalten
+  function calibResetView() {
+    const c = SCORE_CATS[calib.cat], { el } = calib;
+    calib.list = true;
+    const nCat = duels.filter(d => d.cat === c.f).length, nAll = duels.length;
+    $('.cb-q', el).innerHTML = `<b>Verglichene Paare zurücksetzen</b>`;
+    $('.cb-body', el).innerHTML = `<div class="cb-list"><p>Die Paare können danach wieder vorkommen. <b>Deine Werte bleiben unverändert</b> – es wird nur vergessen, welche Paare du schon verglichen hast.</p>
+      <label class="chk"><input type="checkbox" id="cb-keep-open" checked> offene Entscheidungen behalten (${duels.filter(duelOpen).length})</label>
+      <div class="cb-fixes" style="margin-top:12px"><button class="btn" data-cbreset="cat" ${nCat ? '' : 'disabled'}>nur ${esc(c.label)} (${nCat})</button><button class="btn" data-cbreset="all" ${nAll ? '' : 'disabled'}>alle Kategorien (${nAll})</button></div></div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
+    calibCount();
+  }
+  function calibReset(scope) {
+    const c = SCORE_CATS[calib.cat], keepOpen = !!($('#cb-keep-open', calib.el) || {}).checked;
+    const before = duels.length;
+    duels = duels.filter(d => (scope === 'cat' && d.cat !== c.f) || (keepOpen && duelOpen(d)));
+    const n = before - duels.length;
+    saveDuels(); calib.skip = new Set();
+    toast(`${n} Paar${n === 1 ? '' : 'e'} zurückgesetzt – Werte unverändert.`, 'ok');
+    calibNext();
   }
   function calibKeep(duelId) {
     const d = duels.find(x => x.id === duelId);
@@ -4117,6 +4188,24 @@
   $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
+  // „Zu erledigen“-Auswahl
+  {
+    const dd = $('#f-todo'), btn = $('.todo-btn', dd), pop = $('.todo-pop', dd);
+    const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', () => { if (pop.hidden) { todoPopRender(); pop.hidden = false; btn.setAttribute('aria-expanded', 'true'); } else close(); });
+    pop.addEventListener('change', (ev) => {
+      const cb = ev.target.closest('input[type=checkbox]'); if (!cb) return;
+      const cur = new Set(todoSel()); cb.checked ? cur.add(cb.value) : cur.delete(cb.value);
+      ui.todo = TODOS.map(t => t.k).filter(k => cur.has(k)); saveUI(); todoButtonLabel(); render();
+    });
+    pop.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-todo-clear]')) { ui.todo = []; saveUI(); todoButtonLabel(); todoPopRender(); render(); }
+      if (ev.target.closest('[data-todo-close]')) close();
+    });
+    document.addEventListener('click', (ev) => { if (!pop.hidden && !ev.target.closest('#f-todo')) close(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !pop.hidden) close(); });
+    todoButtonLabel();
+  }
   applyFilterVisibility();
   applyCardLook();
   if (ui.sort === 'mine') ui.sort = 'score';
@@ -4125,7 +4214,7 @@
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-status').value = ''; $('#f-fav').checked = false;
     for (const k of Object.keys(xfVals)) delete xfVals[k];
-    statFilter = null;
+    statFilter = null; ui.todo = []; saveUI(); todoButtonLabel();
     renderExtraFilters(); render();
   });
 
