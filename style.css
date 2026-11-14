@@ -931,3 +931,13 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 /* Abgleich: Auswirkung auf die Tool-Note */
 .cb-fix { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
 .cb-fix small { font-size: 11px; color: var(--muted); font-weight: 400; }
+/* Abgleich-Vorschläge */
+.cb-conf { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-right: 6px; border: 1px solid; }
+.cb-conf.hi { color: var(--good); border-color: var(--good); background: rgba(79,191,138,.12); }
+.cb-conf.mid { color: var(--warn); border-color: var(--warn); background: rgba(232,176,79,.10); }
+.cb-conf.lo { color: var(--muted); border-color: var(--border); }
+.cb-arrow { margin-left: 4px; white-space: nowrap; }
+.cb-hint { flex-basis: 100%; text-align: center; font-size: 12.5px; color: var(--muted); }
+.cb-scope { margin-left: 8px; vertical-align: middle; }
+.cb-scope button { font-size: 12px; padding: 2px 10px; }
+.btn.primary kbd { background: rgba(0,0,0,.22); color: inherit; border-color: transparent; }
