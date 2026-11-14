@@ -2446,18 +2446,51 @@
   }
   function scoreBox(e) {
     if (!rateable(e)) return `<div class="sec score-box"><h3>Bewertung</h3>${adultAskHTML(e)}</div>`;
-    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><button class="btn small sc-open" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button></h3>
+    return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><button class="btn small sc-open" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button>${hasScore(e) ? `<button class="btn small sc-open" data-place="${esc(e._id)}" title="Ein paar kurze Duelle nur mit diesem Eintrag gegen Gleichbewertete">⚖︎ Einordnen</button>` : ''}${undoBtnHTML('sc-open')}</h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
       ${scoreSummary(e)}</div>`;
   }
-  function setScore(id, f, val) {
+  function setScore(id, f, val, noUndo) {
     const e = byId(id); if (!e) return;
     if (!rateable(e) && val !== '') { toast('Erst „Volljährig (Kanon)“ auf „ja“ setzen – Minderjährige werden nicht bewertet.'); return; }
+    const prev = e[f] == null ? '' : String(e[f]);
     e[f] = val === '' ? '' : String(val);
     e._updated = Date.now();
     derive(e);
     saveQuiet(); refreshItem(id);
+    if (typeof cbSugDirty === 'function') cbSugDirty();
+    if (!noUndo) pushUndo(id, f, prev, e[f]);
   }
+  // ---- Rückgängig für Bewertungen (nur diese Sitzung; schnelle Änderungen am selben Wert werden zusammengefasst) ----
+  const undoStack = [];
+  function pushUndo(id, f, prev, next) {
+    if (prev === next) return;
+    const top = undoStack[undoStack.length - 1], now = Date.now();
+    if (top && top.id === id && top.f === f && now - top.t < 2000) { top.next = next; top.t = now; if (top.prev === top.next) undoStack.pop(); }
+    else undoStack.push({ id, f, prev, next, t: now });
+    if (undoStack.length > 60) undoStack.shift();
+    undoUI();
+  }
+  const catLabelOf = (f) => (SCORE_CATS.find(c => c.f === f) || { label: f }).label;
+  const fmtScoreV = (x) => x === '' ? 'leer' : String(x).replace('.', ',');
+  function undoText(u) { const e = byId(u.id); return `${e ? v(e, 'Name') : '?'} · ${catLabelOf(u.f)} ${fmtScoreV(u.next)} → ${fmtScoreV(u.prev)}`; }
+  function undoUI() {
+    const u = undoStack[undoStack.length - 1];
+    $$('.undo-btn').forEach(b => { b.hidden = !u; if (u) b.title = 'Rückgängig: ' + undoText(u) + ' (Strg+Z)'; });
+  }
+  function undoLast() {
+    const u = undoStack.pop(); if (!u) { toast('Nichts zum Rückgängigmachen.'); return; }
+    const e = byId(u.id); if (!e) { undoUI(); return; }
+    setScore(u.id, u.f, u.prev, true);
+    toast('Rückgängig: ' + undoText(u), 'ok');
+    undoUI();
+    if (rater) { const cur = raterEntry(); if (cur && cur._id === u.id) raterCats(); }
+    if (calib && calib.list) { $('.cb-scope', calib.el) ? calibSugList() : null; }
+    else if (calib) calibCount();
+    const dt = !overlay.hidden && $('.detail', modal);
+    if (dt && dt.dataset.detail === u.id) showDetail(u.id);
+  }
+  const undoBtnHTML = (cls = '') => { const u = undoStack[undoStack.length - 1]; return `<button type="button" class="btn small undo-btn ${cls}" ${u ? `title="${esc('Rückgängig: ' + undoText(u) + ' (Strg+Z)')}"` : 'hidden'}>↶ Rückgängig</button>`; };
 
 
 
@@ -3339,6 +3372,8 @@
         <span class="rt-count"></span>
         <label class="chk rt-adv" title="Nach einer Ziffer automatisch zur nächsten Kategorie springen"><input type="checkbox" ${ui.raterAdvance ? 'checked' : ''}> Ziffer springt weiter</label>
         <label class="chk rt-only"><input type="checkbox" ${onlyOpen ? 'checked' : ''}> nur unbewertete</label>
+        <label class="chk rt-place" title="Nach dem Bewerten ein paar kurze Duelle gegen Gleichbewertete, solange der Eindruck frisch ist"><input type="checkbox" ${ui.raterPlace ? 'checked' : ''}> danach einordnen</label>
+        ${undoBtnHTML('rt-undo')}
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
       <div class="rt-body">
@@ -3350,8 +3385,8 @@
           <div class="rt-sum"></div>
           <div class="rt-ref"></div>
           <label class="rt-notes"><span>Notizen <span class="muted">(Feld „Notes“, wird automatisch gespeichert)</span></span><textarea rows="3" placeholder="Eindruck, Begründung, Auffälligkeiten …"></textarea></label>
-          <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn primary" data-rt="1">Weiter →</button></div>
-          <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>K</kbd> Kachelbild setzen/geprüft · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
+          <div class="rt-nav"><button class="btn" data-rt="-1">← Zurück</button><button class="btn rt-placebtn" data-rt-place hidden title="Ein paar Duelle nur mit diesem Eintrag">⚖︎ Einordnen</button><button class="btn primary" data-rt="1">Weiter →</button></div>
+          <p class="muted rt-help">1–5 setzt die markierte Kategorie (bleibt stehen) · <kbd>.</kbd> +½ · <kbd>↑</kbd><kbd>↓</kbd> Kategorie · <kbd>←</kbd><kbd>→</kbd> Bild · <kbd>+</kbd><kbd>−</kbd> eine Stufe höher/tiefer · <kbd>Enter</kbd> weiter · <kbd>N</kbd> Notizen · <kbd>K</kbd> Kachelbild setzen/geprüft · <kbd>E</kbd> einordnen · <kbd>Strg</kbd>+<kbd>Z</kbd> rückgängig · <kbd>Esc</kbd> beenden<br>${SCORE_ANCHORS}</p>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -3365,12 +3400,16 @@
       if (t.closest('.vw-arrow.next')) return raterImg(1);
       if (t.closest('.rt-cover')) return raterCover();
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
+      if (t.closest('.undo-btn')) return undoLast();
+      if (t.closest('[data-rt-place]')) return raterPlace(false);
+      if (rater.cmp && t.closest('.rt-cmp')) { rater.cmp.remove(); rater.cmp = null; return; }
       const ad = t.closest('[data-adult]'); if (ad) { setAdult(ad.dataset.id, ad.dataset.adult); raterCats(); return; }
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
       const rs = t.closest('[data-ref-set]'); if (rs) { rater.preview = null; raterSet(rater.cat, Number(rs.dataset.refSet), false); return; }
       const rmo = t.closest('[data-ref-more]'); if (rmo) { rater.refOpen = Object.assign({}, rater.refOpen, { [rmo.dataset.refMore]: true }); raterRef(); return; }
       const ro = t.closest('[data-ref-open]');
+      if (ro && TOUCH()) { raterCompare(ro.dataset.refOpen); return; }
       if (ro) { const x = byId(ro.dataset.refOpen); if (x) { const u = images(x)[0]; const im = $('.rt-stage img', rater.el); if (u) { rater.peek = x._id; im.src = R(u); $('.rt-imgc', rater.el).textContent = 'Vergleich: ' + v(x, 'Name') + ' – Bild antippen für zurück'; } } return; }
       if (t.closest('.rt-stage img') && rater.peek) { rater.peek = null; raterImgShow(); return; }
       const row = t.closest('[data-sc-idx]'); if (row) { rater.cat = Number(row.dataset.scIdx); raterCats(); return; }
@@ -3401,6 +3440,8 @@
       rater.preview = null; raterRef();
     });
     $('.rt-adv input', el).addEventListener('change', (ev) => { ui.raterAdvance = ev.target.checked; saveUI(); });
+    $('.rt-place input', el).addEventListener('change', (ev) => { ui.raterPlace = ev.target.checked; saveUI(); });
+    undoUI();
     $('.rt-only input', el).addEventListener('change', (ev) => { ui.raterOnlyOpen = ev.target.checked; saveUI(); toast('Gilt beim nächsten Start des Bewertungsmodus.'); });
     // Wischen auf dem Bild: Bilder wechseln
     let sx = 0, sy = 0;
@@ -3522,7 +3563,32 @@
   function calibPool(c) {
     return shown.filter(e => { const x = num(v(e, c.f)); return rateable(e) && x != null && !(c.f === 'Sympathy Score' && x === 2.5); });
   }
+  // Einordnen: wie viele Duelle, höchstens 2 je Kategorie (Sympathie nur, wenn gesetzt)
+  const PLACE_N = 6, PLACE_PER_CAT = 2;
+  function calibPickFocus() {
+    const F = byId(calib.focus.id), fz = calib.focus;
+    if (!F || calib.n >= fz.max) return null;
+    const cats = SCORE_CATS.map((c, i) => ({ c, i, x: num(v(F, c.f)) })).filter(o => o.x != null && !symUnknown(o.c, o.x));
+    const doneIn = (c) => duels.filter(d => d.cat === c.f && (d.a === F._id || d.b === F._id)).length;
+    // Kategorien mit den wenigsten Duellen dieser Person zuerst, je Runde höchstens PLACE_PER_CAT
+    cats.sort((a, b) => (fz.perCat[a.c.f] || 0) - (fz.perCat[b.c.f] || 0) || doneIn(a.c) - doneIn(b.c) || a.i - b.i);
+    for (const o of cats) {
+      if ((fz.perCat[o.c.f] || 0) >= PLACE_PER_CAT && calib.n < cats.length * PLACE_PER_CAT) continue;
+      const seen = new Set(duels.filter(d => d.cat === o.c.f && (d.a === F._id || d.b === F._id)).map(d => d.a === F._id ? d.b : d.a));
+      const cnt = new Map(); for (const d of duels) if (d.cat === o.c.f) { cnt.set(d.a, (cnt.get(d.a) || 0) + 1); cnt.set(d.b, (cnt.get(d.b) || 0) + 1); }
+      const pool = entries.filter(b => b !== F && rateable(b) && !seen.has(b._id) && !calib.skip.has([F._id, b._id].sort().join('|')) && (() => { const y = num(v(b, o.c.f)); return y != null && !symUnknown(o.c, y) && Math.abs(y - o.x) <= (o.c.vals ? 1 : 0.5); })());
+      if (!pool.length) continue;
+      // gleicher Wert bevorzugt; gut belegte Gegner (viele Duelle) sind verlässlichere Maßstäbe
+      pool.sort((p, q) => Math.abs(num(v(p, o.c.f)) - o.x) - Math.abs(num(v(q, o.c.f)) - o.x) || (cnt.get(q._id) || 0) - (cnt.get(p._id) || 0) || Math.random() - .5);
+      const B = pool[Math.floor(Math.random() * Math.min(3, pool.length))];
+      calib.cat = o.i;
+      fz.perCat[o.c.f] = (fz.perCat[o.c.f] || 0) + 1;
+      return Math.random() < .5 ? [F, B] : [B, F];
+    }
+    return null;
+  }
   function calibPick() {
+    if (calib.focus) return calibPickFocus();
     const c = SCORE_CATS[calib.cat], pool = calibPool(c);
     if (pool.length < 2) return null;
     const cnt = new Map(), seen = new Set();
@@ -3544,17 +3610,18 @@
     }
     return null;
   }
-  function openCalib() {
+  function openCalib(opts = {}) {
     if (calib) return;
     const el = document.createElement('div');
     el.className = 'calib';
     el.innerHTML = `
       <div class="cb-top">
-        <b class="cb-title">⚖️ Kategorie-Abgleich</b>
+        <b class="cb-title">${opts.focus ? `⚖️ Einordnen: ${esc(v(byId(opts.focus) || {}, 'Name'))}` : '⚖️ Kategorie-Abgleich'}</b>
         <div class="seg cb-cats">${SCORE_CATS.map((c, i) => `<button data-cbcat="${i}" title="Taste ${c.key}">${esc(c.label)}</button>`).join('')}</div>
         <span class="cb-count muted"></span>
         <button class="btn small cb-open" title="Vorschläge aus allen Duellen">Vorschläge (0)</button>
         <button class="btn small cb-reset" title="Bereits verglichene Paare wieder freigeben (Werte und Duelle bleiben)">↺ Paare</button>
+        ${undoBtnHTML('cb-undo')}
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
       <div class="cb-q"></div>
@@ -3563,10 +3630,15 @@
     document.body.appendChild(el);
     document.body.style.overflow = 'hidden';
     calib = { el, cat: Math.max(0, Math.min(SCORE_CATS.length - 1, ui.calibCat || 0)), pair: null, img: [0, 0], answer: null, skip: new Set(), n: 0 };
-    cbSugDirty();
+    if (opts.focus) { calib.focus = { id: opts.focus, max: PLACE_N, perCat: {} }; el.classList.add('focus'); }
+    calib.onClose = opts.onClose || null;
+    cbSugDirty(); undoUI();
     el.addEventListener('click', (ev) => {
       const t = ev.target;
       if (t.closest('.vw-x')) return closeCalib();
+      if (t.closest('.undo-btn')) return undoLast();
+      if (t.closest('[data-plclose]')) return closeCalib();
+      if (t.closest('[data-cbmore]')) { calib.focus.max += 3; return calibNext(); }
       const cc = t.closest('[data-cbcat]'); if (cc) return calibSetCat(Number(cc.dataset.cbcat));
       const an = t.closest('[data-cbans]'); if (an) return calibAnswer(an.dataset.cbans);
       const im = t.closest('[data-cbimg]'); if (im) return calibImg(Number(im.dataset.cbimg), ev.shiftKey ? -1 : 1);
@@ -3585,11 +3657,13 @@
   }
   function closeCalib() {
     if (!calib) return;
+    const after = calib.onClose;
     calib.el.remove(); calib = null;
-    if (overlay.hidden) document.body.style.overflow = '';
+    if (overlay.hidden && !rater) document.body.style.overflow = '';
     render();
+    if (after) after();
   }
-  function calibSetCat(i) { const inList = calib.list && $('.cb-scope', calib.el); calib.cat = i; ui.calibCat = i; saveUI(); inList ? calibSugList() : calibNext(); }
+  function calibSetCat(i) { if (calib.focus) return; const inList = calib.list && $('.cb-scope', calib.el); calib.cat = i; ui.calibCat = i; saveUI(); inList ? calibSugList() : calibNext(); }
   // Hinweis „später entscheiden“: die Entscheidung bleibt in „Offen“, das Paar kommt nicht nochmal
   function calibNext() {
     calib.pair = calibPick(); calib.img = [0, 0]; calib.answer = null;
@@ -3730,7 +3804,23 @@
     $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
     calibCount();
   }
+  function calibFocusDone() {
+    const { el } = calib, F = byId(calib.focus.id);
+    calib.list = true;
+    const mine = cbSugs().filter(x => x.e._id === calib.focus.id);
+    $('.cb-q', el).innerHTML = `<b>${calib.n ? `${calib.n} Duell${calib.n === 1 ? '' : 'e'} für ${esc(v(F, 'Name'))}` : `Keine passenden Gegner für ${esc(v(F, 'Name'))}`}</b>`;
+    const res = mine.length ? `<p>Das deutet auf eine Anpassung hin:</p>` + mine.map(x => `<div class="cb-fixes pl-sug"><span class="cb-conf ${x.cls}">${x.level}</span><b>${esc(x.c.label)}</b> ${fmtV(x.from)} → <b class="${x.to > x.from ? 'sg-new up' : 'sg-new down'}" style="font-size:18px">${fmtV(x.to)}</b><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>`).join('')
+      : (calib.n ? `<p class="pl-ok">✓ Passt soweit – keine klare Abweichung.</p><p class="muted">Mit mehr Duellen wird das Bild genauer; Vorschläge erscheinen auch später im Abgleich.</p>` : `<p class="muted">Es gibt gerade niemanden mit gleichem oder benachbartem Wert, gegen den noch nicht verglichen wurde.</p>`);
+    $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${res}</div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans">${calib.n ? `<button class="btn" data-cbmore>3 weitere Duelle</button>` : ''}<button class="btn primary" data-plclose>${rater ? 'weiter bewerten →' : 'fertig'}</button></div>`;
+    calibCount();
+  }
   function calibCount() {
+    if (calib.focus) {
+      const n = calib.n, mx = calib.focus.max;
+      $('.cb-count', calib.el).textContent = calib.pair && !calib.answer ? `Duell ${n + 1} von ${mx}` : `${n} von ${mx}`;
+      return;
+    }
     const c = SCORE_CATS[calib.cat], since = pairsSince(c.f);
     const done = duels.filter(d => d.cat === c.f).length, fresh = duels.filter(d => d.cat === c.f && d.ts > since).length, pool = calibPool(c).length;
     const sug = cbSugs(), nCat = sug.filter(x => x.c.f === c.f).length;
@@ -3746,6 +3836,7 @@
     calib.list = false;
     const pool = calibPool(c).length;
     calibCount();
+    if (!calib.pair && calib.focus) return calibFocusDone();
     if (!calib.pair) {
       $('.cb-q', el).innerHTML = '';
       $('.cb-body', el).innerHTML = `<div class="cb-empty"><p>${pool < 2 ? `In der aktuellen Liste sind in „${esc(c.label)}“ weniger als zwei Einträge bewertet.` : `Für „${esc(c.label)}“ gibt es gerade keine neuen Paare mit gleichem oder benachbartem Wert.`}</p><p class="muted">Andere Kategorie wählen, die Vorschläge ansehen oder mit „↺ Paare“ bereits verglichene Paare wieder freigeben.</p></div>`;
@@ -3773,15 +3864,16 @@
     setScore(id, f, val);
     if (e._calibKeep && e._calibKeep[f]) { delete e._calibKeep[f]; }
     cbSugDirty();
-    toast(`${v(e, 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok');
-    calibSugList();
+    const old = undoStack[undoStack.length - 1];
+    toast(`${v(e, 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok', old && old.id === id && old.f === f ? { label: 'Rückgängig', fn: undoLast } : null);
+    calib.focus ? calibFocusDone() : calibSugList();
   }
   function calibKeepSug(id, f) {
     const e = byId(id); if (!e) return;
     const n = duels.filter(d => d.cat === f && (d.a === id || d.b === id)).length;
     e._calibKeep = Object.assign({}, e._calibKeep, { [f]: { v: num(v(e, f)), n } });
     e._updated = Date.now(); saveQuiet(); cbSugDirty();
-    calibSugList();
+    calib.focus ? calibFocusDone() : calibSugList();
   }
   // „↺ Paare“: Duelle bleiben als Grundlage für die Vorschläge erhalten; es wird nur ein Zeitpunkt gemerkt,
   // ab dem schon verglichene Paare wieder vorkommen dürfen (pairsResetAt, wird mitsynchronisiert)
@@ -3811,8 +3903,9 @@
     const k = ev.key;
     if (k === 'Escape') { ev.preventDefault(); return closeCalib(); }
     const ci = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
-    if (ci >= 0 && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); return calibSetCat(ci); }
-    if (calib.list) { if (k === 'Enter') { ev.preventDefault(); calibNext(); } return; }
+    if (ci >= 0 && !ev.ctrlKey && !ev.metaKey && !calib.focus) { ev.preventDefault(); return calibSetCat(ci); }
+    if ((k === 'z' || k === 'Z') && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); return undoLast(); }
+    if (calib.list) { if (k === 'Enter') { ev.preventDefault(); calib.focus && !calib.pair ? closeCalib() : calibNext(); } return; }
     if (!calib.pair) return;
     if (!calib.answer) {
       if (k === 'ArrowLeft') { ev.preventDefault(); return calibAnswer('a'); }
@@ -3838,7 +3931,8 @@
     $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
     $('.rt-count', el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
     $('.rt-meta', el).innerHTML = [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', v(e, 'Professions'), siteRating(e) != null ? `meine Babepedia-Note ${v(e, 'User Rating')}` : '', v(e, 'Global Rating') ? `Babepedia Ø ${v(e, 'Global Rating')}` : '', e._ranker ? `Ranker ${e._ranker.tier} · ${e._ranker.score}` : '', v(e, 'My Rating (old)') ? `alte eigene Note ${v(e, 'My Rating (old)')}` : ''].filter(Boolean).map(esc).join(' · ');
-    rater.img = 0; rater.refOpen = {}; rater.preview = null;
+    rater.img = 0; rater.refOpen = {}; rater.preview = null; rater.startScored = hasScore(e);
+    if (rater.cmp) { rater.cmp.remove(); rater.cmp = null; }
     const ta = $('.rt-notes textarea', el); ta.value = e.Notes || ''; ta.dataset.eid = e._id;
     raterImgShow(); raterCats();
     const nx = byId(rater.ids[rater.i + 1]); if (nx) { const u = images(nx)[0]; if (u) { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = R(u); } }
@@ -3862,9 +3956,16 @@
   function raterImg(d) { const n = images(raterEntry()).length; if (n < 2) return; rater.img = (rater.img + d + n) % n; raterImgShow(); }
   function raterCats() {
     const e = raterEntry(), { el } = rater;
-    if (!rateable(e)) { $('.rt-cats', el).innerHTML = adultAskHTML(e); $('.rt-sum', el).innerHTML = ''; $('.rt-ref', el).innerHTML = ''; return; }
+    if (!rateable(e)) { const rf = rater.refEl || (rater.refEl = $('.rt-ref', el)); if (rf.parentElement !== $('.rt-panel', el)) $('.rt-sum', el).after(rf); $('.rt-cats', el).innerHTML = adultAskHTML(e); $('.rt-sum', el).innerHTML = ''; rf.innerHTML = ''; return; }
+    const ref = rater.refEl || (rater.refEl = $('.rt-ref', el));
+    if (ref.parentElement !== $('.rt-panel', el)) $('.rt-sum', el).after(ref);   // vor dem Neuzeichnen der Kategorien in Sicherheit bringen
     $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
     $('.rt-sum', el).innerHTML = scoreSummary(e);
+    // Handy: Vergleich direkt unter die markierte Kategorie, damit er ohne Scrollen sichtbar ist
+    const narrow = window.matchMedia('(max-width: 760px)').matches;
+    if (narrow) { const row = $$('.rt-cats .sc-row', el)[rater.cat]; if (row) row.after(ref); }
+    ref.classList.toggle('inline', narrow);
+    const pb = $('[data-rt-place]', el); if (pb) pb.hidden = !hasScore(e);
     raterRef();
   }
   // Vergleich: wer liegt in der markierten Kategorie gleich, eine Stufe darüber und darunter?
@@ -3880,7 +3981,7 @@
     if (!byVal.size) { box.innerHTML = `<div class="muted rt-ref-empty">Vergleich: Sobald andere Einträge in „${esc(c.label)}“ bewertet sind, siehst du hier, wer gleich, darüber und darunter liegt.</div>`; return; }
     const lbl = (n) => String(n).replace('.5', '½');
     if (center == null) {
-      box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">– Wert wählen (oder mit der Maus über eine Zahl fahren), dann siehst du, wer gleich, darüber und darunter liegt.</span></div>
+      box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">– ${TOUCH() ? 'Wert antippen' : 'Wert wählen (oder mit der Maus über eine Zahl fahren)'}, dann siehst du, wer gleich, darüber und darunter liegt.</span></div>
         <div class="rt-ref-dist">${[...byVal.keys()].sort((a, b) => b - a).map(n => `<span>${lbl(n)}: ${byVal.get(n).length}</span>`).join('')}</div>`;
       return;
     }
@@ -3898,7 +3999,7 @@
           ${peers.length > lim ? `<button class="rt-ref-more" data-ref-more="${n}">+${peers.length - lim}</button>` : ''}${!peers.length ? '<span class="muted">– noch niemand</span>' : ''}</div>
       </div>`;
     };
-    box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">${rater.preview ? 'Vorschau für ' + lbl(center) : 'Vergleich zu ' + lbl(center)} – Klick auf ein Bild zeigt es groß, auf den Wert setzt ihn</span></div>
+    box.innerHTML = `<div class="rt-ref-head"><b>${esc(c.label)}</b> <span class="muted">${rater.preview ? 'Vorschau für ' + lbl(center) : 'Vergleich zu ' + lbl(center)} – ${TOUCH() ? 'Bild antippen = Gegenüberstellung' : 'Klick auf ein Bild zeigt es groß'}, auf den Wert setzt ihn</span></div>
       ${row(above, 'up')}${row(center, 'same')}${row(below, 'down')}`;
   }
   function raterSet(ci, val, advance) {
@@ -3913,8 +4014,30 @@
     raterCats();
     $('.rt-count', rater.el).textContent = `${rater.i + 1} / ${rater.ids.length}` + (rater.done ? ` · ${rater.done} bewertet` : '');
   }
-  function raterStep(d) {
+  // Gegenüberstellung (vor allem Handy): aktuelles Bild links, Vergleichsperson rechts, Antippen schließt
+  const TOUCH = () => window.matchMedia('(hover: none)').matches;
+  function raterCompare(id) {
+    const e = raterEntry(), x = byId(id); if (!e || !x) return;
+    const c = SCORE_CATS[rater.preview ? rater.preview.cat : rater.cat];
+    const side = (y, img) => { const u = img || images(y)[0]; const src = u ? R(u) : ''; const val = num(v(y, c.f));
+      return `<div class="rt-cmp-side"><div class="rt-cmp-img">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${esc(thumbUrl(src) || '')}'">` : `<span>${esc(initials(v(y, 'Name')))}</span>`}</div>
+        <div class="rt-cmp-n"><b>${esc(v(y, 'Name'))}</b><span>${esc(c.label)}: ${val == null ? '–' : fmtV(val)}</span></div></div>`; };
+    if (rater.cmp) rater.cmp.remove();
+    const box = document.createElement('div'); box.className = 'rt-cmp';
+    box.innerHTML = `<div class="rt-cmp-in">${side(e, images(e)[rater.img])}${side(x)}</div><p class="muted">antippen zum Schließen</p>`;
+    rater.el.appendChild(box); rater.cmp = box;
+  }
+  // Einordnen: kurze Duelle nur mit dem aktuellen Eintrag; danach zurück in den Bewertungsmodus
+  function raterPlace(thenNext) {
+    const e = raterEntry(); if (!e || !hasScore(e)) return;
     if (rater.saveNote) rater.saveNote();
+    rater.placed = rater.placed || new Set(); rater.placed.add(e._id);
+    openCalib({ focus: e._id, onClose: () => { if (!rater) return; if (thenNext) raterStep(1, true); else raterCats(); } });
+  }
+  function raterStep(d, noPlace) {
+    if (rater.saveNote) rater.saveNote();
+    const cur = raterEntry();
+    if (d > 0 && !noPlace && ui.raterPlace && cur && hasScore(cur) && !rater.startScored && !(rater.placed && rater.placed.has(cur._id))) { raterPlace(true); return; }
     const n = rater.i + d;
     if (n < 0) return;
     if (n >= rater.ids.length) { toast(`Fertig – ${rater.done} Einträge bewertet.`, 'ok'); closeRater(); return; }
@@ -3960,9 +4083,12 @@
     if (k === 'Enter' || k === ' ') { ev.preventDefault(); raterStep(1); return; }
     if (k === 'Backspace') { ev.preventDefault(); raterStep(-1); return; }
     if (k === 'Delete') { raterSet(rater.cat, '', false); return; }
+    if ((k === 'z' || k === 'Z') && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); undoLast(); return; }
+    if (k === 'e' || k === 'E') { ev.preventDefault(); raterPlace(false); return; }
   }
   function closeRater() {
     if (!rater) return;
+    if (rater.cmp) rater.cmp.remove();
     if (rater.saveNote) rater.saveNote();
     const backTo = rater.fromDetail ? rater.ids[rater.i] : null;
     rater.el.remove(); rater = null;
@@ -3979,12 +4105,17 @@
     document.body.appendChild(lb);
   }
 
-  function toast(msg, kind = '') {
+  function toast(msg, kind = '', action) {   // action = { label, fn } → Knopf im Hinweis (z. B. „Rückgängig“)
     const t = document.createElement('div');
     t.className = 'toast ' + kind;
     t.textContent = msg;
+    if (action) {
+      const b = document.createElement('button'); b.className = 'toast-act'; b.textContent = action.label;
+      b.addEventListener('click', () => { t.remove(); action.fn(); });
+      t.appendChild(b);
+    }
     $('#toasts').appendChild(t);
-    setTimeout(() => t.remove(), 4200);
+    setTimeout(() => t.remove(), action ? 7000 : 4200);
   }
 
   function toggleFav(id) {
@@ -4058,6 +4189,8 @@
     if (t.closest('#btn-menu')) { menu.hidden = !menu.hidden; return; }
     if (!t.closest('#menu')) menu.hidden = true;
 
+    if (t.closest('.undo-btn')) { undoLast(); return; }
+    const pl = t.closest('[data-place]'); if (pl) { const id = pl.dataset.place; closeModal(true); openCalib({ focus: id, onClose: () => showDetail(id) }); return; }
     const rm = t.closest('[data-rate-mode]');
     if (rm && !t.closest('.rater')) { openRaterFor(rm.dataset.rateMode); return; }
     const ad = t.closest('[data-adult]');
@@ -4132,6 +4265,7 @@
     if (slide) { slideKey(ev); return; }
     if (calib) { calibKey(ev); return; }
     if (rater) { raterKey(ev); return; }
+    if ((ev.key === 'z' || ev.key === 'Z') && (ev.ctrlKey || ev.metaKey) && !(ev.target.closest && ev.target.closest('input, textarea, select, [contenteditable]')) && undoStack.length) { ev.preventDefault(); undoLast(); return; }
     if (viewer) {
       const k = ev.key;
       if (k === 'Escape') { closeViewer(); return; }

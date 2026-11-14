@@ -1008,3 +1008,36 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
   .sg-card { width: calc(50% - 16px); max-width: 160px; }
   .sg-name { font-size: 16px; }
 }
+
+/* Rückgängig, Hinweis-Knopf */
+.toast { display: flex; align-items: center; gap: 10px; }
+.toast-act { margin-left: auto; border: 1px solid var(--border); background: var(--surface-2); color: var(--accent-2); border-radius: 7px; padding: 3px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.undo-btn[hidden] { display: none !important; }
+/* Einordnen (Abgleich nur mit einer Person) */
+.calib.focus .cb-cats, .calib.focus .cb-open, .calib.focus .cb-reset { display: none; }
+.calib.focus .cb-title { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-done { align-items: center; text-align: center; padding-top: 30px; font-size: 15px; }
+.pl-ok { font-size: 18px; color: var(--good); font-weight: 650; }
+.pl-sug { justify-content: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
+.rt-placebtn[hidden] { display: none; }
+/* Bewertungsmodus: Gegenüberstellung (Handy) */
+.rt-cmp { position: absolute; inset: 0; z-index: 5; background: rgba(8,9,12,.985); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; padding-top: calc(16px + env(safe-area-inset-top)); }
+.rt-cmp-in { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 900px; }
+.rt-cmp-img { aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; font-size: 30px; font-weight: 800; color: var(--faint); }
+.rt-cmp-img img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+.rt-cmp-side:first-child .rt-cmp-img { box-shadow: 0 0 0 2px var(--accent); }
+.rt-cmp-n { display: flex; flex-direction: column; align-items: center; margin-top: 6px; font-size: 13px; }
+.rt-cmp-n span { color: var(--muted); }
+/* Handy: Vergleich direkt unter der markierten Kategorie, Leisten waagerecht wischbar */
+.rt-ref.inline { margin: 2px 0 10px; padding: 8px; border: 1px solid var(--accent); border-top-width: 1px; border-radius: 10px; background: var(--surface); }
+.rt-ref.inline .rt-ref-row { grid-template-columns: 54px 1fr; }
+.rt-ref.inline .rt-ref-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.rt-ref.inline .rt-ref-strip .rt-ref-item { flex: 0 0 52px; width: 52px; }
+.rt-ref.inline .rt-ref-dist { flex-wrap: wrap; }
+.rt-place { font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 800px) {
+  .rt-top { flex-wrap: wrap; row-gap: 6px; }
+  .rt-top .rt-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rt-top .rt-place { order: 5; }
+  .rt-top .rt-undo { order: 6; padding: 4px 9px; }
+}
