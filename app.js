@@ -2025,11 +2025,11 @@
   }
   // Karten-Stil wie eine Sammelkarte: große Tool-Note + Flagge links, Kategorien rechts
   const futV = (x) => x == null ? '–' : (x % 1 ? Math.floor(x) + '½' : String(x));
-  function futHTML(e) {
+  function futHTML(e, hl) {   // hl = { f, dir: 'up'|'down' } hebt einen Wert hervor (Abgleich-Vorschläge)
     const s = scoreOf(e); if (!s) return '';
     const st = SCORE_CATS.map(c => {
       const x = num(v(e, c.f)), unset = x == null;
-      return `<span class="fut-s${unset ? ' unset' : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}"><b>${futV(x)}</b><i>${esc(c.short)}</i></span>`;
+      return `<span class="fut-s${unset ? ' unset' : ''}${hl && hl.f === c.f ? ' chg ' + hl.dir : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}"><b>${futV(x)}</b><i>${esc(c.short)}</i></span>`;
     }).join('');
     const r = ratingDiff(e);
     const bp = IS_CHARS ? (e._ranker ? `<span class="fut-s" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank}/${e._ranker.total}"><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><i>RNK</i></span>` : `<span class="fut-s unset" title="nicht im Ranker"><b>–</b><i>RNK</i></span>`)
@@ -2037,7 +2037,7 @@
       : r.state === 'diff' ? `<span class="fut-s ${r.site > r.mine ? 'up' : 'down'}" title="meine Babepedia-Note ${r.site} – ${r.site > r.mine ? 'höher' : 'niedriger'} als die Tool-Note (gerundet ${r.mine})"><b>${r.site > r.mine ? '▲' : '▼'}${r.site}</b><i>BP</i></span>`
       : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
     const nat = IS_CHARS ? '' : fieldValues(e, 'Nationality')[0];
-    return `<div class="fut" title="Tool-Note ${esc(v(e, 'Score'))}">
+    return `<div class="fut${hl ? ' fut-' + hl.dir : ''}" title="Tool-Note ${esc(v(e, 'Score'))}">
       <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}${(() => { const pc = ui.cardBadges.includes('primary') && primaryCat(e); return pc ? `<i class="fut-pos${pc.manual ? '' : ' auto'}" title="Hauptbereich: ${esc(pc.cat)}${pc.manual ? '' : ' (automatisch)'}">${primaryIcon(pc.cat)}</i>` : ''; })()}</span></div>
       <div class="fut-grid">${st}${bp}</div></div>`;
   }
@@ -3692,21 +3692,41 @@
       <span class="cb-fixes"><button class="btn small primary" data-cbnext>weiter <kbd>Enter</kbd></button></span></div>`;
   }
   // Liste der Vorschläge (aktuelle Kategorie oder alle)
+  // Mini-Kachel mit Sammelkarten-Overlay (vorher / nachher)
+  function sugCardHTML(e, label, hl) {
+    const img = images(e)[0], src = img ? R(img) : '';
+    return `<figure class="sg-card${hl ? ' after ' + hl.dir : ''}"><div class="sg-img"><span class="sg-ini">${esc(initials(v(e, 'Name')))}</span>${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(thumbUrl(src) || '')}" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt}else{this.remove()}">` : ''}${futHTML(e, hl)}</div><figcaption>${label}</figcaption></figure>`;
+  }
+  function sugDots(tab) {
+    return tab.map(([o, t]) => `<span class="sg-vs"><i>gegen ${fmtV(o)}</i>${'<b class="w" title="gewonnen"></b>'.repeat(t[0])}${'<b class="t" title="gleich"></b>'.repeat(t[1])}${'<b class="l" title="verloren"></b>'.repeat(t[2])}</span>`).join('');
+  }
   function calibSugList() {
     const { el } = calib, all = !!calib.sugAll, c = SCORE_CATS[calib.cat];
     calib.list = true;
     const list = cbSugs().filter(x => all || x.c.f === c.f);
-    $('.cb-q', el).innerHTML = `<b>Vorschläge aus ${duels.length} Duellen</b> <span class="muted">– je mehr du votest, desto sicherer</span>
+    const cnt = (k) => list.filter(x => x.cls === k).length, ups = list.filter(x => x.to > x.from).length;
+    $('.cb-q', el).innerHTML = `<b>Vorschläge aus ${duels.length} Duellen</b>
       <span class="seg cb-scope"><button data-cbscope="cat" class="${all ? '' : 'on'}">${esc(c.label)}</button><button data-cbscope="all" class="${all ? 'on' : ''}">alle Kategorien</button></span>`;
-    $('.cb-body', el).innerHTML = `<div class="cb-list">${list.length ? list.map(x => {
-      const eff = noteEffect(x.e, x.c.f, x.to);
-      const tab = x.tab.map(([o, t]) => `gegen ${fmtV(o)}: <b>${t[0]}</b>–${t[1]}–<b>${t[2]}</b>`).join(' · ');
-      return `<div class="cb-item"><div class="cb-item-h"><span class="cb-conf ${x.cls}" title="${Math.round(x.conf * 100)} % Wahrscheinlichkeit, dass der Wert eher ${x.to > x.from ? 'höher' : 'niedriger'} liegt">${x.level} · ${Math.round(x.conf * 100)} %</span>
-          <b>${esc(x.c.label)}</b> · <button class="linklike" data-cbopen="${esc(x.e._id)}">${esc(v(x.e, 'Name'))}</button> <span class="cb-arrow">${fmtV(x.from)} → <b>${fmtV(x.to)}</b></span></div>
-        <div class="cb-item-m muted">${x.n} Duelle (gewonnen–gleich–verloren) · ${tab}${eff ? ` · ${esc(eff)}` : ''}</div>
-        <div class="cb-fixes"><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">auf ${fmtV(x.to)} setzen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div></div>`;
-    }).join('') : `<p class="muted">Keine Vorschläge${all ? '' : ` in ${esc(c.label)}`}. Vorschläge entstehen, sobald ein Eintrag mindestens ${CB_MIN_DUELS} Duelle hat und die Ergebnisse klar in eine Richtung zeigen.</p>`}
-      <p class="muted cb-help">Sicherheit: <span class="cb-conf hi">sicher</span> ab 90 % · <span class="cb-conf mid">wahrscheinlich</span> ab 75 % · <span class="cb-conf lo">möglich</span> ab 60 %. Gerechnet wird mit den heutigen Werten der Gegner – änderst du einen Wert, ordnen sich die Vorschläge neu. „So lassen“ gilt, bis zwei neue Duelle dazukommen.</p></div>`;
+    const head = list.length ? `<div class="sg-sum"><span class="cb-conf hi">${cnt('hi')} sicher</span><span class="cb-conf mid">${cnt('mid')} wahrscheinlich</span><span class="cb-conf lo">${cnt('lo')} möglich</span><span class="sg-sep"></span><span class="sg-dir up">▲ ${ups} höher</span><span class="sg-dir down">▼ ${list.length - ups} niedriger</span></div>` : '';
+    $('.cb-body', el).innerHTML = `<div class="cb-list sg-list">${head}${list.length ? list.map(x => {
+      const dir = x.to > x.from ? 'up' : 'down', pct = Math.round(x.conf * 100);
+      const after = Object.assign({}, x.e, { [x.c.f]: String(x.to) });
+      const sa = scoreOf(after); if (sa) { after.Score = (Math.round(sa.ten * 10) / 10).toFixed(1); after['My Rating'] = String(Math.round(sa.ten)); }
+      const sb = scoreOf(x.e), r1 = (t) => Math.round(t * 10) / 10, f1 = (t) => r1(t).toFixed(1).replace('.', ',');
+      const dn = sa && sb ? Math.round((r1(sa.ten) - r1(sb.ten)) * 10) / 10 : null;
+      const note = sa && sb ? `<span class="sg-note ${dn > 0 ? 'up' : dn < 0 ? 'down' : ''}">Tool-Note ${f1(sb.ten)} → <b>${f1(sa.ten)}</b>${dn ? ` (${dn > 0 ? '+' : '−'}${f1(Math.abs(dn))})` : ` (${sb.ten >= 10 ? 'bleibt am Maximum' : 'gleich'})`}</span>` : '<span class="sg-note muted">Tool-Note noch nicht vollständig</span>';
+      return `<article class="sg ${dir} ${x.cls}">
+        <div class="sg-cards">${sugCardHTML(x.e, 'heute')}<span class="sg-to ${dir}">${dir === 'up' ? '▲' : '▼'}</span>${sugCardHTML(after, 'nachher', { f: x.c.f, dir })}</div>
+        <div class="sg-info">
+          <div class="sg-top"><span class="cb-conf ${x.cls}">${x.level}</span><span class="sg-meter" title="${pct} % Wahrscheinlichkeit, dass der Wert eher ${dir === 'up' ? 'höher' : 'niedriger'} liegt"><i style="width:${pct}%"></i></span><span class="sg-pct">${pct} %</span></div>
+          <button class="sg-name linklike" data-cbopen="${esc(x.e._id)}">${esc(v(x.e, 'Name'))}</button>
+          <div class="sg-change"><span class="sg-cat">${esc(x.c.label)}</span><span class="sg-from">${fmtV(x.from)}</span><span class="sg-arr ${dir}">→</span><span class="sg-new ${dir}">${fmtV(x.to)}</span></div>
+          ${note}
+          <div class="sg-ev"><span class="muted">${x.n} Duelle</span>${sugDots(x.tab)}</div>
+          <div class="sg-btns"><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">${esc(x.c.label)} auf ${fmtV(x.to)} setzen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>
+        </div></article>`;
+    }).join('') : `<div class="sg-empty"><div class="sg-empty-ico">⚖️</div><p>Keine Vorschläge${all ? '' : ` in ${esc(c.label)}`}.</p><p class="muted">Vorschläge entstehen, sobald ein Eintrag mindestens ${CB_MIN_DUELS} Duelle hat und die Ergebnisse klar in eine Richtung zeigen.</p></div>`}
+      <p class="muted cb-help">Punkte: <b class="sg-dot w"></b> gewonnen · <b class="sg-dot t"></b> gleich · <b class="sg-dot l"></b> verloren, jeweils gegen Gegner mit diesem Wert. Sicherheit: <span class="cb-conf hi">sicher</span> ab 90 % · <span class="cb-conf mid">wahrscheinlich</span> ab 75 % · <span class="cb-conf lo">möglich</span> ab 60 %. Gerechnet wird mit den heutigen Werten der Gegner – änderst du einen Wert, ordnen sich die Vorschläge neu. „So lassen“ gilt, bis zwei neue Duelle dazukommen.</p></div>`;
     $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
     calibCount();
   }
