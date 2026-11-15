@@ -2825,7 +2825,6 @@
     if (IS_CHARS) return '';
     const cats = catList(e); if (!cats.length) return '';
     const pc = primaryCat(e);
-    if (cats.length === 1) return `<div class="sc-row pr-row"><span class="sc-lbl">Bereich<small class="muted">nur einer</small></span><span class="pr-chips"><span class="pr-chip on single">${primaryIcon(cats[0])} ${esc(primaryLabel(cats[0]))}</span></span></div>`;
     return `<div class="sc-row pr-row"><span class="sc-lbl">Hauptbereich<small class="muted">${pc && pc.manual ? '✓ bestätigt' : 'automatisch – antippen zum Bestätigen'}</small></span>
       <span class="pr-chips">${cats.map(c => { const on = pc && pc.cat === c; return `<button type="button" class="pr-chip${on ? ' on' : ''}${on && !pc.manual ? ' auto' : ''}" data-primary="${esc(c)}" data-id="${esc(e._id)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt) – antippen = wieder automatisch' : 'Automatisch gewählt – antippen = bestätigen') : 'Als Hauptbereich festlegen'}">${primaryIcon(c)} ${esc(primaryLabel(c))}${on && pc.manual ? ' ✓' : ''}</button>`; }).join('')}</span></div>`;
   }
