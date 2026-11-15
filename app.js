@@ -2791,7 +2791,7 @@
     toast('Rückgängig: ' + undoText(u), 'ok');
     undoUI();
     if (rater) { const cur = raterEntry(); if (cur && cur._id === u.id) raterCats(); }
-    if (calib && calib.list) { $('.cb-scope', calib.el) ? calibSugList() : null; }
+    if (calib && calib.list) { calib.mode === 'sug' ? calibSugList() : calib.mode === 'done' ? calibFocusDone() : null; }
     else if (calib) calibCount();
     const dt = !overlay.hidden && $('.detail', modal);
     if (dt && dt.dataset.detail === u.id) showDetail(u.id);
@@ -3947,14 +3947,17 @@
     el.className = 'calib';
     el.innerHTML = `
       <div class="cb-top">
-        <b class="cb-title">${opts.focus ? `⚖️ Einordnen: ${esc(v(byId(opts.focus) || {}, 'Name'))}` : '⚖️ Kategorie-Abgleich'}</b>
-        <div class="seg cb-cats">${SCORE_CATS.map((c, i) => `<button data-cbcat="${i}" title="Taste ${c.key}">${esc(c.label)}</button>`).join('')}</div>
-        <span class="cb-count muted"></span>
-        <button class="btn small cb-open" title="Vorschläge aus allen Duellen">Vorschläge (0)</button>
-        <button class="btn small cb-reset" title="Bereits verglichene Paare wieder freigeben (Werte und Duelle bleiben)">↺ Paare</button>
+        <b class="cb-title">${opts.focus ? `⚖️ Einordnen: ${esc(v(byId(opts.focus) || {}, 'Name'))}` : '⚖️ Abgleich'}</b>
+        <div class="cb-modes">
+          <button class="cb-mode cb-duel" data-cbmode="duel" title="Paare vergleichen (V wechselt)">⚔️ Vergleichen</button>
+          <button class="cb-mode cb-open" data-cbmode="sug" title="Vorschläge aus allen Duellen (V wechselt)">💡 Vorschläge <span class="cb-n"></span></button>
+        </div>
+        <span class="cb-sp"></span>
         ${undoBtnHTML('cb-undo')}
+        <button class="btn small cb-reset" title="Bereits verglichene Paare wieder freigeben (Werte und Duelle bleiben)">↺ Paare</button>
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
+      <div class="cb-sub"><div class="cb-cats"></div><span class="cb-count muted"></span></div>
       <div class="cb-q"></div>
       <div class="cb-body"></div>
       <div class="cb-foot"></div>`;
@@ -3971,19 +3974,19 @@
       if (t.closest('.undo-btn')) return undoLast();
       if (t.closest('[data-plclose]')) return closeCalib();
       if (t.closest('[data-cbmore]')) { calib.focus.max += 3; return calibNext(); }
-      const cc = t.closest('[data-cbcat]'); if (cc) return calibSetCat(Number(cc.dataset.cbcat));
+      const md = t.closest('[data-cbmode]'); if (md) return md.dataset.cbmode === 'sug' ? calibSugList() : calibNext();
+      const cc = t.closest('[data-cbcat]'); if (cc) { if (cc.dataset.cbcat === 'all') { calib.sugAll = true; return calibSugList(); } calib.sugAll = false; return calibSetCat(Number(cc.dataset.cbcat)); }
+      const nm = t.closest('[data-cbopen]'); if (nm) { const id = nm.dataset.cbopen; closeCalib(); showDetail(id); return; }
       const an = t.closest('[data-cbans]'); if (an) return calibAnswer(an.dataset.cbans);
       const im = t.closest('[data-cbimg]'); if (im) return calibImg(Number(im.dataset.cbimg), ev.shiftKey ? -1 : 1);
       const ap = t.closest('[data-cbapply]'); if (ap) return calibApply(ap.dataset.cbapply, ap.dataset.cat, Number(ap.dataset.val));
       const ks = t.closest('[data-cbkeepsug]'); if (ks) return calibKeepSug(ks.dataset.cbkeepsug, ks.dataset.cat);
-      const sc = t.closest('[data-cbscope]'); if (sc) { calib.sugAll = sc.dataset.cbscope === 'all'; return calibSugList(); }
-      if (t.closest('.cb-open')) return calib.list ? calibNext() : calibSugList();
       if (t.closest('.cb-reset')) return calibResetView();
       const rs = t.closest('[data-cbreset]'); if (rs) return calibReset(rs.dataset.cbreset);
       if (t.closest('[data-cbback]')) return calibNext();
       if (t.closest('[data-cbnext]')) return calibNext();
       if (t.closest('[data-cbskip]')) { calib.skip.add(calib.pair.map(e => e._id).sort().join('|')); return calibNext(); }
-      const nm = t.closest('[data-cbopen]'); if (nm) { const id = nm.dataset.cbopen; closeCalib(); showDetail(id); }
+
     });
     calibNext();
   }
@@ -3995,7 +3998,7 @@
     render();
     if (after) after();
   }
-  function calibSetCat(i) { if (calib.focus) return; const inList = calib.list && $('.cb-scope', calib.el); calib.cat = i; ui.calibCat = i; saveUI(); inList ? calibSugList() : calibNext(); }
+  function calibSetCat(i) { if (calib.focus) return; const inList = calib.list && calib.mode === 'sug'; calib.sugAll = false; calib.cat = i; ui.calibCat = i; saveUI(); inList ? calibSugList() : calibNext(); }
   // Hinweis „später entscheiden“: die Entscheidung bleibt in „Offen“, das Paar kommt nicht nochmal
   function calibNext() {
     calib.pair = calibPick(); calib.img = [0, 0]; calib.answer = null;
@@ -4011,11 +4014,16 @@
     const c = SCORE_CATS[calib.cat], imgs = images(e), k = calib.img[side];
     const src = imgs.length ? R(imgs[k]) : '';
     const x = num(v(e, c.f));
-    const mark = calib.answer && ((calib.answer === 'a' && side === 0) || (calib.answer === 'b' && side === 1)) ? ' win' : calib.answer === '=' ? ' tie' : '';
+    const win = calib.answer && ((calib.answer === 'a' && side === 0) || (calib.answer === 'b' && side === 1));
+    const mark = win ? ' win' : calib.answer === '=' ? ' tie' : calib.answer ? ' lose' : '';
+    const dots = imgs.length > 1 ? `<span class="cb-dots">${imgs.slice(0, 12).map((_, i) => `<i class="${i === k ? 'on' : ''}"></i>`).join('')}${imgs.length > 12 ? `<small>${k + 1}/${imgs.length}</small>` : ''}</span>` : '';
     return `<div class="cb-pane${mark}">
-      <button class="cb-img" data-cbimg="${side}" title="Klick: nächstes Bild (Shift: vorheriges)">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" draggable="false" onerror="this.onerror=null;this.src='${esc(thumbUrl(src) || '')}'">` : '<span class="muted">Keine Bilder</span>'}${imgs.length > 1 ? `<span class="cb-imgc">${k + 1} / ${imgs.length}</span>` : ''}</button>
-      <div class="cb-name"><button class="linklike" data-cbopen="${esc(e._id)}" title="Details öffnen">${esc(v(e, 'Name'))}</button>
-        <span class="cb-val">${reveal ? `${esc(c.label)}: <b>${fmtV(x)}</b>` : `${esc(c.label)}: <span class="muted">verdeckt</span>`}</span></div>
+      <button class="cb-img" data-cbimg="${side}" title="Antippen: nächstes Bild (Shift: vorheriges)">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" draggable="false" onerror="this.onerror=null;this.src='${esc(thumbUrl(src) || '')}'">` : `<span class="cb-ini">${esc(initials(v(e, 'Name')))}</span>`}
+        ${dots}
+        <span class="cb-key">${side ? '→' : '←'}</span>
+        ${reveal ? `<span class="cb-reveal${win ? ' win' : ''}"><small>${esc(c.label)}</small>${x == null ? '–' : fmtV(x)}</span>` : ''}
+        <span class="cb-cap"><span class="cb-nm" data-cbopen="${esc(e._id)}" title="Details öffnen">${esc(v(e, 'Name'))}</span></span>
+      </button>
     </div>`;
   }
   // Bewertet ein einzelnes Duell mit den AKTUELLEN Werten (nur als Rückmeldung direkt nach dem Vote)
@@ -4129,11 +4137,10 @@
   }
   function calibSugList() {
     const { el } = calib, all = !!calib.sugAll, c = SCORE_CATS[calib.cat];
-    calib.list = true;
+    calib.list = true; calib.mode = 'sug';
     const list = cbSugs().filter(x => all || x.c.f === c.f);
     const cnt = (k) => list.filter(x => x.cls === k).length, ups = list.filter(x => x.to > x.from).length;
-    $('.cb-q', el).innerHTML = `<b>Vorschläge aus ${duels.length} Duellen</b>
-      <span class="seg cb-scope"><button data-cbscope="cat" class="${all ? '' : 'on'}">${esc(c.label)}</button><button data-cbscope="all" class="${all ? 'on' : ''}">alle Kategorien</button></span>`;
+    $('.cb-q', el).innerHTML = `<span class="cb-qlabel">💡 Vorschläge</span><span class="cb-qcat">${all ? 'alle Kategorien' : esc(c.label)}</span>`;
     const head = list.length ? `<div class="sg-sum"><span class="cb-conf hi">${cnt('hi')} sicher</span><span class="cb-conf mid">${cnt('mid')} wahrscheinlich</span><span class="cb-conf lo">${cnt('lo')} möglich</span><span class="sg-sep"></span><span class="sg-dir up">▲ ${ups} höher</span><span class="sg-dir down">▼ ${list.length - ups} niedriger</span></div>` : '';
     $('.cb-body', el).innerHTML = `<div class="cb-list sg-list">${head}${list.length ? list.map(x => {
       const dir = x.to > x.from ? 'up' : 'down', pct = Math.round(x.conf * 100);
@@ -4154,12 +4161,12 @@
         </div></article>`;
     }).join('') : `<div class="sg-empty"><div class="sg-empty-ico">⚖️</div><p>Keine Vorschläge${all ? '' : ` in ${esc(c.label)}`}.</p><p class="muted">Vorschläge entstehen, sobald ein Eintrag mindestens ${CB_MIN_DUELS} Duelle hat und die Ergebnisse klar in eine Richtung zeigen.</p></div>`}
       <p class="muted cb-help">Punkte: <b class="sg-dot w"></b> gewonnen · <b class="sg-dot t"></b> gleich · <b class="sg-dot l"></b> verloren, jeweils gegen Gegner mit diesem Wert. Sicherheit: <span class="cb-conf hi">sicher</span> ab 90 % · <span class="cb-conf mid">wahrscheinlich</span> ab 75 % · <span class="cb-conf lo">möglich</span> ab 60 %. Gerechnet wird mit den heutigen Werten der Gegner – änderst du einen Wert, ordnen sich die Vorschläge neu. „So lassen“ gilt, bis zwei neue Duelle dazukommen.</p></div>`;
-    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>⚔️ weiter vergleichen <kbd>V</kbd></button></div>`;
     calibCount();
   }
   function calibFocusDone() {
     const { el } = calib, F = byId(calib.focus.id);
-    calib.list = true;
+    calib.list = true; calib.mode = 'done';
     const mine = cbSugs().filter(x => x.e._id === calib.focus.id);
     $('.cb-q', el).innerHTML = `<b>${calib.n ? `${calib.n} Duell${calib.n === 1 ? '' : 'e'} für ${esc(v(F, 'Name'))}` : `Keine passenden Gegner für ${esc(v(F, 'Name'))}`}</b>`;
     const res = mine.length ? `<p>Das deutet auf eine Anpassung hin:</p>` + mine.map(x => `<div class="cb-fixes pl-sug"><span class="cb-conf ${x.cls}">${x.level}</span><b>${esc(x.c.label)}</b> ${fmtV(x.from)} → <b class="${x.to > x.from ? 'sg-new up' : 'sg-new down'}" style="font-size:18px">${fmtV(x.to)}</b><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>`).join('')
@@ -4174,19 +4181,30 @@
       $('.cb-count', calib.el).textContent = calib.pair && !calib.answer ? `Duell ${n + 1} von ${mx}` : `${n} von ${mx}`;
       return;
     }
-    const c = SCORE_CATS[calib.cat], since = pairsSince(c.f);
+    const c = SCORE_CATS[calib.cat], since = pairsSince(c.f), el = calib.el;
     const done = duels.filter(d => d.cat === c.f).length, fresh = duels.filter(d => d.cat === c.f && d.ts > since).length, pool = calibPool(c).length;
-    const sug = cbSugs(), nCat = sug.filter(x => x.c.f === c.f).length;
-    $('.cb-count', calib.el).textContent = `${done} Duell${done === 1 ? '' : 'e'} in ${c.label}${since ? ` (${fresh} seit Zurücksetzen)` : ''}${calib.n ? ` · ${calib.n} in dieser Runde` : ''} · ${pool} bewertet`;
-    const ob = $('.cb-open', calib.el);
-    ob.textContent = `Vorschläge (${nCat}${sug.length !== nCat ? ` / ${sug.length}` : ''})`;
-    ob.title = `${nCat} in ${c.label}, ${sug.length} in allen Kategorien`;
-    ob.classList.toggle('has', sug.length > 0); ob.classList.toggle('on', !!calib.list);
+    const sug = cbSugs(), strong = sug.filter(x => x.cls !== 'lo');
+    const sugMode = calib.list && calib.mode === 'sug', duelMode = !calib.list;
+    // Kategorie-Chips: Duelle + Vorschläge je Kategorie; im Vorschlags-Modus zusätzlich „Alle“
+    $('.cb-cats', el).innerHTML = (sugMode ? `<button class="cb-chip${calib.sugAll ? ' on' : ''}" data-cbcat="all"><span>Alle</span>${sug.length ? `<em class="${strong.some(x => x.cls === 'hi') ? 'hi' : strong.length ? 'mid' : 'lo'}">${sug.length}</em>` : ''}</button>` : '')
+      + SCORE_CATS.map((x, i) => {
+        const ns = sug.filter(y => y.c.f === x.f), hi = ns.some(y => y.cls === 'hi'), mid = ns.some(y => y.cls === 'mid');
+        const on = i === calib.cat && !(sugMode && calib.sugAll);
+        return `<button class="cb-chip${on ? ' on' : ''}" data-cbcat="${i}" title="${esc(x.label)} · Taste ${x.key}${ns.length ? ` · ${ns.length} Vorschläge` : ''}"><span>${esc(x.label)}</span>${ns.length ? `<em class="${hi ? 'hi' : mid ? 'mid' : 'lo'}">${ns.length}</em>` : ''}<kbd>${x.key}</kbd></button>`;
+      }).join('');
+    const st = calib.stats || { ok: 0, warn: 0 };
+    $('.cb-count', el).innerHTML = duelMode
+      ? `<b>${done}</b> Duelle in ${esc(c.label)}${since ? ` <span title="seit dem letzten Zurücksetzen">(${fresh} neu)</span>` : ''} · ${pool} bewertet${calib.n ? ` · Runde: <b>${calib.n}</b> <span class="ok">✓ ${st.ok}</span> <span class="warn">⚠︎ ${st.warn}</span>` : ''}`
+      : sugMode ? `<b>${sug.length}</b> Vorschläge aus ${duels.length} Duellen` : '';
+    const ob = $('.cb-open', el), n = $('.cb-n', ob);
+    n.textContent = strong.length ? strong.length : sug.length ? sug.length : '';
+    n.className = 'cb-n ' + (strong.some(x => x.cls === 'hi') ? 'hi' : strong.length ? 'mid' : 'lo');
+    ob.title = `${strong.length} sichere/wahrscheinliche, ${sug.length} insgesamt (V wechselt)`;
+    ob.classList.toggle('on', sugMode); $('.cb-duel', el).classList.toggle('on', duelMode);
   }
   function calibRender() {
     const { el } = calib, c = SCORE_CATS[calib.cat];
-    $$('.cb-cats button', el).forEach((b, i) => b.classList.toggle('on', i === calib.cat));
-    calib.list = false;
+    calib.list = false; calib.mode = 'duel';
     const pool = calibPool(c).length;
     calibCount();
     if (!calib.pair && calib.focus) return calibFocusDone();
@@ -4196,12 +4214,13 @@
       $('.cb-foot', el).innerHTML = '';
       return;
     }
-    const [A, B] = calib.pair, rev = !!calib.answer;
-    $('.cb-q', el).innerHTML = `Wer ist in <b>${esc(c.label)}</b>${c.hint ? ` <span class="muted">(${esc(c.hint)})</span>` : ''} stärker?`;
-    $('.cb-body', el).innerHTML = calibPaneHTML(A, 0, rev) + calibPaneHTML(B, 1, rev);
+    const [A, B] = calib.pair, rev = !!calib.answer, r0 = calib.answer;
+    $('.cb-q', el).innerHTML = `<span class="cb-qlabel">Wer ist stärker in</span><span class="cb-qcat">${esc(c.label)}</span>${c.hint ? `<span class="cb-qhint">${esc(c.hint)}</span>` : ''}`;
+    const vsTxt = !rev ? 'VS' : r0 === '=' ? '=' : r0 === 'a' ? '◀' : '▶';
+    $('.cb-body', el).innerHTML = calibPaneHTML(A, 0, rev) + `<div class="cb-vs${rev ? ' done' : ''}"><span>${vsTxt}</span></div>` + calibPaneHTML(B, 1, rev);
     $('.cb-foot', el).innerHTML = rev ? calibVerdict()
-      : `<div class="cb-ans"><button class="btn" data-cbans="a"><kbd>←</kbd> links</button><button class="btn" data-cbans="="><kbd>↓</kbd> gleich</button><button class="btn" data-cbans="b">rechts <kbd>→</kbd></button></div>
-         <p class="muted cb-help">Werte sind verdeckt, bis du entschieden hast · Bild anklicken bzw. <kbd>Q</kbd>/<kbd>P</kbd> = nächstes Bild links/rechts · ${SCORE_CATS.map(x => `<kbd>${x.key}</kbd>`).join('')} Kategorie · <kbd>Leertaste</kbd> überspringen · <kbd>Esc</kbd> beenden</p>`;
+      : `<div class="cb-ans"><button class="cb-a left" data-cbans="a"><kbd>←</kbd> links</button><button class="cb-a tie" data-cbans="="><kbd>↓</kbd> gleich</button><button class="cb-a right" data-cbans="b">rechts <kbd>→</kbd></button></div>
+         <p class="muted cb-help">Werte sind verdeckt, bis du entschieden hast · Bild antippen bzw. <kbd>Q</kbd>/<kbd>P</kbd> = nächstes Bild · <kbd>Leertaste</kbd> überspringen · <kbd>V</kbd> Vorschläge · <kbd>Esc</kbd> beenden</p>`;
   }
   function calibAnswer(r) {
     if (!calib.pair || calib.answer) return;
@@ -4209,6 +4228,7 @@
     calib.answer = r; calib.n++;
     calib.duel = { id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cat: c.f, a: A._id, b: B._id, va: num(v(A, c.f)), vb: num(v(B, c.f)), r, ts: Date.now() };
     duels.push(calib.duel); cbSugDirty();
+    const ev0 = duelEval(calib.duel); calib.stats = calib.stats || { ok: 0, warn: 0 }; if (ev0) calib.stats[ev0.ok ? 'ok' : 'warn']++;
     saveDuels();
     calibRender();
   }
@@ -4234,11 +4254,11 @@
   }
   function calibResetView() {
     const c = SCORE_CATS[calib.cat], { el } = calib;
-    calib.list = true;
+    calib.list = true; calib.mode = 'reset';
     $('.cb-q', el).innerHTML = `<b>Verglichene Paare wieder freigeben</b>`;
     $('.cb-body', el).innerHTML = `<div class="cb-list"><p>Danach können schon verglichene Paare wieder vorkommen. <b>Deine Werte und alle bisherigen Duelle bleiben erhalten</b> – sie zählen weiter für die Vorschläge. Ein erneuter Vote zum selben Paar wirkt als Bestätigung oder Widerspruch.</p>
       <div class="cb-fixes" style="margin-top:12px"><button class="btn" data-cbreset="cat">nur ${esc(c.label)}</button><button class="btn" data-cbreset="all">alle Kategorien</button></div></div>`;
-    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>← zurück zum Abgleich</button></div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>⚔️ weiter vergleichen <kbd>V</kbd></button></div>`;
     calibCount();
   }
   function calibReset(scope) {
@@ -4255,6 +4275,7 @@
     const ci = SCORE_CATS.findIndex(c => c.key === k.toUpperCase());
     if (ci >= 0 && !ev.ctrlKey && !ev.metaKey && !calib.focus) { ev.preventDefault(); return calibSetCat(ci); }
     if ((k === 'z' || k === 'Z') && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); return undoLast(); }
+    if ((k === 'v' || k === 'V') && !calib.focus && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); return calib.list && calib.mode === 'sug' ? calibNext() : calibSugList(); }
     if (calib.list) { if (k === 'Enter') { ev.preventDefault(); calib.focus && !calib.pair ? closeCalib() : calibNext(); } return; }
     if (!calib.pair) return;
     if (!calib.answer) {
