@@ -3616,6 +3616,8 @@
     ta.addEventListener('blur', saveNote);
     rater.saveNote = saveNote;
     el.addEventListener('mouseover', (ev) => {
+      // Nur mit echter Maus: auf dem Handy löst ein Antippen auch „mouseover“ aus – iOS verschluckt dann den Tipp, wenn sich dabei die Seite ändert
+      if (TOUCH()) return;
       const b = ev.target.closest('.rt-cats [data-score]');
       if (!b || b.dataset.val === '') return;
       const ci = SCORE_CATS.findIndex(c => c.f === b.dataset.score);
@@ -3624,6 +3626,7 @@
       rater.preview = { cat: ci, val }; raterRef();
     });
     el.addEventListener('mouseout', (ev) => {
+      if (TOUCH()) return;
       if (!rater.preview || !ev.target.closest('.rt-cats [data-score]')) return;
       if (ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest('.rt-cats [data-score]')) return;
       rater.preview = null; raterRef();
@@ -4178,7 +4181,10 @@
     const above = vals.find(n => n > center), below = [...vals].reverse().find(n => n < center);
     const sortPeers = (list) => list.slice().sort((a, b) => (imgState(a) === 'none') - (imgState(b) === 'none') || (num(b.Score) ?? 0) - (num(a.Score) ?? 0));
     const open = rater.refOpen || {};
+    const steps = catSteps(c), top = Math.max(...steps), bottom = Math.min(...steps);
     const row = (n, kind) => {
+      if (kind === 'up' && center >= top) return '';       // über dem Höchstwert gibt es nichts
+      if (kind === 'down' && center <= bottom) return '';
       if (n == null) return `<div class="rt-ref-row empty"><span class="rt-ref-lbl">${kind === 'up' ? '▲ darüber' : '▼ darunter'}</span><span class="muted">– noch niemand</span></div>`;
       const peers = sortPeers(byVal.get(n) || []);
       const lim = open[n] ? 24 : 6;
@@ -4193,6 +4199,7 @@
   }
   function raterSet(ci, val, advance) {
     const e = raterEntry(); if (!e || ci < 0) return;
+    rater.preview = null;
     const c = SCORE_CATS[ci];
     const before = hasScore(e);
     setScore(e._id, c.f, val);
