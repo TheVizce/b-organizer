@@ -1218,3 +1218,54 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
   .cb-foot { padding-left: 10px; padding-right: 10px; padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
   .cb-a { min-width: 0; flex: 1; height: 44px; }
 }
+
+/* ---------- Ansicht anpassen: Reiter + Vorschau ---------- */
+.modal:has(.vc) { width: min(1080px, 96vw); }
+.vc { display: grid; grid-template-columns: 170px 1fr 280px; gap: 0; min-height: 460px; }
+.vc-tabs { display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; border-right: 1px solid var(--border); }
+.vc-tabs button { text-align: left; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; padding: 9px 12px; border-radius: 10px; cursor: pointer; }
+.vc-tabs button:hover { color: var(--text); background: var(--surface); }
+.vc-tabs button.on { color: var(--accent-2); background: var(--accent-bg); }
+.vc-main { padding: 6px 20px 20px; overflow: auto; max-height: 68vh; }
+.vc-main h3 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.vc-main h4 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; }
+.vc-size button { padding: 6px 16px; }
+.vc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vc-chip { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 99px; border: 1px dashed var(--border); background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.vc-chip:hover { color: var(--text); border-color: var(--accent); }
+.vc-chip.on { border-style: solid; border-color: var(--accent); background: var(--accent-bg); color: var(--text); padding-right: 4px; cursor: default; }
+.vc-chip.on button { border: 0; background: none; color: var(--muted); width: 20px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1; }
+.vc-chip.on button:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.08); }
+.vc-chip.on button:disabled { opacity: .25; cursor: default; }
+.vc-num { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 99px; background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 800; margin-right: 2px; }
+.vc-sws { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
+.vc-sws.col { flex-direction: column; }
+.vc-sws.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px 18px; }
+.vc-sw { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13.5px; line-height: 1.3; }
+.vc-sw input { position: absolute; opacity: 0; pointer-events: none; }
+.vc-tg { flex: none; width: 34px; height: 20px; border-radius: 99px; background: var(--surface-3); position: relative; transition: background .15s; margin-top: 1px; }
+.vc-tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.vc-sw input:checked + .vc-tg { background: var(--accent); }
+.vc-sw input:checked + .vc-tg::after { transform: translateX(14px); }
+.vc-sw input:focus-visible + .vc-tg { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.vc-sw small { display: block; color: var(--muted); font-size: 11.5px; }
+.vc-order { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-width: 420px; }
+.vc-order li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border); }
+.vc-order .vc-oname { flex: 1; font-size: 13.5px; }
+.vc-order button { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); width: 28px; height: 26px; border-radius: 7px; cursor: pointer; }
+.vc-order button:disabled { opacity: .3; cursor: default; }
+.vc-prev { padding: 14px 16px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.vc-prev-h { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.vc-prev-h .muted { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.vc-prev-card .grid { display: block; }
+.vc-prev-card[data-size="s"] .card { width: 150px; } .vc-prev-card[data-size="m"] .card { width: 210px; } .vc-prev-card[data-size="l"] .card { width: 248px; }
+.vc-prev-card .card { margin: 0 auto; pointer-events: none; }
+.vc-note { font-size: 11.5px; margin: auto 0 0; }
+@media (max-width: 860px) {
+  .vc { grid-template-columns: 1fr; min-height: 0; }
+  .vc-tabs { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
+  .vc-tabs button { white-space: nowrap; padding: 7px 10px; }
+  .vc-main { max-height: none; padding: 4px 14px 14px; }
+  .vc-prev { display: none; }   /* am Handy zu eng – Änderungen sind nach „Übernehmen“ direkt im Raster zu sehen */
+}
+.vc-size button.on { background: var(--accent); color: #fff; }

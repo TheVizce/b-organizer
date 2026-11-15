@@ -2054,77 +2054,101 @@
     b.classList.toggle('cards-s', ui.cardSize === 's'); b.classList.toggle('cards-l', ui.cardSize === 'l');
     b.classList.toggle('cards-top', !!ui.cardImgTop); b.classList.toggle('cards-noname', !!ui.cardNoName);
   }
+  // ---------- Ansicht anpassen: Reiter + Live-Vorschau einer echten Kachel ----------
+  let viewCfgSnap = null;   // Zustand vor dem Öffnen; „Abbrechen“/Schließen stellt ihn wieder her
   function showViewSettings() {
-    const chk = (name, val, on, label) => `<label class="chk"><input type="checkbox" name="${name}" value="${esc(val)}" ${on ? 'checked' : ''}> ${esc(label)}</label>`;
+    const keys = ['cardFields', 'cardBadges', 'cardSize', 'cardImgTop', 'cardNoName', 'hiddenFilters', 'extraFilters'];
+    viewCfgSnap = Object.fromEntries(keys.map(k => [k, ui[k] === undefined ? null : JSON.parse(JSON.stringify(ui[k]))]));   // null = war nicht gesetzt
+    const st = { tab: ui.viewCfgTab || 'card', fields: ui.cardFields.slice(), badges: ui.cardBadges.slice(), size: ui.cardSize || 'm', top: !!ui.cardImgTop, noname: !!ui.cardNoName,
+      hidden: Object.assign({}, ui.hiddenFilters), extra: ui.extraFilters.slice(), pOrder: primaryOrder.slice() };
+    const sample = filtered().find(e => hasScore(e) && images(e).length) || filtered()[0] || entries[0];
+    const tabs = [['card', '🃏 Kachel'], ['badges', '🏷 Abzeichen'], ['filters', '🔎 Filter'], ...(IS_CHARS ? [] : [['primary', '★ Hauptbereich']])];
     openModal(`
       <div class="modal-head"><h2>Ansicht anpassen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
-      <form class="help view-cfg" id="view-cfg">
-        <h3>Angaben auf den Kacheln</h3>
-        <p class="muted">Erscheinen unter dem Namen in der gewählten Reihenfolge (Reihenfolge = Klick-Reihenfolge; zuerst gewählt steht vorne).</p>
-        <div class="cfg-grid" id="cfg-card">${CARD_FIELD_CHOICES.map(f => chk('card', f, ui.cardFields.includes(f), lab(f))).join('')}</div>
-        <p class="muted" id="cfg-order"></p>
-        <h3>Kacheln</h3>
-        <div class="cfg-grid">
-          ${[['s', 'klein'], ['m', 'mittel'], ['l', 'groß']].map(([k, l]) => `<label class="chk"><input type="radio" name="size" value="${k}" ${(ui.cardSize || 'm') === k ? 'checked' : ''}> ${l}</label>`).join('')}
-          <label class="chk"><input type="checkbox" name="imgtop" ${ui.cardImgTop ? 'checked' : ''}> Bildausschnitt oben (Gesicht)</label>
-          <label class="chk"><input type="checkbox" name="noname" ${ui.cardNoName ? 'checked' : ''}> nur Bilder (ohne Name und Angaben)</label>
-        </div>
-        <h3>Abzeichen auf dem Bild</h3>
-        <div class="cfg-grid">${CARD_BADGES.map(([k, l]) => chk('badge', k, ui.cardBadges.includes(k), l)).join('')}</div>
-        ${IS_CHARS ? '' : `<h3>Hauptbereich: Rangfolge für die Automatik</h3>
-        <p class="muted">Hat jemand mehrere Bereiche, gilt automatisch der oberste. Von dir gesetzte Hauptbereiche bleiben davon unberührt. Die Rangfolge wird mit der Cloud abgeglichen.</p>
-        <ol class="prim-order" id="prim-order"></ol>`}
-        <h3>Filter in der Leiste</h3>
-        <div class="cfg-grid">${BUILTIN_FILTERS.map(([id, l]) => chk('filter', id, !ui.hiddenFilters[id], l)).join('')}</div>
-        <h3>Zusätzliche Filter</h3>
-        <p class="muted">Auswahl mit allen vorkommenden Werten (und „leer“).</p>
-        <div class="cfg-grid">${EXTRA_FILTER_CHOICES.map(f => chk('extra', f, ui.extraFilters.includes(f), lab(f))).join('')}</div>
-      </form>
+      <div class="vc">
+        <nav class="vc-tabs">${tabs.map(([k, l]) => `<button type="button" data-vct="${k}">${l}</button>`).join('')}</nav>
+        <div class="vc-main" id="vc-main"></div>
+        <aside class="vc-prev"><div class="vc-prev-h">Vorschau${sample ? ` <span class="muted">· ${esc(v(sample, 'Name'))}</span>` : ''}</div><div class="vc-prev-card" id="vc-prev"></div>
+          <p class="muted vc-note">Gilt für dieses Gerät. Änderungen siehst du sofort – auch im Raster dahinter.</p></aside>
+      </div>
       <div class="form-foot">
         <button class="btn ghost" id="cfg-default">Standard</button>
+        <span style="flex:1"></span>
         <button class="btn" data-action="close">Abbrechen</button>
         <button class="btn primary" id="cfg-save">Übernehmen</button>
       </div>`);
-    const form = $('#view-cfg');
-    let order = ui.cardFields.slice();
-    let pOrder = primaryOrder.slice();
-    const drawP = () => { const ol = $('#prim-order'); if (ol) ol.innerHTML = pOrder.map((c, i) => `<li><span>${primaryIcon(c)} ${esc(c)}</span><button type="button" class="btn small" data-pmove="${i}" data-dir="-1" ${i ? '' : 'disabled'} aria-label="nach oben">↑</button><button type="button" class="btn small" data-pmove="${i}" data-dir="1" ${i < pOrder.length - 1 ? '' : 'disabled'} aria-label="nach unten">↓</button></li>`).join(''); };
-    drawP();
-    form.addEventListener('click', (ev) => {
-      const b = ev.target.closest('[data-pmove]'); if (!b) return;
-      const i = +b.dataset.pmove, j = i + +b.dataset.dir; if (j < 0 || j >= pOrder.length) return;
-      [pOrder[i], pOrder[j]] = [pOrder[j], pOrder[i]]; drawP();
-    });
-    const showOrder = () => { $('#cfg-order').textContent = order.length ? 'Reihenfolge: ' + order.map(lab).join(' · ') : 'Keine Angaben ausgewählt.'; };
-    showOrder();
-    form.addEventListener('change', (ev) => {
-      if (ev.target.name === 'card') {
-        const f = ev.target.value;
-        order = ev.target.checked ? [...order.filter(x => x !== f), f] : order.filter(x => x !== f);
-        showOrder();
+    const main = $('#vc-main');
+    const live = () => {   // vorläufig anwenden (Vorschau + Raster), endgültig erst bei „Übernehmen“
+      Object.assign(ui, { cardFields: st.fields, cardBadges: st.badges, cardSize: st.size, cardImgTop: st.top, cardNoName: st.noname });
+      applyCardLook();
+      const pv = $('#vc-prev'); if (pv && sample) pv.innerHTML = `<div class="grid">${cardHTML(sample)}</div>`;
+      pv && pv.setAttribute('data-size', st.size);
+    };
+    const chip = (f, on, i, n) => on
+      ? `<span class="vc-chip on" data-f="${esc(f)}"><span class="vc-num">${i + 1}</span>${esc(lab(f))}<button type="button" data-vmove="-1" ${i ? '' : 'disabled'} aria-label="nach vorne">‹</button><button type="button" data-vmove="1" ${i < n - 1 ? '' : 'disabled'} aria-label="nach hinten">›</button><button type="button" data-vdel aria-label="entfernen">×</button></span>`
+      : `<button type="button" class="vc-chip" data-vadd="${esc(f)}">＋ ${esc(lab(f))}</button>`;
+    const sw = (name, on, label, sub) => `<label class="vc-sw"><input type="checkbox" data-vsw="${name}" ${on ? 'checked' : ''}><span class="vc-tg"></span><span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
+    const draw = () => {
+      $$('.vc-tabs button', modal).forEach(b => b.classList.toggle('on', b.dataset.vct === st.tab));
+      if (st.tab === 'card') {
+        const avail = CARD_FIELD_CHOICES.filter(f => !st.fields.includes(f));
+        main.innerHTML = `<h3>Größe</h3>
+          <div class="seg vc-size">${[['s', 'klein'], ['m', 'mittel'], ['l', 'groß']].map(([k, l]) => `<button type="button" data-vsize="${k}" class="${st.size === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+          <div class="vc-sws">${sw('top', st.top, 'Bildausschnitt oben', 'zeigt eher das Gesicht')}${sw('noname', st.noname, 'Nur Bilder', 'ohne Name und Angaben')}</div>
+          <h3>Angaben unter dem Namen <span class="muted">(${st.fields.length})</span></h3>
+          <div class="vc-chips">${st.fields.length ? st.fields.map((f, i) => chip(f, true, i, st.fields.length)).join('') : '<span class="muted">keine – unten hinzufügen</span>'}</div>
+          <h4 class="muted">Hinzufügen</h4>
+          <div class="vc-chips">${avail.map(f => chip(f, false)).join('')}</div>`;
+      } else if (st.tab === 'badges') {
+        main.innerHTML = `<h3>Abzeichen auf dem Bild</h3><div class="vc-sws col">${CARD_BADGES.map(([k, l]) => sw('badge:' + k, st.badges.includes(k), l)).join('')}</div>`;
+      } else if (st.tab === 'filters') {
+        main.innerHTML = `<h3>Filter in der Leiste</h3><div class="vc-sws grid2">${BUILTIN_FILTERS.map(([id, l]) => sw('filter:' + id, !st.hidden[id], l)).join('')}</div>
+          <h3>Zusätzliche Filter</h3><p class="muted">Auswahlfeld mit allen vorkommenden Werten (und „leer“).</p>
+          <div class="vc-sws grid2">${EXTRA_FILTER_CHOICES.map(f => sw('extra:' + f, st.extra.includes(f), lab(f))).join('')}</div>`;
+      } else if (st.tab === 'primary') {
+        main.innerHTML = `<h3>Rangfolge für die Automatik</h3>
+          <p class="muted">Hat jemand mehrere Bereiche, gilt automatisch der oberste. Von dir bestätigte Hauptbereiche bleiben unberührt. Wird mit der Cloud abgeglichen.</p>
+          <ol class="vc-order">${st.pOrder.map((c, i) => `<li><span class="vc-num">${i + 1}</span><span class="vc-oname">${primaryIcon(c)} ${esc(c)}</span><button type="button" data-pmove="${i}" data-dir="-1" ${i ? '' : 'disabled'} aria-label="nach oben">↑</button><button type="button" data-pmove="${i}" data-dir="1" ${i < st.pOrder.length - 1 ? '' : 'disabled'} aria-label="nach unten">↓</button></li>`).join('')}</ol>`;
       }
+    };
+    $('.vc', modal).addEventListener('click', (ev) => {
+      const t = ev.target;
+      const tb = t.closest('[data-vct]'); if (tb) { st.tab = tb.dataset.vct; ui.viewCfgTab = st.tab; return draw(); }
+      const sz = t.closest('[data-vsize]'); if (sz) { st.size = sz.dataset.vsize; draw(); return live(); }
+      const ad = t.closest('[data-vadd]'); if (ad) { st.fields.push(ad.dataset.vadd); draw(); return live(); }
+      const ch = t.closest('.vc-chip.on');
+      if (ch && t.closest('[data-vdel]')) { st.fields = st.fields.filter(f => f !== ch.dataset.f); draw(); return live(); }
+      const mv = t.closest('[data-vmove]');
+      if (ch && mv) { const i = st.fields.indexOf(ch.dataset.f), j = i + Number(mv.dataset.vmove); if (j >= 0 && j < st.fields.length) { [st.fields[i], st.fields[j]] = [st.fields[j], st.fields[i]]; draw(); live(); } return; }
+      const pm = t.closest('[data-pmove]'); if (pm) { const i = +pm.dataset.pmove, j = i + +pm.dataset.dir; if (j >= 0 && j < st.pOrder.length) { [st.pOrder[i], st.pOrder[j]] = [st.pOrder[j], st.pOrder[i]]; draw(); } return; }
+    });
+    $('.vc', modal).addEventListener('change', (ev) => {
+      const k = ev.target.dataset.vsw; if (!k) return;
+      const on = ev.target.checked, [kind, id] = k.split(':');
+      if (k === 'top') st.top = on; else if (k === 'noname') st.noname = on;
+      else if (kind === 'badge') st.badges = on ? [...new Set([...st.badges, id])] : st.badges.filter(x => x !== id);
+      else if (kind === 'filter') { if (on) delete st.hidden[id]; else st.hidden[id] = true; }
+      else if (kind === 'extra') st.extra = on ? [...new Set([...st.extra, id])] : st.extra.filter(x => x !== id);
+      live();
     });
     $('#cfg-default').addEventListener('click', () => {
-      ui.cardFields = DEF_CARD_FIELDS.slice(); ui.cardBadges = CARD_BADGES.map(b => b[0]); ui.hiddenFilters = {}; ui.extraFilters = [];
-      ui.cardSize = 'm'; ui.cardImgTop = false; ui.cardNoName = false; applyCardLook();
-      if (!IS_CHARS && primaryOrder.join() !== PRIMARY_DEFAULT.join()) savePrimaryOrder(PRIMARY_DEFAULT.slice());
-      saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
+      Object.assign(st, { fields: DEF_CARD_FIELDS.slice(), badges: CARD_BADGES.map(b => b[0]), size: 'm', top: false, noname: false, hidden: {}, extra: [], pOrder: PRIMARY_DEFAULT.slice() });
+      draw(); live(); toast('Standard eingesetzt – mit „Übernehmen“ speichern.');
     });
     $('#cfg-save').addEventListener('click', () => {
-      const vals = (n) => [...form.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value);
-      ui.cardFields = order;
-      ui.cardBadges = vals('badge');
-      ui.cardSize = (form.querySelector('input[name="size"]:checked') || {}).value || 'm';
-      ui.cardImgTop = form.querySelector('input[name="imgtop"]').checked;
-      ui.cardNoName = form.querySelector('input[name="noname"]').checked;
+      Object.assign(ui, { cardFields: st.fields, cardBadges: st.badges, cardSize: st.size, cardImgTop: st.top, cardNoName: st.noname, hiddenFilters: st.hidden, extraFilters: st.extra });
       applyCardLook();
-      const shown = new Set(vals('filter'));
-      ui.hiddenFilters = Object.fromEntries(BUILTIN_FILTERS.filter(([id]) => !shown.has(id)).map(([id]) => [id, true]));
-      ui.extraFilters = vals('extra');
-      if (!IS_CHARS && pOrder.join() !== primaryOrder.join()) savePrimaryOrder(pOrder);
+      if (!IS_CHARS && st.pOrder.join() !== primaryOrder.join()) savePrimaryOrder(st.pOrder);
+      viewCfgSnap = null;
       saveUI(); closeModal(true); applyFilterVisibility(); renderExtraFilters(); render();
       toast('Ansicht gespeichert (gilt für dieses Gerät).', 'ok');
     });
+    draw(); live(); render();
+  }
+  function restoreViewCfg() {   // Ansicht-Dialog ohne Übernehmen geschlossen
+    if (!viewCfgSnap) return;
+    for (const [k, x] of Object.entries(viewCfgSnap)) { if (x === null) delete ui[k]; else ui[k] = x; }
+    viewCfgSnap = null; applyCardLook(); render();
   }
 
   async function savePrimaryOrder(o) {
@@ -2677,6 +2701,7 @@
     if (!force && dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
     discardFormUploads();
     overlay.hidden = true; modal.innerHTML = ''; document.body.style.overflow = ''; dirty = false;
+    if (viewCfgSnap) restoreViewCfg();
     if (outOfFilter.size && !rater && !calib) setTimeout(() => { if (overlay.hidden && outOfFilter.size) render(); }, 0);
   }
   const byId = (id) => entries.find(e => e._id === id); // bei ~4000 Einträgen schnell genug
@@ -3918,25 +3943,55 @@
     }
     return null;
   }
+  // Pro Eintrag (eine Kategorie): Wohin zeigen seine bisherigen Duelle? → { n, up, down } (Wahrscheinlichkeitsmasse über/unter dem heutigen Wert)
+  function catLean(c) {
+    const by = new Map();
+    for (const d of duels) {
+      if (d.cat !== c.f) continue;
+      const A = byId(d.a), B = byId(d.b); if (!A || !B) continue;
+      const va = num(v(A, c.f)), vb = num(v(B, c.f));
+      if (va == null || vb == null || symUnknown(c, va) || symUnknown(c, vb)) continue;
+      const sa = d.r === 'a' ? 1 : d.r === 'b' ? 0 : 0.5;
+      (by.get(A._id) || by.set(A._id, []).get(A._id)).push({ opp: vb, s: sa });
+      (by.get(B._id) || by.set(B._id, []).get(B._id)).push({ opp: va, s: 1 - sa });
+    }
+    const grid = catSteps(c).filter(g => !symUnknown(c, g)), out = new Map();
+    for (const [id, list] of by) {
+      const x0 = num(v(byId(id), c.f));
+      const lp = grid.map(g => { let l = -((g - x0) ** 2) / (2 * CB_PRIOR_SD ** 2); for (const o of list) { const q = 1 / (1 + Math.exp(-CB_K * (g - o.opp))); l += o.s * Math.log(q) + (1 - o.s) * Math.log(1 - q); } return l; });
+      const mx = Math.max(...lp), w = lp.map(l => Math.exp(l - mx)), sum = w.reduce((p, q) => p + q, 0);
+      let up = 0, down = 0; grid.forEach((g, i) => { if (g > x0) up += w[i] / sum; else if (g < x0) down += w[i] / sum; });
+      out.set(id, { n: list.length, up, down });
+    }
+    return out;
+  }
+  // Paarwahl nach Nutzen statt Zufall:
+  //  A = wer am meisten Klarheit gewinnt: wenig Duelle und/oder ein Vorschlag knapp vor der nächsten Sicherheitsstufe (45–90 %).
+  //  B = zeigt A nach oben → Gegner mit höherem Wert (prüft die Grenze), nach unten → niedriger, sonst gleicher Wert;
+  //      gut belegte Gegner (viele Duelle) sind verlässlichere Maßstäbe. Etwas Zufall, damit es abwechslungsreich bleibt.
   function calibPick() {
     if (calib.focus) return calibPickFocus();
     const c = SCORE_CATS[calib.cat], pool = calibPool(c);
     if (pool.length < 2) return null;
-    const cnt = new Map(), seen = new Set();
-    const since = pairsSince(c.f);
-    for (const d of duels) if (d.cat === c.f && d.ts > since) { cnt.set(d.a, (cnt.get(d.a) || 0) + 1); cnt.set(d.b, (cnt.get(d.b) || 0) + 1); seen.add([d.a, d.b].sort().join('|')); }
-    const skip = calib.skip;
-    const val = (e) => num(v(e, c.f));
-    const rnd = () => Math.random();
-    // A: möglichst selten verglichen; dann B mit gleichem/benachbartem Wert, noch nie gegen A
-    const order = pool.slice().sort((x, y) => (cnt.get(x._id) || 0) - (cnt.get(y._id) || 0) || rnd() - .5);
+    const seen = new Set(), since = pairsSince(c.f);
+    for (const d of duels) if (d.cat === c.f && d.ts > since) seen.add([d.a, d.b].sort().join('|'));
+    const lean = catLean(c), skip = calib.skip, val = (e) => num(v(e, c.f)), rnd = Math.random;
+    const L = (e) => lean.get(e._id) || { n: 0, up: 0, down: 0 };
+    const near = (u) => u >= 0.45 && u < 0.9 ? 1 - Math.abs(u - 0.72) / 0.3 : 0;   // am wertvollsten knapp vor „wahrscheinlich“/„sicher“
+    const scoreA = (e) => { const l = L(e); return 1.2 / (1 + l.n) + 1.1 * near(Math.max(l.up, l.down)) + 0.35 * rnd(); };
+    const order = pool.map(e => [scoreA(e), e]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
+    const maxGap = c.vals ? 1 : 0.5;
     for (const a of order.slice(0, 60)) {
-      const va = val(a);
-      const opts = pool.filter(b => b !== a && Math.abs(val(b) - va) <= (c.vals ? 1 : 0.5) && !seen.has([a._id, b._id].sort().join('|')) && !skip.has([a._id, b._id].sort().join('|')));
+      const va = val(a), la = L(a);
+      const dir = Math.max(la.up, la.down) >= 0.45 ? (la.up > la.down ? 1 : -1) : 0;
+      const opts = pool.filter(b => b !== a && Math.abs(val(b) - va) <= maxGap && !seen.has([a._id, b._id].sort().join('|')) && !skip.has([a._id, b._id].sort().join('|')));
       if (!opts.length) continue;
-      // gleiche Werte etwas bevorzugen – dort ist die Frage „hält das?“ am klarsten
-      opts.sort((x, y) => (Math.abs(val(x) - va) - Math.abs(val(y) - va)) * 0.5 + ((cnt.get(x._id) || 0) - (cnt.get(y._id) || 0)) * 0.3 + (rnd() - .5));
-      const b = opts[0];
+      const scoreB = (b) => {
+        const d = val(b) - va, lb = L(b);
+        const fit = dir ? (Math.sign(d) === dir ? 1 : d === 0 ? 0.45 : 0) : (d === 0 ? 1 : 0.55);
+        return 1.3 * fit + 0.5 * Math.min(lb.n, 6) / 6 + 0.45 * rnd();
+      };
+      const b = opts.map(x => [scoreB(x), x]).sort((x, y) => y[0] - x[0])[0][1];
       return rnd() < .5 ? [a, b] : [b, a];
     }
     return null;
