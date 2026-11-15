@@ -2996,6 +2996,15 @@
     return `<details class="sec dsec dx-imgs" data-dsec="Bilder" ${open ? 'open' : ''}><summary><h3>Alle Bilder <span class="muted">${n} · Kachelbild${IS_CHARS ? ', Bildarten' : ''}, Vollbild</span></h3></summary>${inner}</details>`;
   }
   const FACT_LABELS = { 'Born': 'Geboren', 'Nationality': 'Nationalität', 'Height': 'Größe', 'Weight': 'Gewicht', 'Measurements': 'Maße', 'Bra/Cup': 'Cup', 'Hair color': 'Haare', 'Eye color': 'Augen', 'Body type': 'Figur', 'Ethnicity': 'Herkunft' };
+  // Kennzahlen oben in der Detailansicht als Kacheln (statt einer Chip-Reihe)
+  function dxStatsHTML(e) {
+    const t = [], sc = scoreOf(e);
+    if (sc) t.push(`<div class="dx-stat main"><span>Tool-Note</span><b>${sc.ten.toFixed(1).replace('.', ',')}</b><small>/ 10</small></div>`);
+    if (v(e, 'Global Rating')) t.push(`<div class="dx-stat" title="Durchschnitt aller Nutzer auf Babepedia"><span>Babepedia Ø</span><b>${esc(v(e, 'Global Rating').replace('.', ','))}</b>${v(e, 'Votes') ? `<small>${esc(v(e, 'Votes'))} Stimmen</small>` : ''}</div>`);
+    if (v(e, 'Rank')) t.push(`<div class="dx-stat"><span>Babepedia-Rang</span><b>#${esc(v(e, 'Rank'))}</b>${v(e, 'Highest Rank') ? `<small>bester #${esc(v(e, 'Highest Rank'))}</small>` : ''}</div>`);
+    if (e._ranker) t.push(`<a class="dx-stat link" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen (${esc(e._ranker.tab)})"><span>Ranker ↗</span><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><small>Platz ${e._ranker.rank}/${e._ranker.total} · Score ${e._ranker.score}</small></a>`);
+    return t.length ? `<div class="dx-stats">${t.join('')}</div>` : '';
+  }
   function detailSideHTML(e, imgs, links, galleries) {
     const TH = 9;
     // Vorschaubilder: Klick = Vollbild an dieser Stelle, ★ = direkt zum Kachelbild machen (das erste ist das aktuelle Kachelbild)
@@ -3010,7 +3019,7 @@
     const e = byId(id); if (!e) return;
     lbSetActive(id);
     const imgs = images(e);
-    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL', ...FACT_FIELDS, ...SCORE_CATS.map(c => c.f), 'Score', 'My Rating', 'Primary Category', 'Profession Category', 'Medium']);   // Bereiche/Medium stehen als Chips oben
+    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL', ...FACT_FIELDS, ...SCORE_CATS.map(c => c.f), 'Score', 'My Rating', 'Primary Category', 'Profession Category', 'Medium', 'Global Rating', 'Votes', 'Rank', 'Highest Rank']);   // stehen oben als Kennzahlen   // Bereiche/Medium stehen als Chips oben
     const sec = (title, fields) => {   // einklappbar, Zustand pro Abschnitt gemerkt (ui.dOpen); Steckbrief-Felder stehen schon links
       const rows = fields.filter(f => !skip.has(f)).map(f => [f, fmtValue(e, f)]).filter(([, x]) => x !== '');
       if (!rows.length) return '';
@@ -3046,14 +3055,10 @@
           ${detailSideHTML(e, imgs, links, galleries)}
         </aside>
         <div class="dx-main">
-          <h1 class="d-title">${esc(v(e, 'Name'))}</h1>
+          <div class="dx-title"><h1 class="d-title">${esc(v(e, 'Name'))}</h1><button class="dx-fav${isTrue(e.Favorite) ? ' on' : ''}" data-fav="${esc(e._id)}" title="${isTrue(e.Favorite) ? 'Favorit – antippen zum Entfernen' : 'Als Favorit markieren'}" aria-label="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button></div>
           ${v(e, 'AKA') ? `<div class="d-aka">auch: ${esc(v(e, 'AKA'))}</div>` : ''}
+          ${dxStatsHTML(e)}
           <div class="chips">
-            <button class="chip accent" data-fav="${esc(e._id)}" style="cursor:pointer">${isTrue(e.Favorite) ? '♥ Favorit' : '♡ Als Favorit'}</button>
-            ${v(e, 'Global Rating') ? `<span class="chip" title="Durchschnitt aller Nutzer auf Babepedia">Babepedia Ø ${esc(v(e, 'Global Rating'))}${v(e, 'Votes') ? ` (${esc(v(e, 'Votes'))} Stimmen)` : ''}</span>` : ''}
-            ${v(e, 'Rank') ? `<span class="chip">Rank #${esc(v(e, 'Rank'))}</span>` : ''}
-            ${v(e, 'Active') ? `<span class="chip">${isTrue(e.Active) ? 'aktiv' : 'inaktiv'}</span>` : ''}
-            ${e._ranker ? `<a class="chip ranker" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen">🏆 ${esc(e._ranker.tier)} · Score ${e._ranker.score} · Platz ${e._ranker.rank}/${e._ranker.total} (${esc(e._ranker.tab)})</a>` : ''}
             ${rankerStale.has(e._id) ? `<button class="chip rk-stale" data-action="to-ranker" data-id="${esc(e._id)}" title="${esc(staleTitle(rankerStale.get(e._id)))}">⟳ Im Ranker veraltet: ${esc([...new Set(rankerStale.get(e._id).map(x => x.name))].join(', '))} – nochmal senden</button>` : ''}
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
