@@ -3718,6 +3718,7 @@
     rater = { el, ids, i: 0, img: 0, cat: 0, last: null, done: 0 };
     raterShow();
     el.addEventListener('click', (ev) => {
+      ev.stopPropagation();   // sonst greift zusätzlich der seitenweite Klick-Handler (doppelt umgeschaltet/rückgängig gemacht)
       const t = ev.target;
       if (t.closest('.vw-x')) return closeRater();
       if (t.closest('.vw-arrow.prev')) return raterImg(-1);
@@ -3964,6 +3965,7 @@
     calib.onClose = opts.onClose || null;
     cbSugDirty(); undoUI();
     el.addEventListener('click', (ev) => {
+      ev.stopPropagation();   // sonst greift zusätzlich der seitenweite Klick-Handler (doppelt umgeschaltet/rückgängig gemacht)
       const t = ev.target;
       if (t.closest('.vw-x')) return closeCalib();
       if (t.closest('.undo-btn')) return undoLast();
