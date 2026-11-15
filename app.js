@@ -2151,8 +2151,90 @@
     return '';
   }
 
+  // ---------- Rangliste (Seitenleiste rechts, nur am PC ab 1440 px) ----------
+  // Einstellungen pro Gerät in ui.lb = { open, by, scope: 'all'|'shown', n }
+  const LB_DESK = window.matchMedia('(min-width: 1440px)');
+  const lbCfg = () => Object.assign({ open: true, by: 'score', scope: 'all', n: 50 }, ui.lb || {});
+  const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
+  const LB_BY = () => [
+    ['score', 'Tool-Note', e => { const s = scoreOf(e); return s ? s.ten : null; }, x => fmt1(x), -1],
+    ...SCORE_CATS.map(c => [c.f, c.label, e => { const x = num(v(e, c.f)); return x == null || symUnknown(c, x) ? null : x; }, x => fmtV(x), -1]),
+    ...(IS_CHARS ? [] : [
+      ['global', 'Babepedia Ø', e => num(e['Global Rating']), x => x.toFixed(2).replace('.', ','), -1],
+      ['bprank', 'Babepedia-Rang', e => { const x = num(e.Rank); return x > 0 ? x : null; }, x => '#' + x, 1],
+      ['bpmine', 'meine Babepedia-Note', e => num(e['User Rating']), x => String(x), -1]]),
+    ['ranker', 'Ranker', e => e._ranker ? e._ranker.score : null, (x, e) => `<span style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</span> <small>${x}</small>`, -1]
+  ];
+  let lbPrev = new Map(), lbActive = null, lbTimer = null;
+  const lbTouched = new Map();   // id → Zeitpunkt der Änderung (für ▲/▼)
+  const lbDelta = new Map();     // id → { d, t }
+  function lbSoon() { clearTimeout(lbTimer); lbTimer = setTimeout(lbRender, 120); }
+  function lbSetActive(id) { if (lbActive === id) return; lbActive = id; lbSoon(); }
+  function lbRender() {
+    const el = $('#lb'); if (!el) return;
+    const cfg = lbCfg(), desk = LB_DESK.matches;
+    el.hidden = !desk;
+    document.body.classList.toggle('has-lb', desk && cfg.open);
+    document.body.classList.toggle('has-lb-closed', desk && !cfg.open);
+    if (!desk) return;
+    if (!cfg.open) { el.className = 'lb closed'; el.innerHTML = `<button class="lb-rail" data-lb-toggle title="Rangliste einblenden">🏆</button>`; return; }
+    el.className = 'lb';
+    const defs = LB_BY(), def = defs.find(d => d[0] === cfg.by) || defs[0];
+    const [, , val, fmt, dir] = def;
+    const pool = (cfg.scope === 'shown' ? filtered() : entries).filter(e => !IS_CHARS || rateable(e));
+    const rows = [];
+    for (const e of pool) { const x = val(e); if (x != null && !isNaN(x)) rows.push({ e, x, t: def[0] === 'score' ? 0 : (scoreOf(e) || { ten: 0 }).ten }); }
+    rows.sort((a, b) => dir * (a.x - b.x) || b.t - a.t || collator.compare(v(a.e, 'Name'), v(b.e, 'Name')));
+    // gleicher Wert = gleicher Platz (1, 2, 2, 4 …)
+    const rank = new Map(); let last = null, lastR = 0;
+    rows.forEach((r, i) => { const key = fmt(r.x, r.e); if (key !== last) { lastR = i + 1; last = key; } r.r = lastR; rank.set(r.e._id, lastR); });
+    const now = Date.now();
+    for (const [id, t] of lbTouched) {
+      const a = lbPrev.get(id), b = rank.get(id);
+      if (a && b && a !== b) lbDelta.set(id, { d: a - b, t: now });
+      else if (!a && b) lbDelta.set(id, { d: 0, t: now, neu: true });
+      lbTouched.delete(id);
+    }
+    for (const [id, x] of lbDelta) if (now - x.t > 9000) lbDelta.delete(id);
+    lbPrev = rank;
+    const rowHTML = (r) => {
+      const e = r.e, img = images(e)[0], src = img ? R(img) : '', dl = lbDelta.get(e._id);
+      const mv = dl ? (dl.neu ? '<span class="lb-mv new">neu</span>' : `<span class="lb-mv ${dl.d > 0 ? 'up' : 'down'}">${dl.d > 0 ? '▲' : '▼'} ${Math.abs(dl.d)}</span>`) : '';
+      const nat = splitList(v(e, 'Nationality'));
+      const sub = IS_CHARS ? v(e, 'Universe') : nat.map(n => flagFor(n)).filter(Boolean).join(' ');
+      return `<button class="lb-row${e._id === lbActive ? ' on' : ''}${r.r <= 3 ? ' top' + r.r : ''}" data-lb-open="${esc(e._id)}" title="${esc(v(e, 'Name'))}">
+        <span class="lb-r">${r.r}</span><span class="lb-img">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<i>${esc(initials(v(e, 'Name')))}</i></span>
+        <span class="lb-n">${esc(v(e, 'Name'))}${sub ? `<small>${esc(sub)}</small>` : ''}</span>${mv}<span class="lb-v">${fmt(r.x, e)}</span></button>`;
+    };
+    const top = rows.slice(0, cfg.n);
+    const act = lbActive && rows.find(r => r.e._id === lbActive);
+    const pin = act && act.r > cfg.n ? `<div class="lb-gap">…</div>${rowHTML(act)}` : '';
+    el.innerHTML = `<div class="lb-head"><b>🏆 Rangliste</b><button class="lb-x" data-lb-toggle title="Rangliste ausblenden">›</button></div>
+      <div class="lb-cfg"><select data-lb="by">${defs.map(d => `<option value="${d[0]}" ${d[0] === def[0] ? 'selected' : ''}>${esc(d[1])}</option>`).join('')}</select>
+        <span class="seg"><button data-lb-scope="shown" class="${cfg.scope === 'shown' ? 'on' : ''}" title="nur die Einträge, die gerade angezeigt werden (Filter/Suche)">Auswahl</button><button data-lb-scope="all" class="${cfg.scope === 'all' ? 'on' : ''}">Alle</button></span>
+        <select data-lb="n" title="Länge">${[25, 50, 100, 250].map(n => `<option ${n === cfg.n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="lb-meta muted">${rows.length} mit Wert${cfg.scope === 'shown' ? ' in der Auswahl' : ''}</div>
+      <div class="lb-list">${top.length ? top.map(rowHTML).join('') : '<p class="muted lb-empty">Noch niemand mit diesem Wert.</p>'}${pin}${rows.length > cfg.n ? `<button class="lb-more" data-lb-more>mehr zeigen (${rows.length - cfg.n} weitere)</button>` : ''}</div>`;
+    const on = $('.lb-row.on', el); if (on && on.offsetTop) { const L = $('.lb-list', el); if (on.offsetTop < L.scrollTop || on.offsetTop > L.scrollTop + L.clientHeight - 40) L.scrollTop = on.offsetTop - L.clientHeight / 2; }
+  }
+  function lbSet(k, x) { ui.lb = Object.assign(lbCfg(), { [k]: x }); saveUI(); lbPrev = new Map(); lbDelta.clear(); lbRender(); }
+  function initLeaderboard() {
+    const el = $('#lb'); if (!el) return;
+    el.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t.closest('[data-lb-toggle]')) return lbSet('open', !lbCfg().open);
+      const sc = t.closest('[data-lb-scope]'); if (sc) return lbSet('scope', sc.dataset.lbScope);
+      if (t.closest('[data-lb-more]')) return lbSet('n', lbCfg().n + 100);
+      const o = t.closest('[data-lb-open]'); if (o) { lbActive = o.dataset.lbOpen; showDetail(o.dataset.lbOpen); lbRender(); }
+    });
+    el.addEventListener('change', (ev) => { const k = ev.target.dataset.lb; if (k) lbSet(k, k === 'n' ? Number(ev.target.value) : ev.target.value); });
+    LB_DESK.addEventListener('change', lbRender);
+    // Höhe der Kopfzeile für die klebende Leiste
+    const tb = $('.topbar');
+    if (tb && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', tb.offsetHeight + 'px')).observe(tb);
+  }
   function render() {
-    outOfFilter.clear(); calibBadgeSoon();
+    outOfFilter.clear(); calibBadgeSoon(); lbSoon();
     renderUpdateBanner();
     if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
@@ -2684,6 +2766,7 @@
     saveQuiet(); refreshItem(id);
     if (typeof cbSugDirty === 'function') cbSugDirty();
     if (!noUndo) pushUndo(id, f, prev, e[f]);
+    lbTouched.set(id, Date.now()); lbSoon();
   }
   // ---- Rückgängig für Bewertungen (nur diese Sitzung; schnelle Änderungen am selben Wert werden zusammengefasst) ----
   const undoStack = [];
@@ -2809,6 +2892,7 @@
   }
   function showDetail(id) {
     const e = byId(id); if (!e) return;
+    lbSetActive(id);
     const imgs = images(e);
     const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL']);
     const sec = (title, fields) => {
@@ -4191,6 +4275,7 @@
   }
   function raterEntry() { return rater && byId(rater.ids[rater.i]); }
   function raterShow() {
+    if (rater && rater.ids[rater.i]) lbSetActive(rater.ids[rater.i]);
     const e = raterEntry(); if (!e) return;
     const { el } = rater;
     $('.rt-name', el).textContent = (isTrue(e.Favorite) ? '♥ ' : '') + v(e, 'Name');
@@ -4662,6 +4747,7 @@
   $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
+  initLeaderboard();
   $('#folder-input').addEventListener('change', (ev) => onFolderPicked(ev.target.files));
   $('#btn-folder').addEventListener('click', () => folderIdx ? showFolderMatch() : pickFolder());
   folderBtnUI();
