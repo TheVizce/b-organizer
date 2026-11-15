@@ -2200,8 +2200,7 @@
     const rowHTML = (r) => {
       const e = r.e, img = images(e)[0], src = img ? R(img) : '', dl = lbDelta.get(e._id);
       const mv = dl ? (dl.neu ? '<span class="lb-mv new">neu</span>' : `<span class="lb-mv ${dl.d > 0 ? 'up' : 'down'}">${dl.d > 0 ? '▲' : '▼'} ${Math.abs(dl.d)}</span>`) : '';
-      const nat = splitList(v(e, 'Nationality'));
-      const sub = IS_CHARS ? v(e, 'Universe') : nat.map(n => flagFor(n)).filter(Boolean).join(' ');
+      const sub = IS_CHARS ? v(e, 'Universe') : natNames(e).map(n => flagFor(n)).filter(Boolean).join(' ');   // natNames entfernt mitgespeicherte Flaggen aus Babepedia
       return `<button class="lb-row${e._id === lbActive ? ' on' : ''}${r.r <= 3 ? ' top' + r.r : ''}" data-lb-open="${esc(e._id)}" title="${esc(v(e, 'Name'))}">
         <span class="lb-r">${r.r}</span><span class="lb-img">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<i>${esc(initials(v(e, 'Name')))}</i></span>
         <span class="lb-n">${esc(v(e, 'Name'))}${sub ? `<small>${esc(sub)}</small>` : ''}</span>${mv}<span class="lb-v">${fmt(r.x, e)}</span></button>`;
