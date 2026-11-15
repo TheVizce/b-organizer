@@ -1072,3 +1072,24 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .out-filter { opacity: .35; filter: grayscale(.6); transition: opacity .25s; }
 .out-filter:hover { opacity: .7; }
 .card.out-filter::after { content: attr(data-out); white-space: nowrap; position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--good); color: #0b0d12; }
+
+/* Abgleich-Vorschläge sichtbarer: Zähler am Knopf, Pfeil auf der Karte, Hinweis in Detail/Bewertungsmodus */
+[data-proxy="calib"], [data-action="calib"], #btn-menu { position: relative; }
+.cb-badge { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 99px; font-size: 11px; font-weight: 800; text-align: center; color: #0b0d12; vertical-align: 1px; }
+.cb-badge.hi { background: var(--good); box-shadow: 0 0 0 3px rgba(79,191,138,.18); }
+.cb-badge.mid { background: var(--warn); box-shadow: 0 0 0 3px rgba(232,176,79,.18); }
+.cb-badge.dot { position: absolute; top: -3px; right: -3px; min-width: 10px; width: 10px; height: 10px; padding: 0; margin: 0; }
+.fut-s.sug b sup { font-size: 8px; margin-left: 1px; vertical-align: 4px; }
+.fut-s.sug.up b sup { color: var(--good); }
+.fut-s.sug.down b sup { color: #f07a7a; }
+.es { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.es-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); border-left: 3px solid var(--border); background: var(--surface); }
+.es-row.up { border-left-color: var(--good); }
+.es-row.down { border-left-color: #f07a7a; }
+.es-row.lo { opacity: .8; }
+.es-ico { font-size: 16px; }
+.es-txt { flex: 1 1 260px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.es-txt .sg-new { font-size: 18px; }
+.es-txt .cb-conf { margin: 0; }
+.es-txt small { flex-basis: 100%; }
+.es-btns { display: flex; gap: 6px; }

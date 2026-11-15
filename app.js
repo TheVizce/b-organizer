@@ -2152,7 +2152,7 @@
   }
 
   function render() {
-    outOfFilter.clear();
+    outOfFilter.clear(); calibBadgeSoon();
     renderUpdateBanner();
     if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
@@ -2210,7 +2210,8 @@
     const s = scoreOf(e); if (!s) return '';
     const st = SCORE_CATS.map(c => {
       const x = num(v(e, c.f)), unset = x == null;
-      return `<span class="fut-s${unset ? ' unset' : ''}${hl && hl.f === c.f ? ' chg ' + hl.dir : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}"><b>${futV(x)}</b><i>${esc(c.short)}</i></span>`;
+      const sg = !hl && sugFor(e._id, c.f, 0.75);
+      return `<span class="fut-s${unset ? ' unset' : ''}${hl && hl.f === c.f ? ' chg ' + hl.dir : ''}${sg ? ' sug ' + (sg.to > sg.from ? 'up' : 'down') : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}${sg ? ` · Abgleich: eher ${fmtV(sg.to)} (${sg.level})` : ''}"><b>${futV(x)}${sg ? `<sup>${sg.to > sg.from ? '▲' : '▼'}</sup>` : ''}</b><i>${esc(c.short)}</i></span>`;
     }).join('');
     const r = ratingDiff(e);
     const bp = IS_CHARS ? (e._ranker ? `<span class="fut-s" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank}/${e._ranker.total}"><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><i>RNK</i></span>` : `<span class="fut-s unset" title="nicht im Ranker"><b>–</b><i>RNK</i></span>`)
@@ -2639,7 +2640,30 @@
     if (!rateable(e)) return `<div class="sec score-box"><h3>Bewertung</h3>${adultAskHTML(e)}</div>`;
     return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><span class="sc-actions"><button class="btn small" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button>${hasScore(e) ? `<button class="btn small" data-place="${esc(e._id)}" title="Ein paar kurze Duelle nur mit diesem Eintrag gegen Gleichbewertete">⚖️ Einordnen</button>` : ''}${undoBtnHTML()}</span></h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
-      ${scoreSummary(e)}</div>`;
+      ${scoreSummary(e)}${entrySugHTML(e)}</div>`;
+  }
+  // Abgleich-Vorschläge für einen Eintrag (Detailansicht, Bewertungsmodus)
+  function entrySugHTML(e) {
+    const list = sugsOf(e._id); if (!list.length) return '';
+    return `<div class="es">${list.map(x => {
+      const dir = x.to > x.from ? 'up' : 'down', eff = noteEffect(e, x.c.f, x.to);
+      return `<div class="es-row ${dir} ${x.cls}"><span class="es-ico">⚖️</span><span class="es-txt"><b>${esc(x.c.label)}</b> ${fmtV(x.from)} <span class="sg-arr ${dir}">→</span> <b class="sg-new ${dir}">${fmtV(x.to)}</b>
+        <span class="cb-conf ${x.cls}">${x.level} · ${Math.round(x.conf * 100)} %</span><small class="muted">${x.n} Duelle${eff ? ' · ' + esc(eff) : ''}</small></span>
+        <span class="es-btns"><button class="btn small primary" data-sug-apply="${esc(e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-sug-keep="${esc(e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></span></div>`;
+    }).join('')}</div>`;
+  }
+  // gemeinsame Aktionen (Detailansicht, Bewertungsmodus)
+  function sugApply(id, f, val) {
+    const e = byId(id), c = SCORE_CATS.find(x => x.f === f); if (!e || !c) return;
+    setScore(id, f, val);
+    if (e._calibKeep && e._calibKeep[f]) delete e._calibKeep[f];
+    toast(`${v(e, 'Name')}: ${c.label} → ${fmtV(val)}`, 'ok', { label: 'Rückgängig', fn: undoLast });
+  }
+  function keepSuggestion(id, f) {
+    const e = byId(id); if (!e) return;
+    const n = duels.filter(d => d.cat === f && (d.a === id || d.b === id)).length;
+    e._calibKeep = Object.assign({}, e._calibKeep, { [f]: { v: num(v(e, f)), n } });
+    e._updated = Date.now(); saveQuiet(); cbSugDirty(); refreshItem(id);
   }
   function setScore(id, f, val, noUndo) {
     const e = byId(id); if (!e) return;
@@ -3610,6 +3634,8 @@
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       if (t.closest('.undo-btn')) return undoLast();
       if (t.closest('[data-rt-place]')) return raterPlace(false);
+      const rsa = t.closest('[data-sug-apply]'); if (rsa) { sugApply(rsa.dataset.sugApply, rsa.dataset.cat, Number(rsa.dataset.val)); return raterCats(); }
+      const rsk = t.closest('[data-sug-keep]'); if (rsk) { keepSuggestion(rsk.dataset.sugKeep, rsk.dataset.cat); return raterCats(); }
       if (rater.cmp && t.closest('.rt-cmp')) { rater.cmp.remove(); rater.cmp = null; return; }
       const ad = t.closest('[data-adult]'); if (ad) { setAdult(ad.dataset.id, ad.dataset.adult); raterCats(); return; }
       const sc = t.closest('[data-score]');
@@ -3964,9 +3990,30 @@
     }
     return out.sort((a, b) => b.conf - a.conf || b.n - a.n);
   }
-  let cbSugCache = null;
+  let cbSugCache = null, cbSugIdx = null;
   const cbSugs = () => cbSugCache || (cbSugCache = calibSuggestions());
-  const cbSugDirty = () => { cbSugCache = null; };
+  const cbSugDirty = () => { cbSugCache = null; cbSugIdx = null; calibBadgeSoon(); };
+  function sugIndex() {
+    if (!cbSugIdx) { cbSugIdx = new Map(); for (const x of cbSugs()) { const k = x.e._id; if (!cbSugIdx.has(k)) cbSugIdx.set(k, []); cbSugIdx.get(k).push(x); } }
+    return cbSugIdx;
+  }
+  const sugsOf = (id) => sugIndex().get(id) || [];
+  const sugFor = (id, f, minConf = 0) => sugsOf(id).find(x => x.c.f === f && x.conf >= minConf) || null;
+  // Zähler am Abgleich-Knopf: sichere + wahrscheinliche Vorschläge (Farbe nach der höchsten Stufe)
+  let calibBadgeT = null;
+  function calibBadgeSoon() { clearTimeout(calibBadgeT); calibBadgeT = setTimeout(calibBadgeUI, 250); }
+  function calibBadgeUI() {
+    const list = cbSugs(), hi = list.filter(x => x.cls === 'hi').length, mid = list.filter(x => x.cls === 'mid').length, n = hi + mid;
+    const tip = n ? `Abgleich: ${hi} sichere und ${mid} wahrscheinliche Vorschläge (${list.length - n} mögliche)` : '';
+    $$('[data-proxy="calib"], [data-action="calib"], #btn-menu').forEach(b => {
+      let bd = $('.cb-badge', b);
+      if (!n) { if (bd) bd.remove(); b.removeAttribute('data-sug-tip'); return; }
+      if (!bd) { bd = document.createElement('span'); bd.className = 'cb-badge'; b.appendChild(bd); }
+      bd.textContent = b.id === 'btn-menu' ? '' : String(n);
+      bd.className = 'cb-badge ' + (hi ? 'hi' : 'mid') + (b.id === 'btn-menu' ? ' dot' : '');
+      b.title = b.dataset.proxy === 'calib' || b.dataset.action === 'calib' ? tip : b.title;
+    });
+  }
   function calibVerdict() {
     const d = calib.duel, r = duelEval(d);
     if (!r) return '';
@@ -4080,10 +4127,7 @@
     calib.focus ? calibFocusDone() : calibSugList();
   }
   function calibKeepSug(id, f) {
-    const e = byId(id); if (!e) return;
-    const n = duels.filter(d => d.cat === f && (d.a === id || d.b === id)).length;
-    e._calibKeep = Object.assign({}, e._calibKeep, { [f]: { v: num(v(e, f)), n } });
-    e._updated = Date.now(); saveQuiet(); cbSugDirty();
+    keepSuggestion(id, f);
     calib.focus ? calibFocusDone() : calibSugList();
   }
   // „↺ Paare“: Duelle bleiben als Grundlage für die Vorschläge erhalten; es wird nur ein Zeitpunkt gemerkt,
@@ -4171,7 +4215,7 @@
     const ref = rater.refEl || (rater.refEl = $('.rt-ref', el));
     if (ref.parentElement !== $('.rt-panel', el)) $('.rt-sum', el).after(ref);   // vor dem Neuzeichnen der Kategorien in Sicherheit bringen
     $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
-    $('.rt-sum', el).innerHTML = scoreSummary(e);
+    $('.rt-sum', el).innerHTML = scoreSummary(e) + entrySugHTML(e);
     // Handy: Vergleich direkt unter die markierte Kategorie, damit er ohne Scrollen sichtbar ist
     const narrow = window.matchMedia('(max-width: 760px)').matches;
     if (narrow) { const row = $$('.rt-cats .sc-row', el)[rater.cat]; if (row) row.after(ref); }
@@ -4470,6 +4514,8 @@
     const fdt = t.closest('[data-fd-i]'); if (fdt) { const e = byId(fdt.dataset.id); if (e) openFolderViewer(e, Number(fdt.dataset.fdI)); return; }
     const fdm = t.closest('[data-fd-more]'); if (fdm) { const id = fdm.dataset.id; if (!fdMore.has(id)) fdMore.set(id, new Set()); fdMore.get(id).add(fdm.dataset.fdMore); showDetail(id); return; }
     if (t.closest('[data-fd-choose]')) { pickFolder(); return; }
+    const sa = t.closest('[data-sug-apply]'); if (sa) { sugApply(sa.dataset.sugApply, sa.dataset.cat, Number(sa.dataset.val)); showDetail(sa.dataset.sugApply); return; }
+    const sk = t.closest('[data-sug-keep]'); if (sk) { keepSuggestion(sk.dataset.sugKeep, sk.dataset.cat); showDetail(sk.dataset.sugKeep); return; }
     const pBtn = t.closest('[data-primary]');
     if (pBtn) { const e = byId(pBtn.dataset.id); if (e) { setPrimary(e, pBtn.dataset.primary); showDetail(e._id); } return; }
     const catBtn = t.closest('[data-cat]');
