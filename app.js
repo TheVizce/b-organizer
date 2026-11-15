@@ -159,6 +159,45 @@
       'welsh': 'GB-WLS', 'yemeni': 'YE', 'yugoslav': 'RS', 'zambian': 'ZM', 'zimbabwean': 'ZW'
   };
 
+  // ---------- Deutsche Anzeige für Babepedia-Werte (gespeichert bleibt alles englisch: Import, Babepedia-Updates und Ranker brauchen die Originalwerte) ----------
+  const DE_VAL = IS_CHARS ? {} : {
+    'Hair color': { Brown: 'Braun', Black: 'Schwarz', Blonde: 'Blond', Red: 'Rot', Auburn: 'Kastanienrot', Brunette: 'Brünett', Grey: 'Grau', Gray: 'Grau', White: 'Weiß', Pink: 'Pink', Blue: 'Blau', Purple: 'Lila', Green: 'Grün', Other: 'Andere' },
+    'Eye color': { Brown: 'Braun', Blue: 'Blau', Green: 'Grün', Hazel: 'Haselnuss', Grey: 'Grau', Gray: 'Grau', Black: 'Schwarz', Other: 'Andere' },
+    'Body type': { Slim: 'Schlank', Average: 'Durchschnittlich', Athletic: 'Sportlich', Chubby: 'Mollig', BBW: 'BBW (kurvig)', Muscular: 'Muskulös', Curvy: 'Kurvig', Petite: 'Zierlich' },
+    'Ethnicity': { Caucasian: 'Europäisch', Asian: 'Asiatisch', Latin: 'Lateinamerikanisch', Black: 'Schwarz', 'Middle Eastern': 'Nahöstlich', 'Native American': 'Indigen-amerikanisch', 'Mixed-race': 'Gemischt', Other: 'Andere' },
+    'Sexuality': { Straight: 'Hetero', Bisexual: 'Bisexuell', Lesbian: 'Lesbisch', Pansexual: 'Pansexuell', Asexual: 'Asexuell', Unknown: 'Unbekannt' },
+    'Boobs': { 'Real/Natural': 'Natürlich', 'Fake/Enhanced': 'Vergrößert', 'Unknown': 'Unbekannt', 'Real (Removed implants)': 'Natürlich (Implantate entfernt)' },
+    'Tattoos': { 'n/a': 'keine Angabe' }, 'Piercings': { 'n/a': 'keine Angabe' },
+    'Profession Category': { 'Adult Industry': 'Erotikbranche', 'Music': 'Musik', 'Athletics & Sports': 'Sport', 'Acting & Performing': 'Schauspiel & Bühne', 'TV & Media': 'TV & Medien',
+      'Business / Law / Politics': 'Wirtschaft, Recht & Politik', 'Science / Health / Education': 'Wissenschaft, Gesundheit & Bildung', 'Creative & Design': 'Kreativ & Design', 'Modeling': 'Modeln',
+      'Digital Content': 'Digitale Inhalte', 'Service & Hospitality': 'Service & Gastronomie', 'Sonstige': 'Sonstige' },
+    'Professions': { 'Adult Model': 'Erotikmodel', 'Influencer': 'Influencerin', 'Glamour Model': 'Glamour-Model', 'Model': 'Model', 'Porn Star': 'Pornodarstellerin', 'TikTok Star': 'TikTok-Star',
+      'Actress': 'Schauspielerin', 'YouTuber': 'YouTuberin', 'Camgirl': 'Camgirl', 'Cosplayer': 'Cosplayerin', 'Playboy Model': 'Playboy-Model', 'Escort': 'Escort', 'Gamer': 'Gamerin',
+      'Musician': 'Musikerin', 'Beauty pageant contestant': 'Schönheitswettbewerb', 'Producer': 'Produzentin', 'MILF Porn Star': 'MILF-Pornodarstellerin', 'Fitness Model': 'Fitness-Model',
+      'AV Idol': 'AV-Idol', 'Business Woman': 'Unternehmerin', 'Exotic Dancer': 'Tänzerin (Exotic)', 'Digital Creator': 'Digital Creator', 'Supermodel': 'Supermodel', 'Plus Size Model': 'Plus-Size-Model',
+      'TV Host': 'TV-Moderatorin', 'Fetish Model': 'Fetisch-Model', 'Centerfold': 'Centerfold', 'Reality TV Star': 'Reality-TV-Star', 'Gravure Idol': 'Gravure-Idol', 'Activist': 'Aktivistin',
+      'Blogger': 'Bloggerin', 'Fitness Trainer': 'Fitnesstrainerin', 'ASMR Star': 'ASMR-Star', 'Director': 'Regisseurin', 'Writer': 'Autorin', 'Artist': 'Künstlerin',
+      'Content Creator (Non-Adult)': 'Content Creator (nicht erotisch)', 'Podcaster': 'Podcasterin', 'Voice Actress': 'Synchronsprecherin', 'Comedian': 'Comedian', 'Author': 'Autorin',
+      'Stripper': 'Stripperin', 'Photographer': 'Fotografin', 'Presenter': 'Moderatorin', 'Dominatrix': 'Domina', 'Fashion Designer': 'Modedesignerin', 'Hooters Girl': 'Hooters Girl',
+      'Hotwife': 'Hotwife', 'Student': 'Studentin', 'Journalist': 'Journalistin', 'Realtor': 'Maklerin', 'Cheerleader': 'Cheerleaderin', 'Dancer': 'Tänzerin', 'Singer': 'Sängerin',
+      'Nurse': 'Krankenschwester', 'Teacher': 'Lehrerin', 'Lawyer': 'Anwältin', 'Politician': 'Politikerin', 'Doctor': 'Ärztin', 'Chef': 'Köchin', 'Flight Attendant': 'Flugbegleiterin',
+      'Makeup Artist': 'Visagistin', 'Stylist': 'Stylistin', 'Entrepreneur': 'Unternehmerin', 'Bartender': 'Barkeeperin', 'Waitress': 'Kellnerin', 'Streamer': 'Streamerin', 'Twitch Streamer': 'Twitch-Streamerin',
+      'Instagram Model': 'Instagram-Model', 'Lingerie Model': 'Dessous-Model', 'Swimsuit Model': 'Bademoden-Model', 'Runway Model': 'Laufsteg-Model', 'Pin-up Model': 'Pin-up-Model', 'Nude Model': 'Aktmodel',
+      'OnlyFans Model': 'OnlyFans-Model', 'Webcam Model': 'Webcam-Model', 'Burlesque Dancer': 'Burlesque-Tänzerin', 'Pole Dancer': 'Poledancerin', 'Ring Girl': 'Ringgirl', 'Grid Girl': 'Gridgirl',
+      'Weather Presenter': 'Wetteransagerin', 'News Anchor': 'Nachrichtensprecherin', 'Radio Host': 'Radiomoderatorin', 'Sports Presenter': 'Sportmoderatorin', 'Scientist': 'Wissenschaftlerin', 'Engineer': 'Ingenieurin' }
+  };
+  const DE_PREFIX = { 'Musician': 'Musikerin', 'Sportswoman': 'Sportlerin' };
+  const DE_SUB = { 'Singer': 'Sängerin', 'DJ': 'DJ', 'Rapper': 'Rapperin', 'Football Player': 'Fußballerin', 'Wrestler': 'Wrestlerin', 'Race Car Driver': 'Rennfahrerin', 'Runner': 'Läuferin',
+    'Tennis Player': 'Tennisspielerin', 'Volleyball Player': 'Volleyballerin', 'Swimmer': 'Schwimmerin', 'Gymnast': 'Turnerin', 'Golfer': 'Golferin', 'Boxer': 'Boxerin', 'Cyclist': 'Radfahrerin',
+    'Skier': 'Skifahrerin', 'Surfer': 'Surferin', 'Basketball Player': 'Basketballerin', 'Handball Player': 'Handballerin', 'Ice Hockey Player': 'Eishockeyspielerin', 'Pianist': 'Pianistin', 'Violinist': 'Geigerin', 'Guitarist': 'Gitarristin', 'Drummer': 'Schlagzeugerin' };
+  function deVal(f, x) {
+    const s0 = String(x == null ? '' : x).trim(), m = DE_VAL[f]; if (!m || !s0) return s0;
+    if (m[s0]) return m[s0];
+    if (f === 'Ethnicity') { const mm = s0.match(/^Mixed-race \(primarily (.+)\)$/); if (mm) return `Gemischt (überw. ${(m[mm[1]] || mm[1]).replace(/isch$/, 'isch')})`; }
+    if (f === 'Professions') { const mm = s0.match(/^(Musician|Sportswoman):\s*(.+)$/); if (mm) return `${DE_PREFIX[mm[1]]}: ${DE_SUB[mm[2]] || mm[2]}`; }
+    return s0;
+  }
+  const deList = (f, val) => DE_VAL[f] ? String(val).split(',').map(x => deVal(f, x)).filter(Boolean).join(', ') : val;
   function flagFor(name) {
       const code = NATIONALITY_CODES[String(name || '').toLowerCase().trim()];
       if (!code) return '';
@@ -177,7 +216,16 @@
     .map(x => x.replace(/\u0001/g, ' and '))
     .map(x => x.replace(/[()]/g, '').replace(/^[^A-Za-zÀ-ž]+/, '').trim())
     .filter(Boolean);
-  const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${n}` : n; };
+  // Nationalität deutsch anzeigen: „Australian“ → „Australien“ (über den Ländercode; gespeichert bleibt der englische Wert)
+  let regionDE = null; try { regionDE = new Intl.DisplayNames(['de'], { type: 'region' }); } catch {}
+  function deNat(n) {
+    if (IS_CHARS) return n;
+    const code = NATIONALITY_CODES[String(n || '').toLowerCase().trim()];
+    if (!code) return n;
+    if (code.startsWith('GB-')) return { 'GB-ENG': 'England', 'GB-SCT': 'Schottland', 'GB-WLS': 'Wales' }[code] || n;
+    try { return (regionDE && regionDE.of(code)) || n; } catch { return n; }
+  }
+  const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${deNat(n)}` : deNat(n); };
   const natDisplay = (e) => natNames(e).map(withFlag).join(', ');
 
   // ---- Profession Category: fasst die Professions zu Bereichen zusammen ----
@@ -1757,8 +1805,10 @@
         (field === 'Nationality' ? natNames(e) : [raw]).forEach(x => x.trim() && vals.add(x.trim()));
       });
       const first = sel.options[0].outerHTML;
-      sel.innerHTML = first + [...vals].sort((a, b) => a.localeCompare(b, 'de'))
-        .map(x => `<option value="${esc(x)}">${esc(field === 'Nationality' ? withFlag(x) : x)}</option>`).join('');
+      const shownTxt = (x) => field === 'Nationality' ? withFlag(x) : deList(field, x);
+      const sortTxt = (x) => field === 'Nationality' ? deNat(x) : shownTxt(x);
+      sel.innerHTML = first + [...vals].sort((a, b) => sortTxt(a).localeCompare(sortTxt(b), 'de'))
+        .map(x => `<option value="${esc(x)}">${esc(shownTxt(x))}</option>`).join('');
       sel.value = vals.has(cur) ? cur : '';
     }
   }
@@ -1774,8 +1824,8 @@
     }
     const cats = PROFESSION_CATEGORIES.map(c => c[0]).filter(c => present.has(c));
     const prim = primaryOrder.filter(c => present.has(c));
-    sel.innerHTML = sel.options[0].outerHTML + `<optgroup label="Bereich (einer davon)">${cats.map(c => `<option>${esc(c)}</option>`).join('')}</optgroup>`
-      + `<optgroup label="Hauptbereich">${prim.map(c => `<option value="P:${esc(c)}">★ ${esc(c)}</option>`).join('')}</optgroup>`;
+    sel.innerHTML = sel.options[0].outerHTML + `<optgroup label="Bereich (einer davon)">${cats.map(c => `<option value="${esc(c)}">${esc(deVal('Profession Category', c))}</option>`).join('')}</optgroup>`
+      + `<optgroup label="Hauptbereich">${prim.map(c => `<option value="P:${esc(c)}">★ ${esc(deVal('Profession Category', c))}</option>`).join('')}</optgroup>`;
     sel.value = present.has(cur.replace(/^P:/, '')) ? cur : '';
   }
 
@@ -1962,6 +2012,14 @@
   // Anzeige-Namen (die Feldnamen in den Daten bleiben englisch)
   const FIELD_LABELS = {
     'Image Folder': 'Bilder-Ordner (PC)',
+    // Personen: deutsche Anzeige-Namen (Feldnamen in den Daten bleiben englisch)
+    'Name': 'Name', 'AKA': 'Auch bekannt als', 'Born': 'Geboren', 'Exact Birthdate': 'Geburtsdatum genau', 'Died': 'Gestorben', 'Birthplace': 'Geburtsort', 'Nationality': 'Nationalität',
+    'Ethnicity': 'Herkunft', 'Professions': 'Berufe', 'Profession Category': 'Bereiche', 'Sexuality': 'Sexualität', 'Years active': 'Aktiv seit', 'Active': 'Aktiv', 'Active till': 'Aktiv bis',
+    'Hair color': 'Haarfarbe', 'Eye color': 'Augenfarbe', 'Height': 'Größe', 'Weight': 'Gewicht', 'Body type': 'Figur', 'Measurements': 'Maße', 'Bra/Cup': 'Cup', 'Boobs': 'Brüste',
+    'Tattoos': 'Tattoos', 'Piercings': 'Piercings', 'Favorite': 'Favorit', 'Tags': 'Tags', 'Notes': 'Notizen', 'Cover Checked': 'Kachelbild geprüft', 'Profile URL': 'Babepedia-Profil',
+    'Archive URL': 'Archiv-Link', 'Babe ID': 'Babepedia-ID', 'Votes': 'Stimmen', 'Rank': 'Rang', 'Highest Rank': 'Bester Rang', 'Peakdays': 'Tage auf dem besten Rang',
+    'Own Images': 'Eigene Bilder', 'Own Image URLs': 'Eigene Bild-Links', 'Main Image URL': 'Hauptbild', 'Image 2 URL': 'Bild 2', 'Image 3 URL': 'Bild 3', 'Image 4 URL': 'Bild 4',
+    'User Upload Image URLs': 'Nutzer-Bilder (Babepedia)', 'Gallery Links': 'Galerien', 'Primary Category': 'Hauptbereich',
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
@@ -2018,13 +2076,13 @@
     if (f === '__cats') { const t = SCORE_CATS.map(c => v(e, c.f) ? c.key + fmtScoreVal(v(e, c.f)) : '').filter(Boolean).join(' '); return t; }
     if (/ Score$/.test(f)) return v(e, f) ? `${lab(f)} ${fmtScoreVal(v(e, f))}` : '';
     if (f === 'Rank' || f === 'Highest Rank') return v(e, f) ? `${f === 'Rank' ? '#' : 'max #'}${v(e, f)}` : '';
-    if (f === 'Tattoos' || f === 'Piercings') { const x = v(e, f); return x && x !== 'n/a' ? `${f}: ${x}` : ''; }
+    if (f === 'Tattoos' || f === 'Piercings') { const x = v(e, f); return x && x !== 'n/a' ? `${lab(f)}: ${x}` : ''; }
     const val = v(e, f);
     if (!val || val === 'n/a') return '';
     if (TYPES[f] === 'bool') return isTrue(val) ? f : '';
     if (f === 'Bra/Cup') return 'Cup ' + val;
     if (f === 'Babe ID') return 'ID ' + val;
-    return val + (UNITS[f] || '');
+    return deList(f, val) + (UNITS[f] || '');
   }
   function metaLine(e) {
     return ui.cardFields.map(f => cardValue(e, f)).filter(Boolean).join(' · ');
@@ -2058,7 +2116,7 @@
       const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating', 'Score', 'Global Rating'].includes(f) || / Score$/.test(f);
       const keys = [...counts.keys()].sort((a, b) => isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
-      return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(k)} (${counts.get(k)})</option>`).join('')}</select>`;
+      return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(deVal(f, k))} (${counts.get(k)})</option>`).join('')}</select>`;
     }).join('');
   }
 
@@ -2586,7 +2644,8 @@
       let rows = [...counts].map(([label, n]) => ({ label, n, test: e => statValues(e, f).includes(label), flabel: `${title}: ${label}` }));
       if (f === 'Bra/Cup') rows.sort((a, b) => { const ia = CUP_ORDER.indexOf(a.label.toUpperCase()), ib = CUP_ORDER.indexOf(b.label.toUpperCase()); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label); });
       else rows.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'de'));
-      if (f === 'Nationality') rows.forEach(r => { r.html = `${flagFor(r.label) || ''} ${esc(r.label)}`; });
+      if (f === 'Nationality') rows.forEach(r => { r.html = `${flagFor(r.label) || ''} ${esc(deNat(r.label))}`; r.flabel = `${title}: ${deNat(r.label)}`; });
+      else if (DE_VAL[f === '__primary' ? 'Profession Category' : f]) rows.forEach(r => { const d = deVal(f === '__primary' ? 'Profession Category' : f, r.label); if (d !== r.label) { r.html = esc(d); r.flabel = `${title}: ${d}`; } });
       if (f === 'Bra/Cup') return histSection('Cup', rows, total - empty, empty, { span: true });
       return statSection(title, rows, total, empty, { limit: f === 'Bra/Cup' ? 30 : 15,
         emptyRow: empty ? { label: '(ohne Angabe)', n: empty, test: e => !statValues(e, f).length, flabel: `${title}: ohne Angabe` } : null });
@@ -2727,7 +2786,7 @@
     if (f === 'Nationality') return natDisplay(e);
     if (TYPES[f] === 'date') return fmtDate(val, true);
     if (TYPES[f] === 'bool') return isTrue(val) ? 'Ja' : 'Nein';
-    return val + (UNITS[f] || '');
+    return deList(f, val) + (UNITS[f] || '');
   }
 
   function linkLabel(f, url) {
@@ -2999,7 +3058,7 @@
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
-            ${catList(e).map(c => { const pc = primaryCat(e), on = pc && pc.cat === c; return `<button class="chip cat${on ? ' primary' + (pc.manual ? '' : ' auto') : ''}" data-cat="${esc(c)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt)' : 'Hauptbereich (automatisch – in der Bewertung bestätigen)') + ' · ' : ''}Alle aus diesem Bereich anzeigen">${on ? '★ ' : ''}${esc(c)}</button>`; }).join('')}
+            ${catList(e).map(c => { const pc = primaryCat(e), on = pc && pc.cat === c; return `<button class="chip cat${on ? ' primary' + (pc.manual ? '' : ' auto') : ''}" data-cat="${esc(c)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt)' : 'Hauptbereich (automatisch – in der Bewertung bestätigen)') + ' · ' : ''}Alle aus diesem Bereich anzeigen">${on ? '★ ' : ''}${esc(deVal('Profession Category', c))}</button>`; }).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${profileStatus(e).startsWith('gone') ? `<div class="sec gone-box">⚠︎ <b>${esc(STATUS_LABEL[profileStatus(e)])}</b>${v(e, 'Deleted Since') ? ` <span class="muted">(festgestellt ${esc(fmtDate(v(e, 'Deleted Since')))})</span>` : ''}<br><span class="muted">Daten und Bilder bleiben erhalten; das rollierende Update fragt dieses Profil nicht mehr ab.${profileStatus(e) === 'gone' ? ' Bilder von Babepedia können nach und nach nicht mehr laden – eigene Bilder hochladen sichert sie.' : ''} Taucht das Profil wieder auf, wird der Status beim nächsten Holen automatisch zurückgesetzt.</span></div>` : ''}
