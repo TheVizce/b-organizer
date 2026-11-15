@@ -1852,6 +1852,12 @@
   }
 
   function filtered() {
+    const pred = filterPred();
+    let list = entries.filter(pred);
+    return sortList(list);
+  }
+  // Prüffunktion für die aktuellen Filter (auch einzeln nutzbar: passt ein geänderter Eintrag noch?)
+  function filterPred() {
     const q = $('#q').value.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
     const fv = Object.fromEntries(Object.entries(FILTERS).map(([id, f]) => [f, $('#' + id).value]));
@@ -1865,7 +1871,7 @@
 
     const xf = Object.entries(xfVals).filter(([, x]) => x);
     todoOpenIds = null;
-    let list = entries.filter(e => {
+    return (e) => {
       if (statFilter && !statFilter.test(e)) return false;
       if (fav && !isTrue(e.Favorite)) return false;
       for (const [f, want] of xf) {
@@ -1908,7 +1914,9 @@
         if (!terms.every(t => hay.includes(t))) return false;
       }
       return true;
-    });
+    };
+  }
+  function sortList(list) {
 
     // Sortierschlüssel einmal pro Eintrag berechnen (statt bei jedem Vergleich)
     const key = {
@@ -2144,6 +2152,7 @@
   }
 
   function render() {
+    outOfFilter.clear();
     renderUpdateBanner();
     if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
@@ -2565,8 +2574,17 @@
     refreshStale(id);
     const e = byId(id); if (!e) return;
     const el = $(`#main [data-id="${CSS.escape(id)}"]`);
-    if (el) el.outerHTML = ui.view === 'table' ? rowHTML(e) : cardHTML(e);
+    if (!el) return;
+    el.outerHTML = ui.view === 'table' ? rowHTML(e) : cardHTML(e);
+    // Passt der Eintrag nicht mehr zu den Filtern (z. B. „Zu erledigen“ erledigt): erst nur abblenden, damit nichts unter der Hand
+    // verspringt – ausgeblendet wird beim Schließen von Detailansicht/Bewertungsmodus/Abgleich bzw. beim nächsten Neuzeichnen
+    if (!filterPred()(e)) {
+      outOfFilter.add(id);
+      const n = $(`#main [data-id="${CSS.escape(id)}"]`);
+      if (n) { n.classList.add('out-filter'); n.dataset.out = todoSel().length ? '✓ erledigt' : 'passt nicht mehr zum Filter'; n.title = 'Passt nicht mehr zu den Filtern – verschwindet beim nächsten Aktualisieren'; }
+    } else outOfFilter.delete(id);
   }
+  const outOfFilter = new Set();
 
   // ---------- Modal ----------
   const overlay = $('#overlay'), modal = $('#modal');
@@ -2577,6 +2595,7 @@
     if (!force && dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
     discardFormUploads();
     overlay.hidden = true; modal.innerHTML = ''; document.body.style.overflow = ''; dirty = false;
+    if (outOfFilter.size && !rater && !calib) setTimeout(() => { if (overlay.hidden && outOfFilter.size) render(); }, 0);
   }
   const byId = (id) => entries.find(e => e._id === id); // bei ~4000 Einträgen schnell genug
 
