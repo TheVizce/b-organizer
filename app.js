@@ -225,6 +225,7 @@
     if (!code) return n;
     let d = n;
     if (code.startsWith('GB-')) d = { 'GB-ENG': 'England', 'GB-SCT': 'Schottland', 'GB-WLS': 'Wales' }[code] || n;
+    else if ({ GB: 1, US: 1 }[code]) d = { GB: 'Großbritannien', US: 'USA' }[code];   // kürzer als „Vereinigtes Königreich“/„Vereinigte Staaten“
     else { try { d = (regionDE && regionDE.of(code)) || n; } catch { d = n; } }
     if (!natFlagDE.has(d)) natFlagDE.set(d, flagFor(n));
     return d;
@@ -1842,7 +1843,6 @@
     { k: 'upimg', label: 'Kachelbild ist ein hochgeladenes Bild', hint: 'nur auf diesem Gerät gespeichert – besser durch einen Link ersetzen', test: e => { const i = images(e)[0]; return !!i && isLocal(i); } },
     { k: 'cover', label: 'Kachelbild nicht bestätigt', hint: 'ohne ✓ oder mit Zweifel', test: e => images(e).length > 0 && coverState(e) !== 'ok' },
     { k: 'score', label: 'Tool-Note nicht vergeben', test: e => rateable(e) && !hasScore(e) },
-    { k: 'sym', label: 'Sympathie fehlt (2,5 angenommen)', test: e => hasScore(e) && !(num(e['Sympathy Score']) >= 1) },
     { k: 'primary', label: 'Hauptbereich nicht bestätigt', hint: 'mehrere Bereiche, Hauptbereich automatisch', bp: true, test: e => catList(e).length > 1 && !(primaryCat(e) || {}).manual },
     { k: 'missing', label: 'Werte fehlen', hint: () => CORE_FIELDS.filter(([f]) => f !== '__img').map(([, l]) => l).join(', '), test: e => CORE_FIELDS.some(([f]) => f !== '__img' && isMissing(e, f)) },
     { k: 'adult', label: 'Volljährig ungeklärt', chars: true, test: e => v(e, 'Adult') !== 'ja' && v(e, 'Adult') !== 'nein' },
@@ -2381,20 +2381,20 @@
   // Karten-Stil wie eine Sammelkarte: große Tool-Note + Flagge links, Kategorien rechts
   const futV = (x) => x == null ? '–' : (x % 1 ? Math.floor(x) + '½' : String(x));
   function futHTML(e, hl) {   // hl = { f, dir: 'up'|'down' } hebt einen Wert hervor (Abgleich-Vorschläge)
-    const s = scoreOf(e); if (!s) return '';
+    const s = scoreOf(e);   // auch ohne Bewertung anzeigen (Flagge, Hauptbereich, Babepedia-Note); Hauptwert dann „–“
     const st = SCORE_CATS.map(c => {
       const x = num(v(e, c.f)), unset = x == null;
       const sg = !hl && sugFor(e._id, c.f, 0.75);
       return `<span class="fut-s${unset ? ' unset' : ''}${hl && hl.f === c.f ? ' chg ' + hl.dir : ''}${sg ? ' sug ' + (sg.to > sg.from ? 'up' : 'down') : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}${sg ? ` · Abgleich: eher ${fmtV(sg.to)} (${sg.level})` : ''}"><b>${futV(x)}${sg ? `<sup>${sg.to > sg.from ? '▲' : '▼'}</sup>` : ''}</b><i>${esc(c.short)}</i></span>`;
     }).join('');
-    const r = ratingDiff(e);
-    const bp = IS_CHARS ? (e._ranker ? `<span class="fut-s" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank}/${e._ranker.total}"><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><i>RNK</i></span>` : `<span class="fut-s unset" title="nicht im Ranker"><b>–</b><i>RNK</i></span>`)
+    const r = ratingDiff(e), site = num(e['User Rating']);
+    const bp = !s && !IS_CHARS && site != null && !isTrue(e['Profile Deleted']) ? `<span class="fut-s" title="meine Babepedia-Note (Tool-Note fehlt noch)"><b>${site}</b><i>BP</i></span>` : IS_CHARS ? (e._ranker ? `<span class="fut-s" title="Image Ranker: ${esc(e._ranker.tab)} · Platz ${e._ranker.rank}/${e._ranker.total}"><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><i>RNK</i></span>` : `<span class="fut-s unset" title="nicht im Ranker"><b>–</b><i>RNK</i></span>`)
       : r.state === 'same' ? `<span class="fut-s ok" title="gleich meiner Babepedia-Note"><b>✓</b><i>BP</i></span>`
       : r.state === 'diff' ? `<span class="fut-s ${r.site > r.mine ? 'up' : 'down'}" title="meine Babepedia-Note ${r.site} – ${r.site > r.mine ? 'höher' : 'niedriger'} als die Tool-Note (gerundet ${r.mine})"><b>${r.site > r.mine ? '▲' : '▼'}${r.site}</b><i>BP</i></span>`
       : `<span class="fut-s unset" title="${r.state === 'gone' ? 'Babepedia-Profil gelöscht' : 'auf Babepedia noch nicht bewertet'}"><b>–</b><i>BP</i></span>`;
     const nat = IS_CHARS ? '' : fieldValues(e, 'Nationality')[0];
-    return `<div class="fut${hl ? ' fut-' + hl.dir : ''}" title="Tool-Note ${esc(v(e, 'Score'))}">
-      <div class="fut-main"><b>${s.ten.toFixed(1).replace('.', ',')}</b><span>${nat ? (flagFor(nat) || '') : ''}${(() => { const pc = ui.cardBadges.includes('primary') && primaryCat(e); return pc ? `<i class="fut-pos${pc.manual ? '' : ' auto'}" title="Hauptbereich: ${esc(pc.cat)}${pc.manual ? '' : ' (automatisch)'}">${primaryIcon(pc.cat)}</i>` : ''; })()}</span></div>
+    return `<div class="fut${hl ? ' fut-' + hl.dir : ''}${s ? '' : ' fut-none'}" title="${s ? `Tool-Note ${esc(v(e, 'Score'))}` : 'noch nicht bewertet'}">
+      <div class="fut-main"><b>${s ? s.ten.toFixed(1).replace('.', ',') : '–'}</b><span>${nat ? (flagFor(nat) || '') : ''}${(() => { const pc = ui.cardBadges.includes('primary') && primaryCat(e); return pc ? `<i class="fut-pos${pc.manual ? '' : ' auto'}" title="Hauptbereich: ${esc(pc.cat)}${pc.manual ? '' : ' (automatisch)'}">${primaryIcon(pc.cat)}</i>` : ''; })()}</span></div>
       <div class="fut-grid">${st}${bp}</div></div>`;
   }
   function cardHTML(e) {

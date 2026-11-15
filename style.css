@@ -1333,3 +1333,4 @@ div.dx-th { cursor: zoom-in; }
 .dx-star:hover:not(.on) { background: var(--accent); }
 @media (hover: none) { .dx-star { opacity: 1; } }
 .pr-chip.single { cursor: default; border-style: solid; }
+.fut.fut-none .fut-main b { color: var(--faint); }
