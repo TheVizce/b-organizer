@@ -218,15 +218,20 @@
     .filter(Boolean);
   // Nationalität deutsch anzeigen: „Australian“ → „Australien“ (über den Ländercode; gespeichert bleibt der englische Wert)
   let regionDE = null; try { regionDE = new Intl.DisplayNames(['de'], { type: 'region' }); } catch {}
+  const natFlagDE = new Map();   // deutscher Ländername → Flagge (für Statistik/Filter, die nach dem deutschen Namen zusammenfassen)
   function deNat(n) {
     if (IS_CHARS) return n;
     const code = NATIONALITY_CODES[String(n || '').toLowerCase().trim()];
     if (!code) return n;
-    if (code.startsWith('GB-')) return { 'GB-ENG': 'England', 'GB-SCT': 'Schottland', 'GB-WLS': 'Wales' }[code] || n;
-    try { return (regionDE && regionDE.of(code)) || n; } catch { return n; }
+    let d = n;
+    if (code.startsWith('GB-')) d = { 'GB-ENG': 'England', 'GB-SCT': 'Schottland', 'GB-WLS': 'Wales' }[code] || n;
+    else { try { d = (regionDE && regionDE.of(code)) || n; } catch { d = n; } }
+    if (!natFlagDE.has(d)) natFlagDE.set(d, flagFor(n));
+    return d;
   }
   const withFlag = (n) => { const f = flagFor(n); return f ? `${f} ${deNat(n)}` : deNat(n); };
-  const natDisplay = (e) => natNames(e).map(withFlag).join(', ');
+  const withFlagEN = (n) => { const f = flagFor(n); return f ? `${f} ${n}` : n; };   // Originalwert (Ranker, Export)
+  const natDisplay = (e) => [...new Set(natNames(e).map(withFlag))].join(', ');
 
   // ---- Profession Category: fasst die Professions zu Bereichen zusammen ----
   // Reihenfolge = Sortierung der Bereiche. Eine Person kann in mehreren Bereichen landen.
@@ -286,9 +291,10 @@
   // Die Rangfolge (primaryOrder) wird in der IndexedDB gespeichert und mitsynchronisiert; automatische Werte werden nie gespeichert.
   const PRIMARY_DEFAULT = ['Adult Industry', 'Music', 'Athletics & Sports', 'Acting & Performing', 'TV & Media', 'Business / Law / Politics',
     'Science / Health / Education', 'Creative & Design', 'Modeling', 'Digital Content', 'Service & Hospitality', 'Sonstige'];
-  const PRIMARY_SHORT = { 'Adult Industry': ['🔞', 'Adult'], 'Music': ['🎤', 'Musik'], 'Athletics & Sports': ['🏅', 'Sport'], 'Acting & Performing': ['🎬', 'Schauspiel'],
-    'TV & Media': ['📺', 'TV/Medien'], 'Business / Law / Politics': ['💼', 'Business'], 'Science / Health / Education': ['🔬', 'Wissenschaft'],
-    'Creative & Design': ['🎨', 'Kreativ'], 'Modeling': ['📸', 'Model'], 'Digital Content': ['📱', 'Content'], 'Service & Hospitality': ['🍸', 'Service'], 'Sonstige': ['•', 'Sonstige'] };
+  const PRIMARY_SHORT = { 'Adult Industry': ['🔞', 'Erotik'], 'Music': ['🎤', 'Musik'], 'Athletics & Sports': ['🏅', 'Sport'], 'Acting & Performing': ['🎬', 'Schauspiel'],
+    'TV & Media': ['📺', 'TV & Medien'], 'Business / Law / Politics': ['💼', 'Wirtschaft & Politik'], 'Science / Health / Education': ['🔬', 'Wissenschaft & Bildung'],
+    'Creative & Design': ['🎨', 'Kreativ'], 'Modeling': ['📸', 'Modeln'], 'Digital Content': ['📱', 'Digitale Inhalte'], 'Service & Hospitality': ['🍸', 'Service'], 'Sonstige': ['•', 'Sonstige'] };
+  if (!IS_CHARS) DE_VAL['Profession Category'] = Object.fromEntries(Object.entries(PRIMARY_SHORT).map(([k, [, l]]) => [k, l]));   // überall dieselben deutschen Namen
   const normPrimaryOrder = (o) => { const ok = Array.isArray(o) ? o.filter(c => PRIMARY_DEFAULT.includes(c)) : []; return [...new Set([...ok, ...PRIMARY_DEFAULT])]; };
   let primaryOrder = PRIMARY_DEFAULT.slice();
   // { cat, manual } oder null
@@ -730,15 +736,7 @@
     return `<details class="sec fd-sec" ${ui.fdOpen ? 'open' : ''}><summary><h3>📁 Weitere Bilder (${p.items.length}) <span class="muted">Ordner „${esc(p.name)}“${groups.size > 1 ? ` · ${groups.size} Unterordner` : ''}</span></h3></summary>${grp}</details>`;
   }
   const fdMore = new Map();
-  // Detailansicht: Maus über ein Vorschaubild zeigt es groß (Klick öffnet den Betrachter an dieser Stelle)
-  $('#modal').addEventListener('mouseover', (ev) => {
-    const th = ev.target.closest && ev.target.closest('.dx-th[data-full]'); if (!th || TOUCH()) return;
-    const main = $('#modal .gallery .main'); if (!main) return;
-    let img = $('img', main);
-    if (!img) { img = document.createElement('img'); main.prepend(img); $('.placeholder', main) && $('.placeholder', main).remove(); }
-    img.src = th.dataset.full; img.removeAttribute('data-cov'); main.dataset.vw = th.dataset.vw;
-    $$('#modal .dx-th').forEach(x => x.classList.toggle('on', x === th));
-  });
+
   document.addEventListener('toggle', (ev) => {
     const t = ev.target; if (!t.classList) return;
     if (t.classList.contains('fd-sec')) { ui.fdOpen = t.open; saveUI(); }
@@ -1802,11 +1800,11 @@
       entries.forEach(e => {
         const raw = v(e, field);
         if (!raw) return;
-        (field === 'Nationality' ? natNames(e) : [raw]).forEach(x => x.trim() && vals.add(x.trim()));
+        (field === 'Nationality' ? natNames(e).map(deNat) : [raw]).forEach(x => x.trim() && vals.add(x.trim()));   // Nationalität: nach deutschem Ländernamen zusammengefasst (New Zealand/New Zealander → Neuseeland)
       });
       const first = sel.options[0].outerHTML;
-      const shownTxt = (x) => field === 'Nationality' ? withFlag(x) : deList(field, x);
-      const sortTxt = (x) => field === 'Nationality' ? deNat(x) : shownTxt(x);
+      const shownTxt = (x) => field === 'Nationality' ? `${natFlagDE.get(x) || ''} ${x}`.trim() : deList(field, x);
+      const sortTxt = (x) => field === 'Nationality' ? x : shownTxt(x);
       sel.innerHTML = first + [...vals].sort((a, b) => sortTxt(a).localeCompare(sortTxt(b), 'de'))
         .map(x => `<option value="${esc(x)}">${esc(shownTxt(x))}</option>`).join('');
       sel.value = vals.has(cur) ? cur : '';
@@ -1969,7 +1967,7 @@
       if (act && String(v(e, 'Active') || 'false') !== act) return false;
       for (const [f, val] of Object.entries(fv)) {
         if (!val) continue;
-        if (f === 'Nationality' ? !natNames(e).includes(val) : v(e, f) !== val) return false;
+        if (f === 'Nationality' ? !natNames(e).some(n => deNat(n) === val) : v(e, f) !== val) return false;
       }
       if (terms.length) {
         const hay = (IS_CHARS ? [e.Name, e.AKA, e['Full Name'], e.Universe, e.Origin, e.Tags, e.Notes, e['Voice Actor'], e.Actress]
@@ -2437,6 +2435,7 @@
   function statValues(e, f) {
     if (f === '__status') return [STATUS_LABEL[profileStatus(e)]];
     if (f === '__primary') { const pc = primaryCat(e); return pc ? [pc.cat] : []; }
+    if (f === 'Nationality') return natNames(e).map(deNat);
     if (f !== 'Geburtsland') return fieldValues(e, f);
     const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return [];
     const last = bp.split(',').pop().trim(); return last ? [COUNTRY_ALIAS[last.toLowerCase()] || last] : [];
@@ -2644,7 +2643,7 @@
       let rows = [...counts].map(([label, n]) => ({ label, n, test: e => statValues(e, f).includes(label), flabel: `${title}: ${label}` }));
       if (f === 'Bra/Cup') rows.sort((a, b) => { const ia = CUP_ORDER.indexOf(a.label.toUpperCase()), ib = CUP_ORDER.indexOf(b.label.toUpperCase()); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label); });
       else rows.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'de'));
-      if (f === 'Nationality') rows.forEach(r => { r.html = `${flagFor(r.label) || ''} ${esc(deNat(r.label))}`; r.flabel = `${title}: ${deNat(r.label)}`; });
+      if (f === 'Nationality') rows.forEach(r => { r.html = `${natFlagDE.get(r.label) || flagFor(r.label) || ''} ${esc(r.label)}`; });
       else if (DE_VAL[f === '__primary' ? 'Profession Category' : f]) rows.forEach(r => { const d = deVal(f === '__primary' ? 'Profession Category' : f, r.label); if (d !== r.label) { r.html = esc(d); r.flabel = `${title}: ${d}`; } });
       if (f === 'Bra/Cup') return histSection('Cup', rows, total - empty, empty, { span: true });
       return statSection(title, rows, total, empty, { limit: f === 'Bra/Cup' ? 30 : 15,
@@ -2824,8 +2823,9 @@
   // Hauptbereich im Bewertungsbereich bestätigen/ändern (nur Personen mit mehreren Bereichen)
   function primaryRowHTML(e) {
     if (IS_CHARS) return '';
-    const cats = catList(e); if (cats.length < 2) return '';
+    const cats = catList(e); if (!cats.length) return '';
     const pc = primaryCat(e);
+    if (cats.length === 1) return `<div class="sc-row pr-row"><span class="sc-lbl">Bereich<small class="muted">nur einer</small></span><span class="pr-chips"><span class="pr-chip on single">${primaryIcon(cats[0])} ${esc(primaryLabel(cats[0]))}</span></span></div>`;
     return `<div class="sc-row pr-row"><span class="sc-lbl">Hauptbereich<small class="muted">${pc && pc.manual ? '✓ bestätigt' : 'automatisch – antippen zum Bestätigen'}</small></span>
       <span class="pr-chips">${cats.map(c => { const on = pc && pc.cat === c; return `<button type="button" class="pr-chip${on ? ' on' : ''}${on && !pc.manual ? ' auto' : ''}" data-primary="${esc(c)}" data-id="${esc(e._id)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt) – antippen = wieder automatisch' : 'Automatisch gewählt – antippen = bestätigen') : 'Als Hauptbereich festlegen'}">${primaryIcon(c)} ${esc(primaryLabel(c))}${on && pc.manual ? ' ✓' : ''}</button>`; }).join('')}</span></div>`;
   }
@@ -2998,7 +2998,8 @@
   const FACT_LABELS = { 'Born': 'Geboren', 'Nationality': 'Nationalität', 'Height': 'Größe', 'Weight': 'Gewicht', 'Measurements': 'Maße', 'Bra/Cup': 'Cup', 'Hair color': 'Haare', 'Eye color': 'Augen', 'Body type': 'Figur', 'Ethnicity': 'Herkunft' };
   function detailSideHTML(e, imgs, links, galleries) {
     const TH = 9;
-    const thumbs = imgs.length > 1 ? `<div class="dx-thumbs">${imgs.slice(0, TH).map((u, i) => `<button class="dx-th${i === 0 ? ' on' : ''}" data-vw="${i}" data-full="${esc(R(u))}" title="Bild ${i + 1}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()"></button>`).join('')}${imgs.length > TH ? `<button class="dx-th more" data-vw="${TH}" title="alle Bilder ansehen">+${imgs.length - TH}</button>` : ''}</div>` : '';
+    // Vorschaubilder: Klick = Vollbild an dieser Stelle, ★ = direkt zum Kachelbild machen (das erste ist das aktuelle Kachelbild)
+    const thumbs = imgs.length > 1 ? `<div class="dx-thumbs">${imgs.slice(0, TH).map((u, i) => `<div class="dx-th${i === 0 ? ' on' : ''}" data-vw="${i}" title="${i === 0 ? 'Aktuelles Kachelbild' : 'Bild ' + (i + 1) + ' – Klick: groß ansehen'}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()"><button class="dx-star${i === 0 ? ' on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Ist das Kachelbild' : 'Als Kachelbild verwenden'}">★</button></div>`).join('')}${imgs.length > TH ? `<button class="dx-th more" data-vw="${TH}" title="alle Bilder ansehen">+${imgs.length - TH}</button>` : ''}</div>` : '';
     const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : '☐ Kachelbild prüfen'}</button>` : '';
     const facts = FACT_FIELDS.map(f => [f, f === 'Nationality' ? natDisplay(e) : fmtValue(e, f)]).filter(([, x]) => x !== '');
     const card = facts.length ? `<div class="dx-card"><h3>Steckbrief</h3><dl class="dx-facts">${facts.map(([f, x]) => `<div><dt>${esc(FACT_LABELS[f] || lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>` : '';
@@ -3013,8 +3014,7 @@
     const sec = (title, fields) => {   // einklappbar, Zustand pro Abschnitt gemerkt (ui.dOpen); Steckbrief-Felder stehen schon links
       const rows = fields.filter(f => !skip.has(f)).map(f => [f, fmtValue(e, f)]).filter(([, x]) => x !== '');
       if (!rows.length) return '';
-      const open = !(ui.dOpen && ui.dOpen[title] === false);
-      return `<details class="sec dsec" data-dsec="${esc(title)}" ${open ? 'open' : ''}><summary><h3>${esc(title)} <span class="muted">${rows.length}</span></h3></summary><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></details>`;
+      return `<div class="sec dsec"><h3>${esc(title)}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
     };
     const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
     const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
@@ -3058,7 +3058,7 @@
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
-            ${catList(e).map(c => { const pc = primaryCat(e), on = pc && pc.cat === c; return `<button class="chip cat${on ? ' primary' + (pc.manual ? '' : ' auto') : ''}" data-cat="${esc(c)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt)' : 'Hauptbereich (automatisch – in der Bewertung bestätigen)') + ' · ' : ''}Alle aus diesem Bereich anzeigen">${on ? '★ ' : ''}${esc(deVal('Profession Category', c))}</button>`; }).join('')}
+            ${IS_CHARS ? '' : ''}${(IS_CHARS ? catList(e) : []).map(c => { const pc = primaryCat(e), on = pc && pc.cat === c; return `<button class="chip cat${on ? ' primary' + (pc.manual ? '' : ' auto') : ''}" data-cat="${esc(c)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt)' : 'Hauptbereich (automatisch – in der Bewertung bestätigen)') + ' · ' : ''}Alle aus diesem Bereich anzeigen">${on ? '★ ' : ''}${esc(deVal('Profession Category', c))}</button>`; }).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${profileStatus(e).startsWith('gone') ? `<div class="sec gone-box">⚠︎ <b>${esc(STATUS_LABEL[profileStatus(e)])}</b>${v(e, 'Deleted Since') ? ` <span class="muted">(festgestellt ${esc(fmtDate(v(e, 'Deleted Since')))})</span>` : ''}<br><span class="muted">Daten und Bilder bleiben erhalten; das rollierende Update fragt dieses Profil nicht mehr ab.${profileStatus(e) === 'gone' ? ' Bilder von Babepedia können nach und nach nicht mehr laden – eigene Bilder hochladen sichert sie.' : ''} Taucht das Profil wieder auf, wird der Status beim nächsten Holen automatisch zurückgesetzt.</span></div>` : ''}
@@ -4752,7 +4752,7 @@
     const dnav = t.closest('[data-dnav]');
     if (dnav) { detailStep(Number(dnav.dataset.dnav)); return; }
     const vw = t.closest('.detail [data-vw]');
-    if (vw && t.tagName === 'IMG' || (vw && vw.classList.contains('main'))) {
+    if (vw && (t.tagName === 'IMG' || vw.classList.contains('main') || vw.classList.contains('more'))) {
       const det = t.closest('[data-detail]');
       if (det) { openViewer(det.dataset.detail, Number(vw.dataset.vw)); return; }
     }
@@ -5040,7 +5040,7 @@
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
     if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
     // Nationalität immer einheitlich mit Flagge senden – auch bei von Hand eingetragenen Werten ohne Flagge
-    if (f === 'Nationality') { const n = natNames(e).map(withFlag); return !n.length ? [] : type === 'multi' ? n : [n.join(', ')]; }
+    if (f === 'Nationality') { const n = natNames(e).map(withFlagEN); return !n.length ? [] : type === 'multi' ? n : [n.join(', ')]; }   // Ranker hat englische Tags
     const raw = v(e, f);
     if (!raw) return [];
     if (type === 'multi') return splitList(raw);

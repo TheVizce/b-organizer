@@ -1325,3 +1325,11 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .dx-imgs > .sec:first-child { margin-top: 8px; }
 .dx-imgs > .sec:first-child > h3 { display: none; }   /* Überschrift steht schon in der Zeile zum Aufklappen */
 .dx-imgs > summary h3 .muted { text-transform: none; letter-spacing: normal; font-weight: 400; margin-left: 6px; }
+/* Vorschaubilder: ★ macht direkt zum Kachelbild */
+div.dx-th { cursor: zoom-in; }
+.dx-star { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(8,9,12,.7); color: #fff; font-size: 12px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .15s; padding: 0; }
+.dx-th:hover .dx-star, .dx-star.on { opacity: 1; }
+.dx-star.on { background: var(--accent); cursor: default; }
+.dx-star:hover:not(.on) { background: var(--accent); }
+@media (hover: none) { .dx-star { opacity: 1; } }
+.pr-chip.single { cursor: default; border-style: solid; }
