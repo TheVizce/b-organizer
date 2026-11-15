@@ -2640,7 +2640,16 @@
     if (!rateable(e)) return `<div class="sec score-box"><h3>Bewertung</h3>${adultAskHTML(e)}</div>`;
     return `<div class="sec score-box"><h3>Bewertung <span class="muted sc-anchor">${SCORE_ANCHORS}</span><span class="sc-actions"><button class="btn small" data-rate-mode="${esc(e._id)}" title="Im Bewertungsmodus öffnen und von hier aus durch die Liste blättern (R)">⭐ Bewertungsmodus</button>${hasScore(e) ? `<button class="btn small" data-place="${esc(e._id)}" title="Ein paar kurze Duelle nur mit diesem Eintrag gegen Gleichbewertete">⚖️ Einordnen</button>` : ''}${undoBtnHTML()}</span></h3>
       ${SCORE_CATS.map((c, i) => scoreRow(e, c, i)).join('')}
+      ${primaryRowHTML(e)}
       ${scoreSummary(e)}${entrySugHTML(e)}</div>`;
+  }
+  // Hauptbereich im Bewertungsbereich bestätigen/ändern (nur Personen mit mehreren Bereichen)
+  function primaryRowHTML(e) {
+    if (IS_CHARS) return '';
+    const cats = catList(e); if (cats.length < 2) return '';
+    const pc = primaryCat(e);
+    return `<div class="sc-row pr-row"><span class="sc-lbl">Hauptbereich<small class="muted">${pc && pc.manual ? '✓ bestätigt' : 'automatisch – antippen zum Bestätigen'}</small></span>
+      <span class="pr-chips">${cats.map(c => { const on = pc && pc.cat === c; return `<button type="button" class="pr-chip${on ? ' on' : ''}${on && !pc.manual ? ' auto' : ''}" data-primary="${esc(c)}" data-id="${esc(e._id)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt) – antippen = wieder automatisch' : 'Automatisch gewählt – antippen = bestätigen') : 'Als Hauptbereich festlegen'}">${primaryIcon(c)} ${esc(primaryLabel(c))}${on && pc.manual ? ' ✓' : ''}</button>`; }).join('')}</span></div>`;
   }
   // Abgleich-Vorschläge für einen Eintrag (Detailansicht, Bewertungsmodus)
   function entrySugHTML(e) {
@@ -3634,6 +3643,7 @@
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       if (t.closest('.undo-btn')) return undoLast();
       if (t.closest('[data-rt-place]')) return raterPlace(false);
+      const rpr = t.closest('[data-primary]'); if (rpr) { const pe = byId(rpr.dataset.id); if (pe) setPrimary(pe, rpr.dataset.primary); return raterCats(); }
       const rsa = t.closest('[data-sug-apply]'); if (rsa) { sugApply(rsa.dataset.sugApply, rsa.dataset.cat, Number(rsa.dataset.val)); return raterCats(); }
       const rsk = t.closest('[data-sug-keep]'); if (rsk) { keepSuggestion(rsk.dataset.sugKeep, rsk.dataset.cat); return raterCats(); }
       if (rater.cmp && t.closest('.rt-cmp')) { rater.cmp.remove(); rater.cmp = null; return; }
@@ -4214,7 +4224,7 @@
     if (!rateable(e)) { const rf = rater.refEl || (rater.refEl = $('.rt-ref', el)); if (rf.parentElement !== $('.rt-panel', el)) $('.rt-sum', el).after(rf); $('.rt-cats', el).innerHTML = adultAskHTML(e); $('.rt-sum', el).innerHTML = ''; rf.innerHTML = ''; return; }
     const ref = rater.refEl || (rater.refEl = $('.rt-ref', el));
     if (ref.parentElement !== $('.rt-panel', el)) $('.rt-sum', el).after(ref);   // vor dem Neuzeichnen der Kategorien in Sicherheit bringen
-    $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('');
+    $('.rt-cats', el).innerHTML = SCORE_CATS.map((c, i) => scoreRow(e, c, i, i === rater.cat)).join('') + primaryRowHTML(e);
     $('.rt-sum', el).innerHTML = scoreSummary(e) + entrySugHTML(e);
     // Handy: Vergleich direkt unter die markierte Kategorie, damit er ohne Scrollen sichtbar ist
     const narrow = window.matchMedia('(max-width: 760px)').matches;

@@ -1093,3 +1093,12 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
 .es-txt .cb-conf { margin: 0; }
 .es-txt small { flex-basis: 100%; }
 .es-btns { display: flex; gap: 6px; }
+/* Hauptbereich im Bewertungsbereich */
+.pr-row { margin-top: 4px; border-top: 1px dashed var(--border); padding-top: 10px; border-radius: 0; }
+.pr-row .sc-lbl small { display: block; font-weight: 400; font-size: 11px; line-height: 1.25; margin-top: 2px; }
+.pr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.pr-chip { height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.pr-chip:hover { border-color: #e3b341; }
+.pr-chip.on { border-color: #e3b341; background: rgba(227,179,65,.18); color: #ffe08a; font-weight: 600; }
+.pr-chip.on.auto { border-style: dashed; background: transparent; color: #d8cfa8; font-weight: 500; }
+.rater .pr-row .sc-lbl { font-size: 14px; }
