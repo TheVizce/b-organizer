@@ -682,7 +682,20 @@
     return `<details class="sec fd-sec" ${ui.fdOpen ? 'open' : ''}><summary><h3>📁 Weitere Bilder (${p.items.length}) <span class="muted">Ordner „${esc(p.name)}“${groups.size > 1 ? ` · ${groups.size} Unterordner` : ''}</span></h3></summary>${grp}</details>`;
   }
   const fdMore = new Map();
-  document.addEventListener('toggle', (ev) => { if (ev.target.classList && ev.target.classList.contains('fd-sec')) { ui.fdOpen = ev.target.open; saveUI(); } }, true);
+  // Detailansicht: Maus über ein Vorschaubild zeigt es groß (Klick öffnet den Betrachter an dieser Stelle)
+  $('#modal').addEventListener('mouseover', (ev) => {
+    const th = ev.target.closest && ev.target.closest('.dx-th[data-full]'); if (!th || TOUCH()) return;
+    const main = $('#modal .gallery .main'); if (!main) return;
+    let img = $('img', main);
+    if (!img) { img = document.createElement('img'); main.prepend(img); $('.placeholder', main) && $('.placeholder', main).remove(); }
+    img.src = th.dataset.full; img.removeAttribute('data-cov'); main.dataset.vw = th.dataset.vw;
+    $$('#modal .dx-th').forEach(x => x.classList.toggle('on', x === th));
+  });
+  document.addEventListener('toggle', (ev) => {
+    const t = ev.target; if (!t.classList) return;
+    if (t.classList.contains('fd-sec')) { ui.fdOpen = t.open; saveUI(); }
+    if (t.classList.contains('dsec')) { ui.dOpen = Object.assign({}, ui.dOpen, { [t.dataset.dsec]: t.open }); saveUI(); }
+  }, true);
 
   async function loadLocalImages() {
     const d = await db();
@@ -2914,15 +2927,35 @@
       rankerPick = null;
     } catch (err) { btn.disabled = false; setMsg('Übergabe fehlgeschlagen: ' + (err && err.message || err)); }
   }
+  // ---------- Detailansicht: linke Spalte unter dem Bild ----------
+  const FACT_FIELDS = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'Hair color', 'Eye color', 'Body type', 'Height', 'Voice Actor', 'Actress']
+    : ['Born', 'Nationality', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Hair color', 'Eye color', 'Body type', 'Ethnicity'];
+  const LINK_ICONS = { 'Profile URL': '🅱', 'Archive URL': '🏛️', 'Website': '🌐', 'Instagram': '📸', 'X / Twitter': '𝕏', 'TikTok': '♪', 'YouTube': '▶', 'Twitch': '🎮', 'Reddit': '👽', 'IMDb': '🎬', 'OnlyFans 1': '🔒', 'OnlyFans 2': '🔒', 'Fansly': '💙', 'Thronly': '👑', 'Boobpedia Link': '📖', 'Wiki URL': '📚' };
+  // Bilderbereich in der Detailansicht einklappbar (links gibt es schon die Vorschaubilder); Personen standardmäßig zu, Charaktere offen (Bildarten)
+  function dxImgs(e, n, inner) {
+    const st = ui.dOpen && ui.dOpen.Bilder, open = st === undefined ? IS_CHARS : st;
+    return `<details class="sec dsec dx-imgs" data-dsec="Bilder" ${open ? 'open' : ''}><summary><h3>Alle Bilder <span class="muted">${n} · Kachelbild${IS_CHARS ? ', Bildarten' : ''}, Vollbild</span></h3></summary>${inner}</details>`;
+  }
+  const FACT_LABELS = { 'Born': 'Geboren', 'Nationality': 'Nationalität', 'Height': 'Größe', 'Weight': 'Gewicht', 'Measurements': 'Maße', 'Bra/Cup': 'Cup', 'Hair color': 'Haare', 'Eye color': 'Augen', 'Body type': 'Figur', 'Ethnicity': 'Herkunft' };
+  function detailSideHTML(e, imgs, links, galleries) {
+    const TH = 9;
+    const thumbs = imgs.length > 1 ? `<div class="dx-thumbs">${imgs.slice(0, TH).map((u, i) => `<button class="dx-th${i === 0 ? ' on' : ''}" data-vw="${i}" data-full="${esc(R(u))}" title="Bild ${i + 1}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()"></button>`).join('')}${imgs.length > TH ? `<button class="dx-th more" data-vw="${TH}" title="alle Bilder ansehen">+${imgs.length - TH}</button>` : ''}</div>` : '';
+    const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : '☐ Kachelbild prüfen'}</button>` : '';
+    const facts = FACT_FIELDS.map(f => [f, f === 'Nationality' ? natDisplay(e) : fmtValue(e, f)]).filter(([, x]) => x !== '');
+    const card = facts.length ? `<div class="dx-card"><h3>Steckbrief</h3><dl class="dx-facts">${facts.map(([f, x]) => `<div><dt>${esc(FACT_LABELS[f] || lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>` : '';
+    const lk = links.length || galleries.length ? `<div class="dx-card"><h3>Links</h3><div class="dx-links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer" title="${esc(v(e, f))}"><span>${LINK_ICONS[f] || '🔗'}</span>${esc(linkLabel(f).replace(/^🏛️ /, ''))}</a>`).join('')}${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><span>🖼</span>Galerie ${i + 1}</a>`).join('')}</div></div>` : '';
+    return thumbs + cover + card + lk;
+  }
   function showDetail(id) {
     const e = byId(id); if (!e) return;
     lbSetActive(id);
     const imgs = images(e);
-    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL']);
-    const sec = (title, fields) => {
+    const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL', ...FACT_FIELDS, ...SCORE_CATS.map(c => c.f), 'Score', 'My Rating', 'Primary Category', 'Profession Category', 'Medium']);   // Bereiche/Medium stehen als Chips oben
+    const sec = (title, fields) => {   // einklappbar, Zustand pro Abschnitt gemerkt (ui.dOpen); Steckbrief-Felder stehen schon links
       const rows = fields.filter(f => !skip.has(f)).map(f => [f, fmtValue(e, f)]).filter(([, x]) => x !== '');
       if (!rows.length) return '';
-      return `<div class="sec"><h3>${title}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
+      const open = !(ui.dOpen && ui.dOpen[title] === false);
+      return `<details class="sec dsec" data-dsec="${esc(title)}" ${open ? 'open' : ''}><summary><h3>${esc(title)} <span class="muted">${rows.length}</span></h3></summary><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></details>`;
     };
     const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
     const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
@@ -2939,18 +2972,21 @@
         <h2>${esc(v(e, 'Name'))}</h2>
         ${nav}
         <div class="actions">
-          <button class="btn small" data-action="to-ranker" data-id="${esc(e._id)}" title="An Image Ranker senden">🏆 An Ranker</button>
-          <button class="btn small" data-action="edit" data-id="${esc(e._id)}">Bearbeiten</button>
-          <button class="btn small" data-action="merge" data-id="${esc(e._id)}" title="Mit einem anderen Eintrag zusammenführen (doppelt angelegt, umbenannt …)">⇄ Zusammenführen</button>
-          <button class="btn small danger" data-action="delete" data-id="${esc(e._id)}">Löschen</button>
+          <button class="btn small" data-action="to-ranker" data-id="${esc(e._id)}" title="An Image Ranker senden">🏆<span class="lbl"> An Ranker</span></button>
+          <button class="btn small" data-action="edit" data-id="${esc(e._id)}" title="Bearbeiten">✎<span class="lbl"> Bearbeiten</span></button>
+          <button class="btn small" data-action="merge" data-id="${esc(e._id)}" title="Mit einem anderen Eintrag zusammenführen (doppelt angelegt, umbenannt …)">⇄<span class="lbl"> Zusammenführen</span></button>
+          <button class="btn small danger" data-action="delete" data-id="${esc(e._id)}" title="Löschen">🗑<span class="lbl"> Löschen</span></button>
           <button class="x" data-action="close" aria-label="Schließen">×</button>
         </div>
       </div>
-      <div class="detail" data-detail="${esc(e._id)}">
-        <div class="gallery">
-          <div class="main" data-vw="0" title="Bilder ansehen">${coverTag(e)}${imgs.length > 1 ? `<span class="vw-hint">🖼 ${imgs.length}</span>` : ''}</div>
-        </div>
-        <div>
+      <div class="detail dx" data-detail="${esc(e._id)}">
+        <aside class="dx-side">
+          <div class="gallery">
+            <div class="main" data-vw="0" title="Bilder ansehen">${coverTag(e)}${imgs.length > 1 ? `<span class="vw-hint">🖼 ${imgs.length}</span>` : ''}</div>
+          </div>
+          ${detailSideHTML(e, imgs, links, galleries)}
+        </aside>
+        <div class="dx-main">
           <h1 class="d-title">${esc(v(e, 'Name'))}</h1>
           ${v(e, 'AKA') ? `<div class="d-aka">auch: ${esc(v(e, 'AKA'))}</div>` : ''}
           <div class="chips">
@@ -2963,26 +2999,30 @@
 
             ${missingCore(e).length ? `<span class="chip missing" title="Diese Werte fehlen (werden auch vom Image Ranker genutzt)">⚠ fehlt: ${esc(missingCore(e).join(', '))}</span>` : ''}
             ${v(e, 'Archive URL') ? `<a class="chip" href="${esc(v(e, 'Archive URL'))}" target="_blank" rel="noopener noreferrer" title="Aus dem Internet Archive übernommen">🏛️ aus dem Archiv</a>` : ''}
-            ${(() => { const pc = primaryCat(e); return catList(e).map(c => { const on = pc && pc.cat === c; return `<span class="chip-pair"><button class="chip-star${on ? ' on' : ''}${on && !pc.manual ? ' auto' : ''}" data-primary="${esc(c)}" data-id="${esc(e._id)}" title="${on ? (pc.manual ? 'Hauptbereich (von dir gesetzt) – antippen = wieder automatisch' : 'Hauptbereich (automatisch) – antippen = so festlegen') : 'Als Hauptbereich festlegen'}">${on ? '★' : '☆'}</button><button class="chip cat${on ? ' primary' : ''}" data-cat="${esc(c)}" title="Alle aus diesem Bereich anzeigen">${esc(c)}</button></span>`; }).join(''); })()}
+            ${catList(e).map(c => { const pc = primaryCat(e), on = pc && pc.cat === c; return `<button class="chip cat${on ? ' primary' + (pc.manual ? '' : ' auto') : ''}" data-cat="${esc(c)}" title="${on ? (pc.manual ? 'Hauptbereich (bestätigt)' : 'Hauptbereich (automatisch – in der Bewertung bestätigen)') + ' · ' : ''}Alle aus diesem Bereich anzeigen">${on ? '★ ' : ''}${esc(c)}</button>`; }).join('')}
             ${tags.map(t => `<button class="chip tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}
           </div>
           ${profileStatus(e).startsWith('gone') ? `<div class="sec gone-box">⚠︎ <b>${esc(STATUS_LABEL[profileStatus(e)])}</b>${v(e, 'Deleted Since') ? ` <span class="muted">(festgestellt ${esc(fmtDate(v(e, 'Deleted Since')))})</span>` : ''}<br><span class="muted">Daten und Bilder bleiben erhalten; das rollierende Update fragt dieses Profil nicht mehr ab.${profileStatus(e) === 'gone' ? ' Bilder von Babepedia können nach und nach nicht mehr laden – eigene Bilder hochladen sichert sie.' : ''} Taucht das Profil wieder auf, wird der Status beim nächsten Holen automatisch zurückgesetzt.</span></div>` : ''}
-          ${scoreBox(e)}
-          ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
-          ${sec('Allgemein', GROUPS[0].fields)}
-          ${sec('Aussehen', GROUPS[1].fields)}
-          ${sec(GROUPS[3].title, GROUPS[3].fields)}
-          ${imgs.length ? (() => {
+          <div class="dx-cols">
+            <div class="dx-col">
+              ${scoreBox(e)}
+              ${v(e, 'Notes') ? `<div class="sec"><h3>Notizen</h3><div class="notes">${esc(v(e, 'Notes'))}</div></div>` : ''}
+            </div>
+            <div class="dx-col">
+              ${sec(GROUPS[0].title, GROUPS[0].fields)}
+              ${sec(GROUPS[1].title, GROUPS[1].fields)}
+              ${sec(GROUPS[3].title, GROUPS[3].fields)}
+            </div>
+          </div>
+          ${imgs.length ? dxImgs(e, imgs.length, (() => {
             const cell = (u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}${IS_CHARS ? `<button class="img-kind-btn k-${imgKind(e, u)}" data-fan-toggle="${esc(u)}" data-id="${esc(e._id)}" title="Bildart wechseln (weiter zu: ${KIND_OF[nextKind(imgKind(e, u))].one})">${KIND_OF[imgKind(e, u)].short} ⇄</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`;
             const all = imgs.map((u, i) => [u, i]);
             if (!IS_CHARS) return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${all.map(([u, i]) => cell(u, i)).join('')}</div></div>`;
 
             return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3></div>`
               + IMG_KINDS.map(x => { const g = all.filter(([u]) => imgKind(e, u) === x.k); return g.length ? `<div class="sec img-sec"><h4>${x.title} (${g.length})</h4><div class="img-grid">${g.map(([u, i]) => cell(u, i)).join('')}</div></div>` : ''; }).join('');
-          })() : ''}
+          })()) : ''}
           ${folderSecHTML(e)}
-          ${links.length ? `<div class="sec"><h3>Links</h3><div class="links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(f))}</a>`).join('')}</div></div>` : ''}
-          ${galleries.length ? `<div class="sec"><h3>Galerien (${galleries.length})</h3><div class="links">${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Galerie ${i + 1}</a>`).join('')}</div></div>` : ''}
         </div>
       </div>`);
     if (rankerPick && rankerPick.boId === e._id) decoratePick(e);

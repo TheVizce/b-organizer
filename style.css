@@ -1269,3 +1269,59 @@ body.cards-s .card .img.has-fut .badges { bottom: 60px; }
   .vc-prev { display: none; }   /* am Handy zu eng – Änderungen sind nach „Übernehmen“ direkt im Raster zu sehen */
 }
 .vc-size button.on { background: var(--accent); color: #fff; }
+
+/* ---------- Detailansicht: breiter, linke Spalte mit Vorschaubildern/Steckbrief/Links, rechts zweispaltig ---------- */
+.modal:has(.dx) { max-width: min(1640px, 96vw); }
+.overlay:has(.dx) { padding: 22px 16px; }
+.dx { grid-template-columns: 340px minmax(0, 1fr); gap: 26px; padding: 22px 24px 26px; }
+.dx-side { position: sticky; top: 74px; align-self: start; display: flex; flex-direction: column; gap: 12px; }
+.dx .gallery .main { box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.dx-thumbs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.dx-th { position: relative; padding: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface-2); cursor: pointer; }
+.dx-th img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .75; transition: opacity .15s; }
+.dx-th:hover img, .dx-th.on img { opacity: 1; }
+.dx-th.on { border-color: var(--accent); }
+.dx-th.more { display: grid; place-items: center; color: var(--muted); font-weight: 700; font-size: 13px; border: 1px dashed var(--border); }
+.dx-th.more:hover { color: var(--text); border-color: var(--accent); }
+.dx-cover { align-self: flex-start; margin: 0; }
+.dx-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.dx-card h3 { margin: 0 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.dx-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 0; }
+.dx-facts div { min-width: 0; }
+.dx-facts dt { font-size: 11px; color: var(--muted); }
+.dx-facts dd { margin: 1px 0 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.dx-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.dx-links a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12.5px; text-decoration: none; }
+.dx-links a:hover { border-color: var(--accent); }
+.dx-links a span { font-size: 12px; }
+.dx-main { min-width: 0; }
+.dx .d-title { font-size: 30px; }
+.dx-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0 28px; align-items: start; }
+.dx-col { min-width: 0; }
+.dx-col .score-box { margin-top: 18px; }
+.dsec > summary { list-style: none; cursor: pointer; }
+.dsec > summary::-webkit-details-marker { display: none; }
+.dsec > summary h3::before { content: '▾ '; }
+.dsec:not([open]) > summary h3::before { content: '▸ '; }
+.dsec > summary h3 .muted { font-weight: 400; letter-spacing: normal; }
+.dx-col .kv { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.chip.cat.primary { border-color: #e3b341; color: #ffe08a; }
+.chip.cat.primary.auto { border-style: dashed; color: #d8cfa8; }
+@media (max-width: 1280px) { .dx-cols { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .dx { grid-template-columns: 1fr; padding: 14px; gap: 14px; }
+  .dx-side { position: static; }
+  .dx .gallery .main { max-width: 340px; margin: 0 auto; width: 100%; }
+  .dx-thumbs { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); }
+  .dx .d-title { font-size: 24px; }
+}
+@media (max-width: 900px) {
+  .dx { display: flex; flex-direction: column; }
+  .dx-side { display: contents; }
+  .dx .gallery { order: 1; } .dx-thumbs { order: 2; } .dx-cover { order: 3; align-self: center; }
+  .dx-main { order: 4; } .dx-card { order: 5; }
+}
+@media (max-width: 760px) { .modal-head .actions .lbl { display: none; } .modal-head .actions .btn.small { min-width: 38px; justify-content: center; } }
+.dx-imgs > .sec:first-child { margin-top: 8px; }
+.dx-imgs > .sec:first-child > h3 { display: none; }   /* Überschrift steht schon in der Zeile zum Aufklappen */
+.dx-imgs > summary h3 .muted { text-transform: none; letter-spacing: normal; font-weight: 400; margin-left: 6px; }
