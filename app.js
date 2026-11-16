@@ -2847,7 +2847,7 @@
   }
   function keepSuggestion(id, f) {
     const e = byId(id); if (!e) return;
-    const n = duels.filter(d => d.cat === f && (d.a === id || d.b === id)).length;
+    const n = latestDuels().filter(d => d.cat === f && (d.a === id || d.b === id)).length;
     e._calibKeep = Object.assign({}, e._calibKeep, { [f]: { v: num(v(e, f)), n } });
     e._updated = Date.now(); saveQuiet(); cbSugDirty(); refreshItem(id);
   }
@@ -4038,7 +4038,7 @@
     cats.sort((a, b) => (fz.perCat[a.c.f] || 0) - (fz.perCat[b.c.f] || 0) || doneIn(a.c) - doneIn(b.c) || a.i - b.i);
     for (const o of cats) {
       if ((fz.perCat[o.c.f] || 0) >= PLACE_PER_CAT && calib.n < cats.length * PLACE_PER_CAT) continue;
-      const seen = new Set(duels.filter(d => d.cat === o.c.f && (d.a === F._id || d.b === F._id)).map(d => d.a === F._id ? d.b : d.a));
+      const seen = new Set(latestDuels().filter(d => d.cat === o.c.f && (d.a === F._id || d.b === F._id) && pairFresh(d, o.c)).map(d => d.a === F._id ? d.b : d.a));
       const cnt = new Map(); for (const d of duels) if (d.cat === o.c.f) { cnt.set(d.a, (cnt.get(d.a) || 0) + 1); cnt.set(d.b, (cnt.get(d.b) || 0) + 1); }
       const pool = entries.filter(b => b !== F && rateable(b) && !seen.has(b._id) && !calib.skip.has([F._id, b._id].sort().join('|')) && (() => { const y = num(v(b, o.c.f)); return y != null && !symUnknown(o.c, y) && Math.abs(y - o.x) <= (o.c.vals ? 1 : 0.5); })());
       if (!pool.length) continue;
@@ -4051,10 +4051,27 @@
     }
     return null;
   }
+  // Je Paar und Kategorie nur den neuesten Vote (ein erneuter Vote ersetzt den alten, statt ihn doppelt zu zählen)
+  let latestCache = null, latestKey = '';
+  function latestDuels() {
+    const key = duels.length + '|' + (duels.length ? duels[duels.length - 1].id : '');
+    if (latestCache && latestKey === key) return latestCache;
+    const m = new Map();
+    for (const d of duels) { const k = d.cat + '|' + [d.a, d.b].sort().join('|'); const o = m.get(k); if (!o || (d.ts || 0) >= (o.ts || 0)) m.set(k, d); }
+    latestCache = [...m.values()]; latestKey = key; return latestCache;
+  }
+  // Schon verglichenes Paar zählt als „gesehen“, solange der Vote frisch ist: nach „↺ Paare“, älter als 90 Tage
+  // oder wenn sich seitdem einer der beiden Werte geändert hat, darf es wieder vorkommen
+  const PAIR_MAX_AGE = 90 * 864e5;
+  function pairFresh(d, c) {
+    if ((d.ts || 0) <= pairsSince(c.f) || Date.now() - (d.ts || 0) > PAIR_MAX_AGE) return false;
+    const A = byId(d.a), B = byId(d.b); if (!A || !B) return false;
+    return num(v(A, c.f)) === d.va && num(v(B, c.f)) === d.vb;
+  }
   // Pro Eintrag (eine Kategorie): Wohin zeigen seine bisherigen Duelle? → { n, up, down } (Wahrscheinlichkeitsmasse über/unter dem heutigen Wert)
   function catLean(c) {
     const by = new Map();
-    for (const d of duels) {
+    for (const d of latestDuels()) {
       if (d.cat !== c.f) continue;
       const A = byId(d.a), B = byId(d.b); if (!A || !B) continue;
       const va = num(v(A, c.f)), vb = num(v(B, c.f));
@@ -4081,8 +4098,8 @@
     if (calib.focus) return calibPickFocus();
     const c = SCORE_CATS[calib.cat], pool = calibPool(c);
     if (pool.length < 2) return null;
-    const seen = new Set(), since = pairsSince(c.f);
-    for (const d of duels) if (d.cat === c.f && d.ts > since) seen.add([d.a, d.b].sort().join('|'));
+    const seen = new Set();
+    for (const d of latestDuels()) if (d.cat === c.f && pairFresh(d, c)) seen.add([d.a, d.b].sort().join('|'));
     const lean = catLean(c), skip = calib.skip, val = (e) => num(v(e, c.f)), rnd = Math.random;
     const L = (e) => lean.get(e._id) || { n: 0, up: 0, down: 0 };
     const near = (u) => u >= 0.45 && u < 0.9 ? 1 - Math.abs(u - 0.72) / 0.3 : 0;   // am wertvollsten knapp vor „wahrscheinlich“/„sicher“
@@ -4221,7 +4238,7 @@
   function calibSuggestions() {
     const out = [];
     const by = new Map();   // "id|cat" -> [{ opp, s }]
-    for (const d of duels) {
+    for (const d of latestDuels()) {   // je Paar zählt nur der neueste Vote
       const c = SCORE_CATS.find(x => x.f === d.cat); if (!c) continue;
       const A = byId(d.a), B = byId(d.b); if (!A || !B || !rateable(A) || !rateable(B)) continue;
       const va = num(v(A, c.f)), vb = num(v(B, c.f));
@@ -4373,7 +4390,7 @@
     if (!calib.pair && calib.focus) return calibFocusDone();
     if (!calib.pair) {
       $('.cb-q', el).innerHTML = '';
-      $('.cb-body', el).innerHTML = `<div class="cb-empty"><p>${pool < 2 ? `In der aktuellen Liste sind in „${esc(c.label)}“ weniger als zwei Einträge bewertet.` : `Für „${esc(c.label)}“ gibt es gerade keine neuen Paare mit gleichem oder benachbartem Wert.`}</p><p class="muted">Andere Kategorie wählen, die Vorschläge ansehen oder mit „↺ Paare“ bereits verglichene Paare wieder freigeben.</p></div>`;
+      $('.cb-body', el).innerHTML = `<div class="cb-empty"><p>${pool < 2 ? `In der aktuellen Liste sind in „${esc(c.label)}“ weniger als zwei Einträge bewertet.` : `Für „${esc(c.label)}“ gibt es gerade keine neuen Paare mit gleichem oder benachbartem Wert.`}</p>${pool >= 2 ? `<p><button class="btn primary" data-cbreset="cat">↺ Paare in ${esc(c.label)} wieder freigeben</button></p><p class="muted">Deine Duelle bleiben erhalten; ein erneuter Vote zu einem Paar ersetzt den alten. Oder andere Kategorie wählen.</p>` : '<p class="muted">Andere Kategorie wählen oder die Vorschläge ansehen.</p>'}</div>`;
       $('.cb-foot', el).innerHTML = '';
       return;
     }
