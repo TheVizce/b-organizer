@@ -1392,3 +1392,12 @@ div.dx-th { cursor: zoom-in; }
 .pl-done .sg-list { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
 .pl-done .pl-others { max-width: 900px; }
 .sg-name + .pl-tag { margin-left: 8px; vertical-align: 3px; }
+/* Online-Ersatz fürs eigene Kachelbild */
+.img-cell .img-alt-btn { position: absolute; right: 40px; top: 6px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(10,11,15,.75); color: var(--muted); font-size: 14px; cursor: pointer; display: grid; place-items: center; opacity: .85; }
+.img-cell .img-alt-btn:hover { color: #fff; }
+.img-cell .img-alt-btn.on { color: #7fd1ff; opacity: 1; box-shadow: 0 0 0 2px #7fd1ff inset; }
+.dx-alt { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; padding: 6px 8px; border-radius: 8px; font-size: 12px; line-height: 1.35; background: var(--panel2, rgba(255,255,255,.04)); color: var(--muted); }
+.dx-alt img { width: 32px; height: 40px; object-fit: cover; border-radius: 4px; flex: none; }
+.dx-alt.ok { color: #9fd8f5; }
+.dx-alt.miss { color: var(--warn); }
+.card .cover-ok.alt span { background: #7fd1ff; color: #06141b; }

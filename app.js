@@ -23,8 +23,8 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder'];
-  const NO_CSV = new Set(['Own Images', 'Cover']); // lokale Bilder gibt es nur im Browser
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder', 'Cover Online'];
+  const NO_CSV = new Set(['Own Images', 'Cover', 'Cover Online']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = IS_CHARS ? [
@@ -732,7 +732,7 @@
     try {
       const ref = await storeLocalImage(file);
       e['Own Images'] = [...splitList(e['Own Images']), ref].join(', ');
-      if (asCover) e.Cover = ref;
+      if (asCover) { keepOnlineAsAlt(e, ref); e.Cover = ref; }
       e._updated = Date.now(); save(); refreshItem(e._id);
       toast(asCover ? 'Als Kachelbild übernommen.' : 'Zu den eigenen Bildern hinzugefügt.', 'ok');
       const dt = !overlay.hidden && $('.detail', modal); if (dt && dt.dataset.detail === e._id) showDetail(e._id);
@@ -974,7 +974,22 @@
     const cover = v(e, 'Cover');
     if (IS_CHARS) { const ord = new Map(list.map(u => [u, KIND_IDX[imgKind(e, u)]])); list.sort((a, b) => ord.get(a) - ord.get(b)); }
     if (cover && list.includes(cover)) list.unshift(cover);
+    // Kachelbild ist ein eigenes Bild, das hier fehlt → gewählten Online-Ersatz zeigen
+    const alt = v(e, 'Cover Online');
+    if (alt && isLocal(cover) && !R(cover) && !isLocal(alt) && list.includes(alt)) list.unshift(alt);
     return [...new Set(list)].filter(u => !isPlaceholder(u));
+  }
+  // Online-Ersatz fürs Kachelbild: nur gültig, wenn das Kachelbild ein eigenes Bild ist und der Ersatz noch zu den Bildern gehört
+  function coverAlt(e) {
+    const c = v(e, 'Cover'), a = v(e, 'Cover Online');
+    if (!a || !isLocal(c) || isLocal(a)) return '';
+    return images(e).includes(a) ? a : '';
+  }
+  // Wird ein eigenes Bild zum Kachelbild und war das bisherige ein Online-Bild, wird das bisherige zum Online-Ersatz
+  function keepOnlineAsAlt(e, newCover) {
+    const old = images(e)[0];
+    if (isLocal(newCover)) { if (old && !isLocal(old) && !coverAlt(e)) e['Cover Online'] = old; }
+    else delete e['Cover Online'];
   }
   // Charaktere: Bild ist Fan-Art (sonst offizielles Artwork)
   // Charaktere: Bildart. 'unk' (Unklar) ist Standard ohne eigenes Feld.
@@ -1970,8 +1985,8 @@
   const missingCore = (e) => CORE_FIELDS.filter(([f]) => isMissing(e, f)).map(([, label]) => label);
   // ---- „Zu erledigen“: Aufgaben-Filter, mehrere Punkte = oder ----
   const TODOS = [
-    { k: 'upimg', label: 'Kachelbild ist ein hochgeladenes Bild', hint: 'nur auf diesem Gerät gespeichert – besser durch einen Link ersetzen', test: e => { const i = images(e)[0]; return !!i && isLocal(i); } },
-    { k: 'cover', label: 'Kachelbild nicht bestätigt', hint: 'ohne ✓ oder mit Zweifel', test: e => images(e).length > 0 && coverState(e) !== 'ok' },
+    { k: 'upimg', label: 'Kachelbild hochgeladen, ohne Online-Ersatz', hint: 'eigenes Bild liegt nur auf einem Gerät – in „Alle Bilder“ mit ☁ einen Online-Ersatz für andere Geräte wählen', test: e => { const c = v(e, 'Cover'); return isLocal(c) ? !coverAlt(e) : (() => { const i = images(e)[0]; return !!i && isLocal(i); })(); } },
+    { k: 'cover', label: 'Kachelbild nicht bestätigt', hint: 'ohne ✓ oder mit Zweifel', test: e => images(e).length > 0 && !coverChecked(e) },
     { k: 'score', label: 'Tool-Note nicht vergeben', test: e => rateable(e) && !hasScore(e) },
     { k: 'primary', label: 'Hauptbereich nicht bestätigt', hint: 'mehrere Bereiche, Hauptbereich automatisch', bp: true, test: e => catList(e).length > 1 && !(primaryCat(e) || {}).manual },
     { k: 'missing', label: 'Werte fehlen', hint: () => CORE_FIELDS.filter(([f]) => f !== '__img').map(([, l]) => l).join(', '), test: e => CORE_FIELDS.some(([f]) => f !== '__img' && isMissing(e, f)) },
@@ -2150,7 +2165,7 @@
     'User Upload Image URLs': 'Nutzer-Bilder (Babepedia)', 'Gallery Links': 'Galerien', 'Primary Category': 'Hauptbereich',
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Own Image URLs': 'Eigene Bild-Links',
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Cover Online': 'Online-Ersatz fürs Kachelbild', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
     'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
   };
@@ -2228,7 +2243,7 @@
   // Zusatzfilter: Kommazahlen-Noten in ganze Stufen zusammenfassen (9,0–9,9 statt jeder Einzelwert)
   const XF_BUCKET = { 'Score': 1, 'Global Rating': 2 };
   function xfValues(e, f) {
-    if (f === 'Cover Checked') { const st = coverState(e); return [st === 'ok' ? 'ja' : st === 'elsewhere' ? 'ja – eigenes Bild auf anderem Gerät' : st === 'doubt' ? 'neu prüfen – Bild weg oder geändert' : 'nein']; }
+    if (f === 'Cover Checked') { const st = coverState(e); return [st === 'ok' ? 'ja' : st === 'alt' ? 'ja – eigenes Bild auf anderem Gerät, hier Online-Ersatz' : st === 'elsewhere' ? 'ja – eigenes Bild auf anderem Gerät' : st === 'doubt' ? 'neu prüfen – Bild weg oder geändert' : 'nein']; }
     const vals = fieldValues(e, f);
     if (!(f in XF_BUCKET) || !vals.length) return vals;
     const x = num(vals[0]); if (x == null) return vals;
@@ -3138,7 +3153,11 @@
     const TH = 9;
     // Vorschaubilder: Klick = Vollbild an dieser Stelle, ★ = direkt zum Kachelbild machen (das erste ist das aktuelle Kachelbild)
     const thumbs = imgs.length > 1 ? `<div class="dx-thumbs">${imgs.slice(0, TH).map((u, i) => `<div class="dx-th${i === 0 ? ' on' : ''}" data-vw="${i}" title="${i === 0 ? 'Aktuelles Kachelbild' : 'Bild ' + (i + 1) + ' – Klick: groß ansehen'}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-alt="${esc(R(u))}" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt}else{this.remove()}"><button class="dx-star${i === 0 ? ' on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Ist das Kachelbild' : 'Als Kachelbild verwenden'}">★</button></div>`).join('')}${imgs.length > TH ? `<button class="dx-th more" data-vw="${TH}" title="alle Bilder ansehen">+${imgs.length - TH}</button>` : ''}</div>` : '';
-    const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : '☐ Kachelbild prüfen'}</button>` : '';
+    const alt = coverAlt(e), here = isLocal(v(e, 'Cover')) && !coverMissingHere(e);
+    const altLine = isLocal(v(e, 'Cover')) ? `<div class="dx-alt ${alt ? 'ok' : 'miss'}" title="Eigene Bilder liegen nur auf dem Gerät, auf dem sie hochgeladen wurden">${alt
+      ? `${here ? `<img src="${esc(thumbUrl(alt))}" alt="" referrerpolicy="no-referrer">` : ''}<span>☁ ${here ? 'Online-Ersatz für andere Geräte gesetzt' : 'Kachelbild liegt auf einem anderen Gerät – hier wird der Online-Ersatz gezeigt'}</span>`
+      : `<span>☁ ${here ? 'Eigenes Kachelbild – noch kein Online-Ersatz für andere Geräte.' : 'Kachelbild liegt auf einem anderen Gerät.'} In „Alle Bilder“ mit ☁ wählen.</span>`}</div>` : '';
+    const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 auf anderem Gerät geprüft' : '☐ Kachelbild prüfen'}</button>${altLine}` : altLine;
     const facts = FACT_FIELDS.map(f => [f, f === 'Nationality' ? natDisplay(e) : fmtValue(e, f)]).filter(([, x]) => x !== '');
     const card = facts.length ? `<div class="dx-card"><h3>Steckbrief</h3><dl class="dx-facts">${facts.map(([f, x]) => `<div><dt>${esc(FACT_LABELS[f] || lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>` : '';
     const lk = links.length || galleries.length ? `<div class="dx-card"><h3>Links</h3><div class="dx-links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer" title="${esc(v(e, f))}"><span>${LINK_ICONS[f] || '🔗'}</span>${esc(linkLabel(f).replace(/^🏛️ /, ''))}</a>`).join('')}${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><span>🖼</span>Galerie ${i + 1}</a>`).join('')}</div></div>` : '';
@@ -3208,7 +3227,7 @@
             </div>
           </div>
           ${imgs.length ? dxImgs(e, imgs.length, (() => {
-            const cell = (u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}${IS_CHARS ? `<button class="img-kind-btn k-${imgKind(e, u)}" data-fan-toggle="${esc(u)}" data-id="${esc(e._id)}" title="Bildart wechseln (weiter zu: ${KIND_OF[nextKind(imgKind(e, u))].one})">${KIND_OF[imgKind(e, u)].short} ⇄</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button></div>`;
+            const cell = (u, i) => `<div class="img-cell" data-vw="${i}"><img src="${esc(thumbUrl(R(u)))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-full="${esc(u)}" data-fallback="✕"${thumbUrl(R(u)) !== R(u) ? ` data-alts="${esc(R(u))}"` : ''}>${isLocal(u) ? '<span class="img-own" title="Eigenes Bild">📁</span>' : ''}${splitList(e['Own Image URLs']).includes(u) ? `<span class="img-own" title="Eigener Bild-Link">🔗</span><button class="img-del-btn" data-ownurl-rm="${esc(u)}" data-id="${esc(e._id)}" title="Eigenen Link entfernen">✕</button>` : ''}${IS_CHARS ? `<button class="img-kind-btn k-${imgKind(e, u)}" data-fan-toggle="${esc(u)}" data-id="${esc(e._id)}" title="Bildart wechseln (weiter zu: ${KIND_OF[nextKind(imgKind(e, u))].one})">${KIND_OF[imgKind(e, u)].short} ⇄</button>` : ''}<button class="img-cover-btn ${i === 0 ? 'on' : ''}" data-set-cover="${esc(u)}" data-id="${esc(e._id)}" title="${i === 0 ? 'Aktuelles Cover' : 'Als Cover verwenden'}">★</button>${isLocal(v(e, 'Cover')) && !isLocal(u) ? `<button class="img-alt-btn ${v(e, 'Cover Online') === u ? 'on' : ''}" data-cover-alt="${esc(u)}" data-id="${esc(e._id)}" title="${v(e, 'Cover Online') === u ? 'Ist der Online-Ersatz fürs Kachelbild – antippen zum Entfernen' : 'Als Online-Ersatz fürs Kachelbild (wird auf Geräten gezeigt, auf denen das eigene Kachelbild fehlt)'}">☁</button>` : ''}</div>`;
             const all = imgs.map((u, i) => [u, i]);
             if (!IS_CHARS) return `<div class="sec"><h3>Bilder (${imgs.length}) <button class="cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="${coverElsewhere(e) ? 'Das geprüfte Kachelbild ist ein eigenes Bild, das nur auf einem anderen Gerät liegt' : 'Kachelbild als geprüft markieren / Markierung entfernen'}">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 Kachelbild auf anderem Gerät geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild neu prüfen' : '☐ Kachelbild geprüft'}</button></h3><div class="img-grid">${all.map(([u, i]) => cell(u, i)).join('')}</div></div>`;
 
@@ -3637,11 +3656,11 @@
   const coverDoubt = new Set();
   function coverState(e) {
     if (!isTrue(e && e['Cover Checked'])) return 'none';
-    if (coverMissingHere(e)) return 'elsewhere';
+    if (coverMissingHere(e)) return coverAlt(e) ? 'alt' : 'elsewhere';
     if (coverGone(e) || coverDoubt.has(e._id)) return 'doubt';
     return 'ok';
   }
-  const coverChecked = (e) => coverState(e) === 'ok';
+  const coverChecked = (e) => { const st = coverState(e); return st === 'ok' || st === 'alt'; };
   const coverElsewhere = (e) => coverState(e) === 'elsewhere';
   function setCoverRibbon(id) {
     const card = document.querySelector(`#main .card[data-id="${CSS.escape(id)}"] .img`), e = byId(id);
@@ -3653,6 +3672,7 @@
     if (!ui.cardBadges.includes('cover')) return '';
     const st = coverState(e);
     if (st === 'ok') return '<div class="cover-ok" title="Kachelbild geprüft"><span>✓ Bild</span></div>';
+    if (st === 'alt') return '<div class="cover-ok alt" title="Geprüftes Kachelbild ist ein eigenes Bild auf einem anderen Gerät – hier wird der gewählte Online-Ersatz gezeigt"><span>✓ Ersatz</span></div>';
     if (st === 'elsewhere') return '<div class="cover-ok far" title="Geprüftes Kachelbild ist ein eigenes Bild auf einem anderen Gerät – hier wird ein Ersatzbild gezeigt"><span>📁 anderes Gerät</span></div>';
     if (st === 'doubt') return `<div class="cover-ok doubt" title="${coverGone(e) ? 'Das geprüfte Kachelbild gibt es nicht mehr – jetzt wird ein anderes Bild gezeigt' : 'Das geprüfte Kachelbild lädt nicht mehr oder hat sich verändert'} – bitte neu prüfen (K)"><span>⚠ Bild prüfen</span></div>`;
     return '';
@@ -3671,6 +3691,7 @@
       if (!confirm('Das Kachelbild ist ein eigenes Bild von einem anderen Gerät (hier nicht vorhanden).\nStattdessen dieses Bild als Kachelbild setzen? Das gilt dann auf allen Geräten.')) return false;
     }
     if (u && imgs.length && u !== imgs[0]) {
+      keepOnlineAsAlt(e, u);
       e.Cover = u; e['Cover Checked'] = 'true'; e._coverSize = ''; e._updated = Date.now(); coverDoubt.delete(e._id);
       saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
       return true;
@@ -3681,7 +3702,7 @@
     saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
     return false;
   }
-  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild geändert – passt?' : '★ Kachelbild – passt?';
+  const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverAlt(e) && coverMissingHere(e) ? '☁ Online-Ersatz (Kachelbild auf anderem Gerät)' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild geändert – passt?' : '★ Kachelbild – passt?';
   function viewerSetCover() {
     if (!viewer) return;
     const e = byId(viewer.ids[viewer.ei]), u = viewer.imgs[viewer.ii];
@@ -4950,6 +4971,17 @@
     }
     const cchk = t.closest('[data-cover-chk]');
     if (cchk) { const e = byId(cchk.dataset.coverChk); if (e) { coverAction(e, null); render(); showDetail(e._id); } return; }
+    const altBtn = t.closest('[data-cover-alt]');
+    if (altBtn) {
+      const e = byId(altBtn.dataset.id), u = altBtn.dataset.coverAlt;
+      if (e) {
+        const off = v(e, 'Cover Online') === u;
+        if (off) delete e['Cover Online']; else e['Cover Online'] = u;
+        e._updated = Date.now(); saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id);
+        toast(off ? 'Online-Ersatz entfernt.' : 'Online-Ersatz gesetzt – Geräte ohne das eigene Kachelbild zeigen jetzt dieses Bild.', 'ok');
+      }
+      return;
+    }
     const setCover = t.closest('[data-set-cover]');
     if (setCover) {
       const e = byId(setCover.dataset.id);
