@@ -3528,6 +3528,11 @@
     return '';
   }
   // Kachelbild: anderes Bild → als Kachelbild setzen und als geprüft markieren; aktuelles Kachelbild → „geprüft“ umschalten
+  // Detailansicht (auch hinter dem Vollbild-Betrachter) neu zeichnen, wenn sie diesen Eintrag zeigt
+  function refreshDetailOf(id) {
+    const det = !overlay.hidden && $('[data-detail]', modal);
+    if (det && det.dataset.detail === id && !dirty) { const sy = modal.scrollTop; showDetail(id); modal.scrollTop = sy; }
+  }
   function coverAction(e, u) {
     if (!e) return false;
     const imgs = images(e);
@@ -3537,13 +3542,13 @@
     }
     if (u && imgs.length && u !== imgs[0]) {
       e.Cover = u; e['Cover Checked'] = 'true'; e._coverSize = ''; e._updated = Date.now(); coverDoubt.delete(e._id);
-      saveQuiet(); refreshItem(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
+      saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id); toast('Kachelbild gesetzt und als geprüft markiert.', 'ok');
       return true;
     }
     const on = coverState(e) === 'doubt' || !isTrue(e['Cover Checked']);
     e['Cover Checked'] = on ? 'true' : 'false'; e._updated = Date.now();
     if (on) { if (imgs[0]) e.Cover = imgs[0]; e._coverSize = ''; coverDoubt.delete(e._id); }   // genau dieses Bild festhalten
-    saveQuiet(); refreshItem(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
+    saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id); toast(on ? 'Kachelbild als geprüft markiert.' : 'Markierung „Kachelbild geprüft“ entfernt.', 'ok');
     return false;
   }
   const coverBtnText = (e, isCover) => !isCover ? '☆ Als Kachelbild' : coverMissingHere(e) ? '📁 Kachelbild nur auf anderem Gerät' : coverChecked(e) ? '✓ Kachelbild geprüft' : coverState(e) === 'doubt' ? '⚠ Kachelbild geändert – passt?' : '★ Kachelbild – passt?';
@@ -3573,7 +3578,7 @@
     viewer.el.remove(); viewer = null;
     // Detail im Hintergrund auf den zuletzt angesehenen Eintrag bringen
     const det = !overlay.hidden && $('[data-detail]', modal);
-    if (det && det.dataset.detail !== id) showDetail(id);
+    if (det) { const sy = modal.scrollTop; showDetail(id); if (det.dataset.detail === id) modal.scrollTop = sy; }   // immer neu zeichnen: Kachelbild/Prüfung kann sich geändert haben
     if (overlay.hidden) document.body.style.overflow = '';
   }
   function browseImages() {
