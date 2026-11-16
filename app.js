@@ -1719,13 +1719,41 @@
     const recommended = due ? Math.min(ui.updMax, want) : 0;
     return { active, overdue, soon, perWeek, week, want, sinceLast, recommended, oldest: oldest === Infinity ? 0 : oldest, interval: ui.updInterval, max: ui.updMax, runs: due ? Math.ceil(want / ui.updMax) : 0 };
   }
+  // Vorschau: an welchem Tag wird das nächste Update empfohlen, und wie viele Profile werden pro Tag fällig?
+  function updateForecast(days = 28) {
+    const DAY = 864e5, iv = ui.updInterval * DAY, t0 = new Date(); t0.setHours(12, 0, 0, 0);
+    const ts = entries.filter(isActiveLink).map(scrapedTs);
+    const active = ts.length, perWeek = Math.ceil(active * 7 / ui.updInterval), newest = ts.length ? Math.max(...ts) : 0;
+    const perDay = new Array(days).fill(0);
+    for (const x of ts) { const k = Math.floor((x + iv - t0.getTime()) / DAY) + 1; if (k >= 0 && k < days) perDay[k]++; else if (k < 0) perDay[0]++; }
+    let next = null;
+    for (let k = 0; k < 60 && active; k++) {
+      const now = t0.getTime() + k * DAY;
+      let overdue = 0, soon = 0, week = 0;
+      for (const x of ts) { if (x >= now - 7 * DAY) week++; if (x < now - iv) overdue++; else if (x < now - iv + 7 * DAY) soon++; }
+      const want = Math.min(active, Math.max(overdue + soon, perWeek - week)), sinceLast = Math.floor((now - newest) / DAY);
+      if (overdue > 0 || (want >= Math.max(10, perWeek * 0.2) && sinceLast >= 1)) { next = { day: new Date(now), n: Math.min(ui.updMax, want), overdue }; break; }
+    }
+    return { perDay, next, start: t0 };
+  }
+  const fmtDay = (d) => { const t = new Date(); t.setHours(0, 0, 0, 0); const k = Math.round((new Date(d).setHours(0, 0, 0, 0) - t) / 864e5); return k === 0 ? 'heute' : k === 1 ? 'morgen' : new Date(d).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' }); };
   function renderUpdateBanner() {
     const box = $('#upd-banner'); if (!box) return;
     if (IS_CHARS) { box.hidden = true; return; }
     const pl = updatePlan();
     let hide = false; try { hide = localStorage.getItem('bp-organizer-upd-hide') === new Date().toDateString(); } catch {}
-    if (!pl.recommended || hide) { box.hidden = true; return; }
-    box.hidden = false;
+    if (hide || !pl.active) { box.hidden = true; return; }
+    if (!pl.recommended) {
+      // Nichts fällig: ruhige Zeile mit dem nächsten geplanten Lauf
+      const fc = updateForecast(), nx = fc.next;
+      box.hidden = false; box.classList.add('calm');
+      box.innerHTML = `<span>🔁 Babepedia-Update: in den letzten 7 Tagen ${pl.week} geholt (Soll ${pl.perWeek}/Woche) · nächster Lauf ${nx ? `<b>${esc(fmtDay(nx.day))}</b> (~${nx.n} Profile)` : 'in mehr als 60 Tagen'}</span>
+        <span class="upd-acts"><button class="btn small ghost" id="upd-cfg">Plan…</button><button class="btn small ghost" id="upd-hide" title="Heute ausblenden">×</button></span>`;
+      $('#upd-hide').onclick = () => { try { localStorage.setItem('bp-organizer-upd-hide', new Date().toDateString()); } catch {} box.hidden = true; };
+      $('#upd-cfg').onclick = showUpdateSettings;
+      return;
+    }
+    box.hidden = false; box.classList.remove('calm');
     const head = pl.overdue ? `${pl.overdue} Profile sind überfällig${pl.soon ? ` (+${pl.soon} diese Woche)` : ''}` : `Update fällig – in den letzten 7 Tagen ${pl.week} von ${pl.perWeek} Profilen der Wochenmenge geholt`;
     box.innerHTML = `<span>🔁 <b>${head}</b> – empfohlen: <b>${pl.recommended}</b> holen${pl.runs > 1 ? ` (noch ${pl.want} diese Woche, also ${pl.runs} Läufe à höchstens ${pl.max} an verschiedenen Tagen)` : ''}. Auf Babepedia: „🔁 Update“.</span>
       <span class="upd-acts"><button class="btn small" id="upd-cfg">Rhythmus…</button><button class="btn small ghost" id="upd-hide">Heute ausblenden</button></span>`;
@@ -1741,12 +1769,21 @@
         <div class="field"><label>Jedes Profil spätestens alle … Tage aktualisieren</label><input type="number" id="upd-iv" min="7" max="365" step="1" value="${ui.updInterval}"></div>
         <div class="field"><label>Höchstens … Profile pro Lauf</label><input type="number" id="upd-max" min="10" max="1000" step="10" value="${ui.updMax}"></div>
         <p class="muted" id="upd-info"></p>
+        <h3 style="margin-top:18px">Vorschau (nächste 4 Wochen)</h3>
+        <div id="upd-fc"></div>
       </div>
       <div class="form-foot"><button class="btn" data-action="close">Abbrechen</button><button class="btn primary" id="upd-save">Übernehmen</button></div>`);
     const info = () => {
       const iv = Math.max(7, +$('#upd-iv').value || 90), mx = Math.max(10, +$('#upd-max').value || 150);
       const pw = Math.ceil(pl.active * 7 / iv), runs = Math.ceil(pw / mx);
       $('#upd-info').textContent = `Das sind etwa ${pw} Profile pro Woche – also ${runs <= 1 ? 'ein Lauf' : runs + ' Läufe'} pro Woche (bei ca. 15 Profilen pro Minute rund ${Math.round(pw / 15)} Minuten insgesamt).`;
+      // Vorschau mit den eingegebenen Werten (ohne zu speichern)
+      const keep = [ui.updInterval, ui.updMax]; ui.updInterval = iv; ui.updMax = mx;
+      const fc = updateForecast(28); [ui.updInterval, ui.updMax] = keep;
+      const mxv = Math.max(1, ...fc.perDay);
+      $('#upd-fc').innerHTML = `<p>${fc.next ? `Nächster empfohlener Lauf: <b>${esc(fmtDay(fc.next.day))}</b> mit ca. <b>${fc.next.n}</b> Profilen${fc.next.overdue ? ` (${fc.next.overdue} überfällig)` : ''}.` : 'In den nächsten 60 Tagen wird kein Lauf nötig.'} ${pl.week} Profile wurden in den letzten 7 Tagen geholt.</p>
+        <div class="upd-bars" title="Profile, die an diesem Tag fällig werden">${fc.perDay.map((n, k) => { const d = new Date(fc.start.getTime() + k * 864e5), isNext = fc.next && d.toDateString() === fc.next.day.toDateString(); return `<div class="upd-bar${isNext ? ' next' : ''}${[0, 6].includes(d.getDay()) ? ' we' : ''}" title="${esc(d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }))}: ${n} fällig${isNext ? ' · empfohlener Lauf' : ''}"><i style="height:${Math.round(n / mxv * 100)}%"></i><span>${d.getDate()}.</span></div>`; }).join('')}</div>
+        <p class="muted">Balken = Profile, die an dem Tag ihr Intervall erreichen (heute inkl. bereits überfälliger). Pink = empfohlener nächster Lauf.</p>`;
     };
     $('#upd-iv').addEventListener('input', info); $('#upd-max').addEventListener('input', info); info();
     $('#upd-save').addEventListener('click', () => {

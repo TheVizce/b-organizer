@@ -1350,3 +1350,13 @@ div.dx-th { cursor: zoom-in; }
 .dx-stat.link:hover { border-color: var(--accent); text-decoration: none; }
 .dx-main .chips:empty { display: none; }
 @media (max-width: 760px) { .dx-stat { min-width: 0; flex: 1 1 40%; padding: 8px 10px; } .dx-stat b { font-size: 19px; } }
+/* Update-Plan: ruhige Zeile + Vorschau */
+#upd-banner.calm { background: var(--surface); border-color: var(--border); color: var(--muted); font-size: 13px; padding-top: 6px; padding-bottom: 6px; }
+#upd-banner.calm b { color: var(--text); }
+.upd-bars { display: grid; grid-template-columns: repeat(28, 1fr); gap: 3px; align-items: end; height: 110px; padding: 6px 0 0; }
+.upd-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.upd-bar i { width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--surface-3); }
+.upd-bar.we i { background: #3a4152; }
+.upd-bar.next i { background: var(--accent); }
+.upd-bar span { font-size: 9.5px; color: var(--faint); margin-top: 3px; }
+.upd-bar.next span { color: var(--accent-2); font-weight: 700; }
