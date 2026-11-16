@@ -1381,3 +1381,11 @@ div.dx-th { cursor: zoom-in; }
 .pl-v.down { border-color: #f07a7a; } .pl-v.down em { color: #f07a7a; }
 .pl-v.main b { color: var(--accent-2); }
 .calib.focus .cb-modes { display: none; }
+.pl-others { width: 100%; max-width: 760px; margin-top: 18px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.pl-others h4 { margin: 0 0 4px; font-size: 13px; }
+.pl-others h4 .muted { font-weight: 400; }
+.pl-on { margin-right: 4px; }
+.pl-tag { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; background: var(--surface-3); color: var(--muted); margin-right: 4px; }
+.rt-sugs[hidden] { display: none; }
+.rt-sugs { border-color: var(--warn); color: var(--warn); }
+.rt-sugs.hi { border-color: var(--good); color: var(--good); }

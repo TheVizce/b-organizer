@@ -3894,6 +3894,7 @@
         <label class="chk rt-adv" title="Nach einer Ziffer automatisch zur nächsten Kategorie springen"><input type="checkbox" ${ui.raterAdvance ? 'checked' : ''}> Ziffer springt weiter</label>
         <label class="chk rt-only"><input type="checkbox" ${onlyOpen ? 'checked' : ''}> nur unbewertete</label>
         <label class="chk rt-place" title="Nach dem Bewerten ein paar kurze Duelle gegen Gleichbewertete, solange der Eindruck frisch ist"><input type="checkbox" ${ui.raterPlace ? 'checked' : ''}> danach einordnen</label>
+        <button class="btn small rt-sugs" data-rt-sugs hidden title="Abgleich-Vorschläge (sicher/wahrscheinlich) ansehen"></button>
         ${undoBtnHTML('rt-undo')}
         <button class="vw-x" aria-label="Beenden">×</button>
       </div>
@@ -3924,6 +3925,7 @@
       const nav = t.closest('[data-rt]'); if (nav) return raterStep(Number(nav.dataset.rt));
       if (t.closest('.undo-btn')) return undoLast();
       if (t.closest('[data-rt-place]')) return raterPlace(false);
+      if (t.closest('[data-rt-sugs]')) { if (rater.saveNote) rater.saveNote(); openCalib({ onClose: () => { if (rater) raterCats(); } }); calibSugList(); return; }
       const rpr = t.closest('[data-primary]'); if (rpr) { const pe = byId(rpr.dataset.id); if (pe) setPrimary(pe, rpr.dataset.primary); return raterCats(); }
       const rsa = t.closest('[data-sug-apply]'); if (rsa) { sugApply(rsa.dataset.sugApply, rsa.dataset.cat, Number(rsa.dataset.val)); return raterCats(); }
       const rsk = t.closest('[data-sug-keep]'); if (rsk) { keepSuggestion(rsk.dataset.sugKeep, rsk.dataset.cat); return raterCats(); }
@@ -4421,7 +4423,14 @@
       const x = num(v(F, c.f)), sg = mine.find(y => y.c.f === c.f && y.cls !== 'lo');
       return `<div class="pl-v${sg ? ' ' + (sg.to > sg.from ? 'up' : 'down') : ''}"><span>${esc(c.label)}</span><b>${x == null || symUnknown(c, x) ? '–' : fmtV(x)}${sg ? ` <em>→ ${fmtV(sg.to)}</em>` : ''}</b></div>`;
     }).join('')}</div>`;
-    $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${vals}${res}</div>`;
+    // auch Vorschläge bei anderen (zuerst die Gegner aus dieser Runde) – sicher/wahrscheinlich
+    const opp = calib.opps || new Set();
+    const others = cbSugs().filter(x => x.e._id !== F._id && x.cls !== 'lo').sort((a, b) => (opp.has(b.e._id) - opp.has(a.e._id)) || b.conf - a.conf);
+    const oth = others.length ? `<div class="pl-others"><h4>Weitere Vorschläge <span class="muted">${others.length} sicher/wahrscheinlich${others.some(x => opp.has(x.e._id)) ? ' · Gegner aus dieser Runde zuerst' : ''}</span></h4>
+      ${others.slice(0, 8).map(x => { const dir = x.to > x.from ? 'up' : 'down'; return `<div class="es-row ${dir} ${x.cls}"><span class="es-txt"><b class="pl-on">${esc(v(x.e, 'Name'))}</b>${opp.has(x.e._id) ? '<span class="pl-tag">Gegner</span>' : ''} ${esc(x.c.label)} ${fmtV(x.from)} <span class="sg-arr ${dir}">→</span> <b class="sg-new ${dir}">${fmtV(x.to)}</b><span class="cb-conf ${x.cls}">${x.level} · ${Math.round(x.conf * 100)} %</span></span>
+        <span class="es-btns"><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></span></div>`; }).join('')}
+      ${others.length > 8 ? `<p class="muted">… und ${others.length - 8} weitere im Abgleich unter „💡 Vorschläge“.</p>` : ''}</div>` : '';
+    $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${vals}${res}${oth}</div>`;
     $('.cb-foot', el).innerHTML = `<div class="cb-ans">${calib.n ? `<button class="btn" data-cbmore>3 weitere Duelle</button>` : ''}<button class="btn primary" data-plclose>${rater ? '← zurück zur Bewertung' : 'fertig'}</button></div>`;
     calibCount();
   }
@@ -4479,6 +4488,7 @@
     calib.duel = { id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cat: c.f, a: A._id, b: B._id, va: num(v(A, c.f)), vb: num(v(B, c.f)), r, ts: Date.now() };
     duels.push(calib.duel); cbSugDirty();
     const ev0 = duelEval(calib.duel); calib.stats = calib.stats || { ok: 0, warn: 0 }; if (ev0) calib.stats[ev0.ok ? 'ok' : 'warn']++;
+    calib.opps = calib.opps || new Set(); calib.opps.add(A._id); calib.opps.add(B._id);
     saveDuels();
     calibRender();
   }
@@ -4588,6 +4598,9 @@
     if (narrow) { const row = $$('.rt-cats .sc-row', el)[rater.cat]; if (row) row.after(ref); }
     ref.classList.toggle('inline', narrow);
     const pb = $('[data-rt-place]', el); if (pb) pb.hidden = !hasScore(e);
+    // Zähler: sichere/wahrscheinliche Vorschläge insgesamt
+    const sb = $('[data-rt-sugs]', el);
+    if (sb) { const all = cbSugs(), n = all.filter(x => x.cls !== 'lo').length; sb.hidden = !n; sb.innerHTML = `💡 ${n} Vorschlag${n === 1 ? '' : 'e'}`; sb.classList.toggle('hi', all.some(x => x.cls === 'hi')); }
     raterRef();
   }
   // Vergleich: wer liegt in der markierten Kategorie gleich, eine Stufe darüber und darunter?
