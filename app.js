@@ -841,8 +841,73 @@
 
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel(IS_CHARS ? 'bp-organizer-chars' : 'bp-organizer') : null;
   // Speichert; wirft bei Fehler, damit z. B. die Übernahme vom Userscript nicht bestätigt wird
+  // ---------- Feld-Zeitstempel für den Abgleich ----------
+  // Der Sync vergleicht ganze Einträge: die jüngste Fassung gewinnt komplett. Ändert ein Gerät mit altem Stand
+  // einen Eintrag (auch automatisch, z. B. Ranker-Stand), würde es neuere Änderungen anderer Geräte überschreiben.
+  // Deshalb merkt sich jeder Eintrag in _fu, wann welches Feld zuletzt geändert wurde, und mergeEntry führt
+  // zwei Fassungen Feld für Feld zusammen.
+  const FU_SKIP = new Set(['_id', '_fu', '_updated', '_created']);
+  let fuSnap = new Map();   // id -> { k: Schlüssel, v: Werte (Objekte als JSON) } – Stand beim letzten Speichern/Übernehmen
+  const fuCell = (x) => x !== null && typeof x === 'object' ? '\u0001' + JSON.stringify(x) : x;
+  function fuCopy(e) { const k = Object.keys(e); return { k, v: k.map(x => fuCell(e[x])) }; }
+  function fuSnapshot() { fuSnap = new Map(); for (const e of entries) if (e && e._id) fuSnap.set(e._id, fuCopy(e)); }
+  // Geänderte Felder seit dem letzten Stand mit „jetzt“ stempeln. Liefert die Zahl gestempelter Felder.
+  function stampFields() {
+    const now = Date.now(); let n = 0;
+    for (const e of entries) {
+      if (!e || !e._id) continue;
+      const old = fuSnap.get(e._id);
+      if (!old) { fuSnap.set(e._id, fuCopy(e)); continue; }
+      const ks = Object.keys(e), ok = old.k, ov = old.v;
+      let same = ks.length === ok.length;
+      for (let i = 0; same && i < ks.length; i++) {
+        const k = ks[i], x = e[k];
+        if (k !== ok[i]) { same = false; break; }
+        if (k === '_fu' || k === '_updated') continue;
+        if ((x !== ov[i] && !(x !== null && typeof x === 'object' && fuCell(x) === ov[i]))) same = false;
+      }
+      if (same) continue;
+      // Unterschied: Feld für Feld vergleichen
+      const before = new Map(ok.map((k, i) => [k, ov[i]])), changed = [];
+      for (const k of ks) if (!FU_SKIP.has(k) && (e[k] === undefined ? before.get(k) !== undefined : before.get(k) !== fuCell(e[k]))) changed.push(k);
+      for (const k of ok) if (!FU_SKIP.has(k) && !(k in e) && before.get(k) !== undefined) changed.push(k);
+      if (changed.length) {
+        const fu = e._fu && typeof e._fu === 'object' ? e._fu : (e._fu = {});
+        for (const k of changed) fu[k] = now;
+        n += changed.length;
+      }
+      fuSnap.set(e._id, fuCopy(e));
+    }
+    return n;
+  }
+  // Zwei Fassungen eines Eintrags zusammenführen: pro Feld gewinnt die jüngere Änderung (_fu),
+  // bei Gleichstand die Fassung, die der Sync ohnehin genommen hätte.
+  function mergeEntry(coll, a, b, info) {
+    if (coll !== 'entries' || !a || !b) return null;
+    const fa = a._fu && typeof a._fu === 'object' ? a._fu : {}, fb = b._fu && typeof b._fu === 'object' ? b._fu : {};
+    const rw = info && info.remoteWins;
+    const win = rw ? b : a, lose = rw ? a : b, fw = rw ? fb : fa, fl = rw ? fa : fb;
+    const out = Object.assign({}, win);
+    let took = 0;
+    for (const k of new Set([...Object.keys(lose), ...Object.keys(win), ...Object.keys(fl)])) {
+      if (FU_SKIP.has(k)) continue;
+      if ((fl[k] || 0) > (fw[k] || 0) && JSON.stringify(lose[k]) !== JSON.stringify(win[k])) {
+        if (lose[k] === undefined) delete out[k]; else out[k] = lose[k];
+        took++;
+      }
+    }
+    if (!took) return null;
+    const fu = {};
+    for (const k of new Set([...Object.keys(fa), ...Object.keys(fb)])) fu[k] = Math.max(fa[k] || 0, fb[k] || 0);
+    out._fu = fu; out._updated = Math.max(a._updated || 0, b._updated || 0);
+    syncMerged++;
+    return out;
+  }
+  let syncMerged = 0;
+
   async function save() {
     try {
+      stampFields();
       await idbSet('entries', entries);
       if (channel) channel.postMessage('changed');
       if (SYNC) SYNC.changed();
@@ -1120,7 +1185,7 @@
     for (const f of OWN_FIELDS) {
       const a = v(keep, f), b = v(dup, f);
       if (!b || b === 'false') continue;
-      if (f === 'Own Images') keep[f] = [...new Set([...splitList(a), ...splitList(b)])].join(', ');
+      if (['Own Images', 'Own Image URLs', 'Official Images', 'Scene Images', 'Fan Art'].includes(f)) keep[f] = [...new Set([...splitList(a), ...splitList(b)])].join(', ');
       else if (f === 'Notes' && a && a !== b) keep[f] = a + '\n\n' + b;
       else if (!a || a === 'false') keep[f] = b;
     }
@@ -1593,6 +1658,7 @@
         if (c === t) continue;
         for (const f of KEEP) if (t[f] !== undefined && !OWN_FIELDS.includes(f)) c[f] = t[f];
         for (const f of OWN_FIELDS) if (v(t, f) && !v(c, f)) c[f] = t[f];
+        for (const f of ['Own Images', 'Own Image URLs']) if (v(t, f) && v(c, f)) c[f] = [...new Set([...splitList(c[f]), ...splitList(t[f])])].join(', ');
         c._updated = Math.max(c._updated || 0, t._updated || 0); derive(c);
       }
       if (dropped.size) entries = entries.filter(x => !dropped.has(x._id));
@@ -1843,7 +1909,7 @@
     if (d.type === 'BP_VOTE_PROG' && ready) bridgeQueue = bridgeQueue.then(() => onVoteProg(d)).catch(() => {});
     if (d.type === 'BP_SYNC' && Array.isArray(d.items) && ready) {
       // Bestätigung (ACK) erst nach erfolgreichem Speichern – sonst bleibt der Batch im Userscript erhalten
-      bridgeQueue = bridgeQueue.then(() => withImportLock(async () => { entries = await load(); return importItems(d.items); })).then(r => {
+      bridgeQueue = bridgeQueue.then(() => withImportLock(async () => { entries = await load(); fuSnapshot(); return importItems(d.items); })).then(r => {
         window.postMessage({ type: 'BP_SYNC_ACK', id: d.id, ...r }, location.origin);
         sendKnown();   // neuer Stand (z. B. Scraped At) gleich ans Skript
         toast(`Von Babepedia übernommen: ${r.added} neu, ${r.updated} bekannt${r.pending ? ` (${r.pending} mit Änderungen zum Prüfen)` : ''}${r.gone ? `, ${r.gone} auf Babepedia gelöscht` : ''}${r.renamed ? `, ${r.renamed} umbenannt` : ''}${r.merged ? `, ${r.merged} zusammengeführt` : ''}.`, 'ok');
@@ -5087,9 +5153,13 @@
       fields: ['primaryOrder', 'pairsResetAt'],
       shards: IS_CHARS ? 8 : 32,
       stampDelay: 1500,
-      get: () => ({ entries, duels, primaryOrder, pairsResetAt }),
+      // vor dem Abgleich noch nicht gespeicherte Feldänderungen stempeln (sonst fehlt _fu in der Cloud-Fassung)
+      get: async () => { if (stampFields()) { try { await idbSet('entries', entries); } catch {} } return { entries, duels, primaryOrder, pairsResetAt }; },
+      mergeItem: mergeEntry,
       apply: async (d) => {
         entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
+        fuSnapshot();
+        if (syncMerged) { toast(`Abgleich: ${syncMerged} Eintr${syncMerged === 1 ? 'ag' : 'äge'} Feld für Feld zusammengeführt – Änderungen beider Geräte bleiben erhalten.`, 'ok'); syncMerged = 0; }
         if (Array.isArray(d.duels)) duels = d.duels.filter(x => x && x.id);
         if (d.pairsResetAt && typeof d.pairsResetAt === 'object') { pairsResetAt = d.pairsResetAt; try { await idbSet('pairsResetAt', pairsResetAt); } catch {} }
         if (Array.isArray(d.primaryOrder)) { primaryOrder = normPrimaryOrder(d.primaryOrder); try { await idbSet('primaryOrder', primaryOrder); } catch {} }
@@ -5590,7 +5660,7 @@
   window.addEventListener('hashchange', openFromHash);
 
   // Änderungen aus anderen Tabs übernehmen
-  if (channel) channel.onmessage = async () => { const fresh = await load(); entries = fresh; entriesGen++; await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
+  if (channel) channel.onmessage = async () => { const fresh = await load(); entries = fresh; entriesGen++; fuSnapshot(); await loadLocalImages().catch(() => {}); refreshFilters(); render(); };
 
   // ---------- Charaktere: vorhandene Ranker-Bilder verknüpfen ----------
   // Liest den Image Ranker nur (ImageRankerDB) und schickt für bestätigte Paare einen Auftrag mit linkTo/create:false
@@ -5724,6 +5794,7 @@
     $('#main').innerHTML = '<div class="empty"><p>Lade Daten…</p></div>';
     try {
       entries = await load();
+      fuSnapshot();
       await loadLocalImages().catch(() => {});
       await loadImgCheck();
       await loadPending();

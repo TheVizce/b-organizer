@@ -4,6 +4,7 @@
 - IndexedDB `bp-organizer`, localStorage-Präfixe `bp-organizer`, `bp_batch_data`. Dazu das Tampermonkey-Skript `babepedia-organizer.user.js` (Version im Header hochzählen).
 - Sync: Ordner `b-organizer/` (32 Teildateien). `collections: entries {type:'array', id:'_id'}`. Eigene Bilder bleiben lokal.
 - `SYNC.changed()` steckt in `save()`.
+- Einträge tragen `_fu` (Zeitstempel pro Feld, gesetzt von `stampFields()` in `save()` und im Sync-`get`). Der Sync führt zwei Fassungen eines Eintrags über `mergeItem: mergeEntry` Feld für Feld zusammen, damit ein Gerät mit altem Stand keine neueren Änderungen überschreibt. Einträge immer über `save()`/`saveQuiet()` speichern; nach dem Austausch von `entries` (Laden, Übernehmen) `fuSnapshot()` aufrufen.
 - **Übergabe an den Image Ranker:** über die gemeinsame IndexedDB `tool-transfer` (Store `jobs`) und `BroadcastChannel('tool-transfer')`. Der Image Ranker verarbeitet das in seiner `ranker-inbox.js`. Den Ranker (`ImageRankerDB`) nur lesen, nie beschreiben.
 - Keine automatischen Verknüpfungen nur über den Namen: unklare Fälle verknüpft der Nutzer von Hand, damit im Ranker keine Doppelten entstehen.
 - Deep-Link `#e=<id>` öffnet einen Eintrag.
