@@ -1360,3 +1360,14 @@ div.dx-th { cursor: zoom-in; }
 .upd-bar.next i { background: var(--accent); }
 .upd-bar span { font-size: 9.5px; color: var(--faint); margin-top: 3px; }
 .upd-bar.next span { color: var(--accent-2); font-weight: 700; }
+/* Bilder-Ordner: Fortschritt */
+.fd-progress { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 120; width: min(560px, calc(100vw - 32px)); padding: 12px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.fd-pr-t { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.fd-pr-t b { flex: 1; font-weight: 600; }
+.fd-pr-t small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fd-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--surface-3); border-top-color: var(--accent); animation: fd-spin .8s linear infinite; flex: none; }
+@keyframes fd-spin { to { transform: rotate(360deg); } }
+.fd-pr-bar { position: relative; height: 6px; margin-top: 10px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.fd-pr-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--accent); transition: width .2s; }
+.fd-pr-bar.indet i { width: 35% !important; animation: fd-ind 1.2s ease-in-out infinite; }
+@keyframes fd-ind { from { left: -35%; } to { left: 100%; } }

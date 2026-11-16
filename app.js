@@ -580,10 +580,26 @@
     if (!x) { const f = folderIdx && folderIdx.files.get(u.slice(4)); if (!f) return ''; x = URL.createObjectURL(f); dirUrls.set(u, x); }
     return x;
   }
-  function buildFolderIdx(fileList) {
-    const files = new Map(), persons = new Map(); let root = '', total = 0;
+  // Fortschrittsanzeige beim Einlesen (Firefox liest den Ordner, bevor das Tool die Dateien bekommt – das kann dauern)
+  let fdProg = null;
+  function fdProgress(text, done, total) {
+    if (!fdProg) {
+      fdProg = document.createElement('div'); fdProg.className = 'fd-progress';
+      fdProg.innerHTML = `<div class="fd-pr-t"><span class="fd-spin"></span><b></b><small></small></div><div class="fd-pr-bar"><i></i></div>`;
+      document.body.appendChild(fdProg); fdProg.t0 = Date.now();
+      fdProg.timer = setInterval(() => { const sec = Math.round((Date.now() - fdProg.t0) / 1000); $('small', fdProg).textContent = sec >= 2 ? `${sec} s` : ''; }, 1000);
+    }
+    $('b', fdProg).textContent = text;
+    const bar = $('.fd-pr-bar', fdProg); bar.classList.toggle('indet', !total);
+    $('i', bar).style.width = total ? Math.round(done / total * 100) + '%' : '';
+  }
+  function fdProgressDone() { if (fdProg) { clearInterval(fdProg.timer); fdProg.remove(); fdProg = null; } }
+  async function buildFolderIdx(fileList) {
+    const files = new Map(), persons = new Map(); let root = '', total = 0, i = 0;
     const coll = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+    const n = fileList.length;
     for (const f of fileList) {
+      if (++i % 2000 === 0) { fdProgress(`Bilder werden zugeordnet: ${i.toLocaleString('de-DE')} von ${n.toLocaleString('de-DE')} Dateien`, i, n); await new Promise(r => setTimeout(r, 0)); }
       const rel = f.webkitRelativePath || f.name; const parts = rel.split('/');
       if (parts.length < 3 || !IMG_EXT.test(f.name) || parts.some(p => p.startsWith('.'))) continue;
       root = parts[0];
@@ -598,12 +614,23 @@
   const folderOf = (e) => { const n = v(e, 'Image Folder'); return n && folderIdx ? folderIdx.persons.get(normFolder(n)) || null : null; };
   const folderImgs = (e) => { const p = folderOf(e); return p ? p.items : []; };
   function pickFolder() {
-    const inp = $('#folder-input'); inp.value = ''; inp.click();
+    const inp = $('#folder-input'); inp.value = '';
+    // Sobald das Auswahlfenster zu ist, liest Firefox den Ordner ein, bevor das Tool etwas bekommt → Hinweis anzeigen
+    let waiting = true;
+    const onFocus = () => { setTimeout(() => { if (waiting) fdProgress('Ordner wird vom Browser eingelesen … (bei vielen Bildern kann das dauern; Firefox fragt evtl. noch „Hochladen?“ – es verlässt nichts den Rechner)'); }, 300); };
+    const stop = () => { waiting = false; window.removeEventListener('focus', onFocus); };
+    window.addEventListener('focus', onFocus, { once: true });
+    inp.addEventListener('cancel', () => { stop(); fdProgressDone(); }, { once: true });
+    inp.addEventListener('change', stop, { once: true });
+    inp.click();
   }
-  function onFolderPicked(fileList) {
-    if (!fileList || !fileList.length) return;
+  async function onFolderPicked(fileList) {
+    if (!fileList || !fileList.length) { fdProgressDone(); return; }
     dirUrls.forEach(u => URL.revokeObjectURL(u)); dirUrls.clear();
-    const idx = buildFolderIdx(fileList);
+    fdProgress(`Bilder werden zugeordnet: 0 von ${fileList.length.toLocaleString('de-DE')} Dateien`, 0, fileList.length);
+    await new Promise(r => setTimeout(r, 0));
+    const idx = await buildFolderIdx(fileList);
+    fdProgressDone();
     if (!idx.total) { toast('In diesem Ordner wurden keine Bilder in Unterordnern gefunden. Erwartet: Hauptordner → Ordner je Person → Bilder (auch in weiteren Unterordnern).', 'err'); return; }
     folderIdx = idx; ui.folderRoot = idx.root; saveUI();
     const linked = entries.filter(e => folderOf(e)).length;
