@@ -1389,3 +1389,6 @@ div.dx-th { cursor: zoom-in; }
 .rt-sugs[hidden] { display: none; }
 .rt-sugs { border-color: var(--warn); color: var(--warn); }
 .rt-sugs.hi { border-color: var(--good); color: var(--good); }
+.pl-done .sg-list { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.pl-done .pl-others { max-width: 900px; }
+.sg-name + .pl-tag { margin-left: 8px; vertical-align: 3px; }

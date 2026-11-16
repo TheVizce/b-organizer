@@ -4381,14 +4381,8 @@
   function sugDots(tab) {
     return tab.map(([o, t]) => `<span class="sg-vs"><i>gegen ${fmtV(o)}</i>${'<b class="w" title="gewonnen"></b>'.repeat(t[0])}${'<b class="t" title="gleich"></b>'.repeat(t[1])}${'<b class="l" title="verloren"></b>'.repeat(t[2])}</span>`).join('');
   }
-  function calibSugList() {
-    const { el } = calib, all = !!calib.sugAll, c = SCORE_CATS[calib.cat];
-    calib.list = true; calib.mode = 'sug';
-    const list = cbSugs().filter(x => all || x.c.f === c.f);
-    const cnt = (k) => list.filter(x => x.cls === k).length, ups = list.filter(x => x.to > x.from).length;
-    $('.cb-q', el).innerHTML = `<span class="cb-qlabel">💡 Vorschläge</span><span class="cb-qcat">${all ? 'alle Kategorien' : esc(c.label)}</span>`;
-    const head = list.length ? `<div class="sg-sum"><span class="cb-conf hi">${cnt('hi')} sicher</span><span class="cb-conf mid">${cnt('mid')} wahrscheinlich</span><span class="cb-conf lo">${cnt('lo')} möglich</span><span class="sg-sep"></span><span class="sg-dir up">▲ ${ups} höher</span><span class="sg-dir down">▼ ${list.length - ups} niedriger</span></div>` : '';
-    $('.cb-body', el).innerHTML = `<div class="cb-list sg-list">${head}${list.length ? list.map(x => {
+  // Ein Vorschlag als Karte mit Vorher/Nachher-Kacheln (Vorschlagsliste, Einordnen-Ergebnis)
+  function sugArticleHTML(x, tag) {
       const dir = x.to > x.from ? 'up' : 'down', pct = Math.round(x.conf * 100);
       const after = Object.assign({}, x.e, { [x.c.f]: String(x.to) });
       const sa = scoreOf(after); if (sa) { after.Score = (Math.round(sa.ten * 10) / 10).toFixed(1); after['My Rating'] = String(Math.round(sa.ten)); }
@@ -4399,13 +4393,21 @@
         <div class="sg-cards">${sugCardHTML(x.e, 'heute')}<span class="sg-to ${dir}">${dir === 'up' ? '▲' : '▼'}</span>${sugCardHTML(after, 'nachher', { f: x.c.f, dir })}</div>
         <div class="sg-info">
           <div class="sg-top"><span class="cb-conf ${x.cls}">${x.level}</span><span class="sg-meter" title="${pct} % Wahrscheinlichkeit, dass der Wert eher ${dir === 'up' ? 'höher' : 'niedriger'} liegt"><i style="width:${pct}%"></i></span><span class="sg-pct">${pct} %</span></div>
-          <button class="sg-name linklike" data-cbopen="${esc(x.e._id)}">${esc(v(x.e, 'Name'))}</button>
+          <button class="sg-name linklike" data-cbopen="${esc(x.e._id)}">${esc(v(x.e, 'Name'))}</button>${tag ? `<span class="pl-tag">${esc(tag)}</span>` : ''}
           <div class="sg-change"><span class="sg-cat">${esc(x.c.label)}</span><span class="sg-from">${fmtV(x.from)}</span><span class="sg-arr ${dir}">→</span><span class="sg-new ${dir}">${fmtV(x.to)}</span></div>
           ${note}
           <div class="sg-ev"><span class="muted">${x.n} Duelle</span>${sugDots(x.tab)}</div>
           <div class="sg-btns"><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">${esc(x.c.label)} auf ${fmtV(x.to)} setzen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>
         </div></article>`;
-    }).join('') : `<div class="sg-empty"><div class="sg-empty-ico">⚖️</div><p>Keine Vorschläge${all ? '' : ` in ${esc(c.label)}`}.</p><p class="muted">Vorschläge entstehen, sobald ein Eintrag mindestens ${CB_MIN_DUELS} Duelle hat und die Ergebnisse klar in eine Richtung zeigen.</p></div>`}
+  }
+  function calibSugList() {
+    const { el } = calib, all = !!calib.sugAll, c = SCORE_CATS[calib.cat];
+    calib.list = true; calib.mode = 'sug';
+    const list = cbSugs().filter(x => all || x.c.f === c.f);
+    const cnt = (k) => list.filter(x => x.cls === k).length, ups = list.filter(x => x.to > x.from).length;
+    $('.cb-q', el).innerHTML = `<span class="cb-qlabel">💡 Vorschläge</span><span class="cb-qcat">${all ? 'alle Kategorien' : esc(c.label)}</span>`;
+    const head = list.length ? `<div class="sg-sum"><span class="cb-conf hi">${cnt('hi')} sicher</span><span class="cb-conf mid">${cnt('mid')} wahrscheinlich</span><span class="cb-conf lo">${cnt('lo')} möglich</span><span class="sg-sep"></span><span class="sg-dir up">▲ ${ups} höher</span><span class="sg-dir down">▼ ${list.length - ups} niedriger</span></div>` : '';
+    $('.cb-body', el).innerHTML = `<div class="cb-list sg-list">${head}${list.length ? list.map(x => sugArticleHTML(x)).join('') : `<div class="sg-empty"><div class="sg-empty-ico">⚖️</div><p>Keine Vorschläge${all ? '' : ` in ${esc(c.label)}`}.</p><p class="muted">Vorschläge entstehen, sobald ein Eintrag mindestens ${CB_MIN_DUELS} Duelle hat und die Ergebnisse klar in eine Richtung zeigen.</p></div>`}
       <p class="muted cb-help">Punkte: <b class="sg-dot w"></b> gewonnen · <b class="sg-dot t"></b> gleich · <b class="sg-dot l"></b> verloren, jeweils gegen Gegner mit diesem Wert. Sicherheit: <span class="cb-conf hi">sicher</span> ab 90 % · <span class="cb-conf mid">wahrscheinlich</span> ab 75 % · <span class="cb-conf lo">möglich</span> ab 60 %. Gerechnet wird mit den heutigen Werten der Gegner – änderst du einen Wert, ordnen sich die Vorschläge neu. „So lassen“ gilt, bis zwei neue Duelle dazukommen.</p></div>`;
     $('.cb-foot', el).innerHTML = `<div class="cb-ans"><button class="btn primary" data-cbback>⚔️ weiter vergleichen <kbd>V</kbd></button></div>`;
     calibCount();
@@ -4415,7 +4417,7 @@
     calib.list = true; calib.mode = 'done';
     const mine = cbSugs().filter(x => x.e._id === calib.focus.id);
     $('.cb-q', el).innerHTML = `<b>${calib.n ? `${calib.n} Duell${calib.n === 1 ? '' : 'e'} für ${esc(v(F, 'Name'))}` : `Keine passenden Gegner für ${esc(v(F, 'Name'))}`}</b>`;
-    const res = mine.length ? `<p>Das deutet auf eine Anpassung hin:</p>` + mine.map(x => `<div class="cb-fixes pl-sug"><span class="cb-conf ${x.cls}">${x.level}</span><b>${esc(x.c.label)}</b> ${fmtV(x.from)} → <b class="${x.to > x.from ? 'sg-new up' : 'sg-new down'}" style="font-size:18px">${fmtV(x.to)}</b><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>`).join('')
+    const res = mine.length ? `<p>Das deutet auf eine Anpassung hin:</p><div class="sg-list pl-own">${mine.map(x => sugArticleHTML(x)).join('')}</div>`
       : (calib.n ? `<p class="pl-ok">✓ Passt soweit – keine klare Abweichung.</p><p class="muted">Mit mehr Duellen wird das Bild genauer; Vorschläge erscheinen auch später im Abgleich.</p>` : `<p class="muted">Es gibt gerade niemanden mit gleichem oder benachbartem Wert, gegen den noch nicht verglichen wurde.</p>`);
     // aktuelle Werte mit Hinweis auf Vorschläge, damit man sieht, wo die Person steht
     const sc = scoreOf(F);
@@ -4427,8 +4429,7 @@
     const opp = calib.opps || new Set();
     const others = cbSugs().filter(x => x.e._id !== F._id && x.cls !== 'lo').sort((a, b) => (opp.has(b.e._id) - opp.has(a.e._id)) || b.conf - a.conf);
     const oth = others.length ? `<div class="pl-others"><h4>Weitere Vorschläge <span class="muted">${others.length} sicher/wahrscheinlich${others.some(x => opp.has(x.e._id)) ? ' · Gegner aus dieser Runde zuerst' : ''}</span></h4>
-      ${others.slice(0, 8).map(x => { const dir = x.to > x.from ? 'up' : 'down'; return `<div class="es-row ${dir} ${x.cls}"><span class="es-txt"><b class="pl-on">${esc(v(x.e, 'Name'))}</b>${opp.has(x.e._id) ? '<span class="pl-tag">Gegner</span>' : ''} ${esc(x.c.label)} ${fmtV(x.from)} <span class="sg-arr ${dir}">→</span> <b class="sg-new ${dir}">${fmtV(x.to)}</b><span class="cb-conf ${x.cls}">${x.level} · ${Math.round(x.conf * 100)} %</span></span>
-        <span class="es-btns"><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></span></div>`; }).join('')}
+      <div class="sg-list">${others.slice(0, 8).map(x => sugArticleHTML(x, opp.has(x.e._id) ? 'Gegner aus dieser Runde' : '')).join('')}</div>
       ${others.length > 8 ? `<p class="muted">… und ${others.length - 8} weitere im Abgleich unter „💡 Vorschläge“.</p>` : ''}</div>` : '';
     $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${vals}${res}${oth}</div>`;
     $('.cb-foot', el).innerHTML = `<div class="cb-ans">${calib.n ? `<button class="btn" data-cbmore>3 weitere Duelle</button>` : ''}<button class="btn primary" data-plclose>${rater ? '← zurück zur Bewertung' : 'fertig'}</button></div>`;
