@@ -4415,8 +4415,14 @@
     $('.cb-q', el).innerHTML = `<b>${calib.n ? `${calib.n} Duell${calib.n === 1 ? '' : 'e'} für ${esc(v(F, 'Name'))}` : `Keine passenden Gegner für ${esc(v(F, 'Name'))}`}</b>`;
     const res = mine.length ? `<p>Das deutet auf eine Anpassung hin:</p>` + mine.map(x => `<div class="cb-fixes pl-sug"><span class="cb-conf ${x.cls}">${x.level}</span><b>${esc(x.c.label)}</b> ${fmtV(x.from)} → <b class="${x.to > x.from ? 'sg-new up' : 'sg-new down'}" style="font-size:18px">${fmtV(x.to)}</b><button class="btn small primary" data-cbapply="${esc(x.e._id)}" data-cat="${esc(x.c.f)}" data-val="${x.to}">übernehmen</button><button class="btn small" data-cbkeepsug="${esc(x.e._id)}" data-cat="${esc(x.c.f)}">so lassen</button></div>`).join('')
       : (calib.n ? `<p class="pl-ok">✓ Passt soweit – keine klare Abweichung.</p><p class="muted">Mit mehr Duellen wird das Bild genauer; Vorschläge erscheinen auch später im Abgleich.</p>` : `<p class="muted">Es gibt gerade niemanden mit gleichem oder benachbartem Wert, gegen den noch nicht verglichen wurde.</p>`);
-    $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${res}</div>`;
-    $('.cb-foot', el).innerHTML = `<div class="cb-ans">${calib.n ? `<button class="btn" data-cbmore>3 weitere Duelle</button>` : ''}<button class="btn primary" data-plclose>${rater ? 'weiter bewerten →' : 'fertig'}</button></div>`;
+    // aktuelle Werte mit Hinweis auf Vorschläge, damit man sieht, wo die Person steht
+    const sc = scoreOf(F);
+    const vals = `<div class="pl-vals">${sc ? `<div class="pl-v main"><span>Tool-Note</span><b>${sc.ten.toFixed(1).replace('.', ',')}</b></div>` : ''}${SCORE_CATS.map(c => {
+      const x = num(v(F, c.f)), sg = mine.find(y => y.c.f === c.f && y.cls !== 'lo');
+      return `<div class="pl-v${sg ? ' ' + (sg.to > sg.from ? 'up' : 'down') : ''}"><span>${esc(c.label)}</span><b>${x == null || symUnknown(c, x) ? '–' : fmtV(x)}${sg ? ` <em>→ ${fmtV(sg.to)}</em>` : ''}</b></div>`;
+    }).join('')}</div>`;
+    $('.cb-body', el).innerHTML = `<div class="cb-list pl-done">${vals}${res}</div>`;
+    $('.cb-foot', el).innerHTML = `<div class="cb-ans">${calib.n ? `<button class="btn" data-cbmore>3 weitere Duelle</button>` : ''}<button class="btn primary" data-plclose>${rater ? '← zurück zur Bewertung' : 'fertig'}</button></div>`;
     calibCount();
   }
   function calibCount() {
@@ -4652,7 +4658,8 @@
     const e = raterEntry(); if (!e || !hasScore(e)) return;
     if (rater.saveNote) rater.saveNote();
     rater.placed = rater.placed || new Set(); rater.placed.add(e._id);
-    openCalib({ focus: e._id, onClose: () => { if (!rater) return; if (thenNext) raterStep(1, true); else raterCats(); } });
+    // Nach dem Einordnen zurück zum selben Eintrag: Bewertung (evtl. angepasst) und Vorschläge sehen; „Weiter“ geht dann ohne erneutes Einordnen zum nächsten
+    openCalib({ focus: e._id, onClose: () => { if (!rater) return; raterCats(); const n = sugsOf(e._id).filter(x => x.cls !== 'lo').length; if (n) toast(`${n} Vorschlag${n === 1 ? '' : 'e'} für ${v(e, 'Name')} – unter der Tool-Note.`, 'ok'); } });
   }
   function raterStep(d, noPlace) {
     if (rater.saveNote) rater.saveNote();

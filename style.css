@@ -1371,3 +1371,13 @@ div.dx-th { cursor: zoom-in; }
 .fd-pr-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--accent); transition: width .2s; }
 .fd-pr-bar.indet i { width: 35% !important; animation: fd-ind 1.2s ease-in-out infinite; }
 @keyframes fd-ind { from { left: -35%; } to { left: 100%; } }
+/* Einordnen: Ergebnis mit aktuellen Werten */
+.pl-vals { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.pl-v { min-width: 86px; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; }
+.pl-v span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.pl-v b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.pl-v em { font-style: normal; font-size: 15px; }
+.pl-v.up { border-color: var(--good); } .pl-v.up em { color: var(--good); }
+.pl-v.down { border-color: #f07a7a; } .pl-v.down em { color: #f07a7a; }
+.pl-v.main b { color: var(--accent-2); }
+.calib.focus .cb-modes { display: none; }
