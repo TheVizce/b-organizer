@@ -24,8 +24,8 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder', 'Cover Online'];
-  const NO_CSV = new Set(['Own Images', 'Cover', 'Cover Online']); // lokale Bilder gibt es nur im Browser
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder', 'Cover Online', 'Cover Crop'];
+  const NO_CSV = new Set(['Own Images', 'Cover', 'Cover Online', 'Cover Crop']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = IS_CHARS ? [
@@ -2225,7 +2225,7 @@
     'User Upload Image URLs': 'Nutzer-Bilder (Babepedia)', 'Gallery Links': 'Galerien', 'Primary Category': 'Hauptbereich',
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
-    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Cover Online': 'Online-Ersatz fürs Kachelbild', 'Own Image URLs': 'Eigene Bild-Links',
+    '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Cover Online': 'Online-Ersatz fürs Kachelbild', 'Cover Crop': 'Bildausschnitt fürs Kachelbild', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies',
     'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link', 'Reference Links': 'Referenz-Links'
   };
@@ -3310,7 +3310,8 @@
     const altLine = isLocal(v(e, 'Cover')) ? `<div class="dx-alt ${alt ? 'ok' : 'miss'}" title="Eigene Bilder liegen nur auf dem Gerät, auf dem sie hochgeladen wurden">${alt
       ? `${here ? `<img src="${esc(thumbUrl(alt))}" alt="" referrerpolicy="no-referrer">` : ''}<span>☁ ${here ? 'Online-Ersatz für andere Geräte gesetzt' : 'Kachelbild liegt auf einem anderen Gerät – hier wird der Online-Ersatz gezeigt'}</span>`
       : `<span>☁ ${here ? 'Eigenes Kachelbild – noch kein Online-Ersatz für andere Geräte.' : 'Kachelbild liegt auf einem anderen Gerät.'} In „Alle Bilder“ mit ☁ wählen.</span>`}</div>` : '';
-    const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 auf anderem Gerät geprüft' : '☐ Kachelbild prüfen'}</button>${altLine}` : altLine;
+    const cropBtn = imgs.length ? `<button class="dx-crop" data-crop="${esc(e._id)}" title="Bildausschnitt fürs Kachelbild einstellen (zoomen und verschieben)">✂ Ausschnitt${coverCrop(e) ? ' ✓' : ''}</button>` : '';
+    const cover = imgs.length ? `${cropBtn}<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 auf anderem Gerät geprüft' : '☐ Kachelbild prüfen'}</button>${altLine}` : altLine;
     const facts = FACT_FIELDS.map(f => [f, f === 'Nationality' ? natDisplay(e) : f === 'Bra/Cup' && cupGroup(e) ? `${fmtValue(e, f)} · ${cupGroupShort(cupGroup(e)).toLowerCase()}` : fmtValue(e, f)]).filter(([, x]) => x !== '');
     const card = facts.length ? `<div class="dx-card"><h3>Steckbrief</h3><dl class="dx-facts">${facts.map(([f, x]) => `<div><dt>${esc(FACT_LABELS[f] || lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>` : '';
     const lk = links.length || galleries.length ? `<div class="dx-card"><h3>Links</h3><div class="dx-links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer" title="${esc(v(e, f))}"><span>${LINK_ICONS[f] || '🔗'}</span>${esc(linkLabel(f).replace(/^🏛️ /, ''))}</a>`).join('')}${galleries.map((u, i) => IS_CHARS ? refLinkHTML(u) : `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><span>🖼</span>Galerie ${i + 1}</a>`).join('')}</div></div>` : '';
@@ -4184,11 +4185,43 @@
   }
   // Bilder, die gar nicht ins Kachel-Format passen (v. a. schmale Ganzkörperbilder): ganz zeigen, Rest mit unscharfer Kopie füllen
   const FIT_SEL = '.card .img img, .gallery .main img, .lb-img img, .sg-img img, .rt-cmp-img img';
+  // Eigener Bildausschnitt fürs Kachelbild: „x y zoom bild“ (x/y in %, gilt nur, solange dieses Bild das Kachelbild ist)
+  function coverCrop(e) {
+    const raw = e && v(e, 'Cover Crop'); if (!raw) return null;
+    const [x, y, z, ...rest] = raw.split(' '), u = rest.join(' ');
+    const c = { x: +x, y: +y, z: +z, u };
+    if (![c.x, c.y, c.z].every(isFinite) || !u) return null;
+    return images(e)[0] === u ? c : null;
+  }
+  // x/y = Bildpunkt (in % des Bilds), der in die Mitte des Rahmens soll; z = Zoom gegenüber „füllt den Rahmen“.
+  // Ergebnis in % der Rahmengröße – hängt nur von den Seitenverhältnissen ab, passt also bei jeder Kachelgröße.
+  const clampN = (x, a, b) => Math.min(b, Math.max(a, x));
+  function cropGeom(c, ia, ba) {
+    const W = c.z * Math.max(1, ia / ba) * 100, H = c.z * Math.max(1, ba / ia) * 100;
+    const fx = clampN(c.x, 5000 / W, 100 - 5000 / W), fy = clampN(c.y, 5000 / H, 100 - 5000 / H);
+    return { W, H, fx, fy, left: 50 - fx * W / 100, top: 50 - fy * H / 100 };
+  }
+  const CROP_PROPS = ['position', 'left', 'top', 'width', 'height', 'max-width', 'max-height', 'object-fit', 'object-position', 'transform', 'inset'];
+  function applyCrop(img, c) {
+    const st = img.style, box = img.parentElement;
+    const w = img.naturalWidth, h = img.naturalHeight, bw = box && box.clientWidth, bh = box && box.clientHeight;
+    if (!c || !w || !h || !bw || !bh) { if (img.classList.contains('has-crop')) { CROP_PROPS.forEach(k => st.removeProperty(k)); img.classList.remove('has-crop'); box && box.classList.remove('crop-box'); } return; }
+    const g = cropGeom(c, w / h, bw / bh);
+    const set = (k, val) => st.setProperty(k, val, 'important');
+    set('position', 'absolute'); set('inset', 'auto'); set('left', g.left + '%'); set('top', g.top + '%'); set('width', g.W + '%'); set('height', g.H + '%');
+    set('max-width', 'none'); set('max-height', 'none'); set('object-fit', 'fill'); set('object-position', '50% 50%'); set('transform', 'none');
+    img.classList.add('has-crop'); box.classList.add('crop-box');
+  }
   function fitCheck(img) {
     const box = img.parentElement; if (!box) return;
+    const eid = img.dataset.eid || (img.closest('[data-lb-open]') || {}).dataset?.lbOpen || (img.closest('[data-eid]') || {}).dataset?.eid;
+    const crop = eid ? coverCrop(byId(eid)) : null;
+    applyCrop(img, crop);
+    if (crop) { box.classList.remove('fit-blur'); const bg = box.querySelector(':scope > img.fit-bg'); if (bg) bg.remove(); return; }
     const w = img.naturalWidth, h = img.naturalHeight, bw = box.clientWidth, bh = box.clientHeight;
     if (!w || !h || !bw || !bh) return;
-    const r = (w / h) / (bw / bh), odd = r < 0.72 || r > 1.6;
+    // nur schmale Bilder (Ganzkörper) – breite Bilder bleiben wie bisher zugeschnitten (Ausschnitt per ✂ einstellbar)
+    const r = (w / h) / (bw / bh), odd = r < 0.72;
     box.classList.toggle('fit-blur', odd);
     let bg = box.querySelector(':scope > img.fit-bg');
     if (odd) {
@@ -4197,6 +4230,70 @@
     } else if (bg) bg.remove();
   }
   document.addEventListener('load', (ev) => { const t = ev.target; if (t.tagName === 'IMG' && !t.classList.contains('fit-bg') && t.matches(FIT_SEL)) fitCheck(t); }, true);
+
+  // ---------- Bildausschnitt-Editor ----------
+  function openCropEditor(e) {
+    const u = images(e)[0]; if (!u) return;
+    const cur = coverCrop(e) || { x: 50, y: document.body.classList.contains('cards-top') ? 15 : 50, z: 1 };
+    let c = { ...cur };
+    const ov = document.createElement('div');
+    ov.className = 'crop-ed';
+    ov.innerHTML = `<div class="ce-box" role="dialog" aria-label="Bildausschnitt">
+        <div class="ce-head"><b>Bildausschnitt</b><span class="muted">${esc(v(e, 'Name'))}</span><button class="x" data-ce="cancel" aria-label="Schließen">×</button></div>
+        <div class="ce-body">
+          <div class="ce-frame"><img src="${esc(R(u))}" alt="" referrerpolicy="no-referrer" draggable="false"><div class="ce-grid"></div></div>
+          <div class="ce-side">
+            <p class="muted">Bild ziehen zum Verschieben, Mausrad oder Regler zum Zoomen. So erscheint das Kachelbild in Kacheln, Detailansicht und Listen.</p>
+            <label class="ce-zoom">Zoom <input type="range" min="1" max="4" step="0.01" value="${c.z}"><span></span></label>
+            <div class="ce-prev"><div class="ce-mini"><img src="${esc(R(u))}" alt="" referrerpolicy="no-referrer"></div><div class="ce-mini sm"><img src="${esc(R(u))}" alt="" referrerpolicy="no-referrer"></div></div>
+            <div class="ce-btns">
+              <button class="btn primary" data-ce="save">Übernehmen</button>
+              <button class="btn" data-ce="reset" title="Eigenen Ausschnitt entfernen – wieder automatisch">Automatisch</button>
+              <button class="btn ghost" data-ce="cancel">Abbrechen</button>
+            </div>
+          </div>
+        </div></div>`;
+    document.body.appendChild(ov);
+    const frame = $('.ce-frame', ov), main = $('.ce-frame img', ov), range = $('.ce-zoom input', ov), zl = $('.ce-zoom span', ov);
+    const draw = () => {
+      [main, ...$$('.ce-mini img', ov)].forEach(im => applyCrop(im, c));
+      range.value = c.z; zl.textContent = c.z.toFixed(1).replace('.', ',') + '×';
+    };
+    const clamp = clampN;
+    // Mittelpunkt auf das erreichbare Maß begrenzen (sonst „klebt“ das Bild beim Zurückziehen)
+    const norm = () => { const g = cropGeom(c, (main.naturalWidth || 1) / (main.naturalHeight || 1), frame.clientWidth / (frame.clientHeight || 1)); c.x = g.fx; c.y = g.fy; return g; };
+    let drag = null;
+    frame.addEventListener('pointerdown', (ev) => { drag = { px: ev.clientX, py: ev.clientY, x: c.x, y: c.y }; frame.setPointerCapture(ev.pointerId); frame.classList.add('drag'); });
+    frame.addEventListener('pointermove', (ev) => {
+      if (!drag) return;
+      const g = cropGeom(c, (main.naturalWidth || 1) / (main.naturalHeight || 1), frame.clientWidth / (frame.clientHeight || 1));
+      c.x = drag.x - (ev.clientX - drag.px) / (frame.clientWidth * g.W / 100) * 100;
+      c.y = drag.y - (ev.clientY - drag.py) / (frame.clientHeight * g.H / 100) * 100;
+      norm(); draw();
+    });
+    const end = () => { drag = null; frame.classList.remove('drag'); };
+    frame.addEventListener('pointerup', end); frame.addEventListener('pointercancel', end);
+    frame.addEventListener('wheel', (ev) => { ev.preventDefault(); c.z = clamp(+(c.z * (ev.deltaY < 0 ? 1.08 : 1 / 1.08)).toFixed(3), 1, 4); norm(); draw(); }, { passive: false });
+    range.addEventListener('input', () => { c.z = +range.value; norm(); draw(); });
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); ev.preventDefault(); close(); } else if (ev.key === 'Enter') { ev.preventDefault(); save(); } };
+    document.addEventListener('keydown', onKey, true);
+    const save = (reset) => {
+      const same = Math.abs(c.x - 50) < 0.5 && Math.abs(c.y - 50) < 0.5 && Math.abs(c.z - 1) < 0.01;
+      if (reset || same) delete e['Cover Crop'];
+      else e['Cover Crop'] = `${c.x.toFixed(1)} ${c.y.toFixed(1)} ${c.z.toFixed(2)} ${u}`;
+      e._updated = Date.now(); saveQuiet(); refreshItem(e._id); refreshDetailOf(e._id);
+      toast(reset || same ? 'Bildausschnitt wieder automatisch.' : 'Bildausschnitt gespeichert.', 'ok');
+      close();
+    };
+    ov.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const b = ev.target.closest('[data-ce]'); if (!b) { if (ev.target === ov) close(); return; }
+      if (b.dataset.ce === 'cancel') close(); else if (b.dataset.ce === 'save') save(); else if (b.dataset.ce === 'reset') save(true);
+    });
+    $$('img', ov).forEach(im => im.addEventListener('load', () => { if (im === main) norm(); draw(); }));
+    if (main.complete) { norm(); draw(); }
+  }
 
   function stopSlide() {
     if (!slide) return;
@@ -4715,7 +4812,7 @@
   // Mini-Kachel mit Sammelkarten-Overlay (vorher / nachher)
   function sugCardHTML(e, label, hl) {
     const img = images(e)[0], src = img ? R(img) : '';
-    return `<figure class="sg-card${hl ? ' after ' + hl.dir : ''}"><div class="sg-img"><span class="sg-ini">${esc(initials(v(e, 'Name')))}</span>${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(thumbUrl(src) || '')}" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt}else{this.remove()}">` : ''}${futHTML(e, hl)}</div><figcaption>${label}</figcaption></figure>`;
+    return `<figure class="sg-card${hl ? ' after ' + hl.dir : ''}"><div class="sg-img"><span class="sg-ini">${esc(initials(v(e, 'Name')))}</span>${src ? `<img data-eid="${esc(e._id)}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(thumbUrl(src) || '')}" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt}else{this.remove()}">` : ''}${futHTML(e, hl)}</div><figcaption>${label}</figcaption></figure>`;
   }
   function sugDots(tab) {
     return tab.map(([o, t]) => `<span class="sg-vs"><i>gegen ${fmtV(o)}</i>${'<b class="w" title="gewonnen"></b>'.repeat(t[0])}${'<b class="t" title="gleich"></b>'.repeat(t[1])}${'<b class="l" title="verloren"></b>'.repeat(t[2])}</span>`).join('');
@@ -5224,6 +5321,8 @@
     }
     const cchk = t.closest('[data-cover-chk]');
     if (cchk) { const e = byId(cchk.dataset.coverChk); if (e) { coverAction(e, null); render(); showDetail(e._id); } return; }
+    const cropB = t.closest('[data-crop]');
+    if (cropB) { const e = byId(cropB.dataset.crop); if (e) openCropEditor(e); return; }
     const altBtn = t.closest('[data-cover-alt]');
     if (altBtn) {
       const e = byId(altBtn.dataset.id), u = altBtn.dataset.coverAlt;
