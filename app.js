@@ -7,9 +7,10 @@
   const IS_CHARS = /[?&]k=chars\b/.test(location.search);
   if (IS_CHARS) document.documentElement.classList.add('mode-chars');
   // ---------- Schema (identisch zum Userscript) ----------
-  const CHAR_FIELDS = ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Adult',
-    'Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'Voice Actor', 'Actress', 'Wiki URL',
-    'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'];
+  // Charaktere: Geschlecht, Größe, Cup und die Bild-URL-Felder sind entfallen (Nov. 2026). Vorhandene Werte bleiben in den Daten,
+  // alte Bild-URLs werden beim Laden zu den Bild-Links verschoben (migrateCharImgs).
+  const CHAR_FIELDS = ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Role', 'First Appearance', 'Adult',
+    'Hair color', 'Eye color', 'Body type', 'Voice Actor', 'Actress', 'Wiki URL', 'Reference Links'];
   const FIELDS = IS_CHARS ? CHAR_FIELDS : [
     'Name', 'AKA', 'Profile URL', 'Archive URL', 'Babe ID', 'Main Image URL',
     'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links', 'Scraped At',
@@ -29,11 +30,11 @@
 
   const GROUPS = IS_CHARS ? [
     { title: 'Allgemein', fields: ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Adult'] },
-    { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height'] },
+    { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Body type'] },
     { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'Tags', 'Notes', 'Cover Checked'] },
     { title: 'Darstellung', fields: ['Voice Actor', 'Actress'] },
-    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'] },
-    { title: 'Links', fields: ['Wiki URL'] }
+    { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder'] },
+    { title: 'Links', fields: ['Wiki URL', 'Reference Links'] }
   ] : [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
@@ -53,7 +54,7 @@
     'Rank': 'num', 'Highest Rank': 'num', 'Peakdays': 'num', 'Years active': 'num', 'Active till': 'num',
     'My Rating': 'num', 'My Rating (old)': 'num', 'Score': 'num',
     'Face Score': 'score', 'Body Score': 'score', 'Hot Score': 'score', 'Cute Score': 'score', 'Sympathy Score': 'score',
-    'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area',
+    'User Upload Image URLs': 'area', 'Own Image URLs': 'area', 'Gallery Links': 'area', 'Notes': 'area', 'Reference Links': 'area',
     // Charaktere
     'Medium': ['', 'Spiel', 'Anime', 'Manga', 'Comic', 'Cartoon', 'Serie', 'Film', 'Buch', 'Sonstiges'],
     'Style': ['', '2D Anime/Manga', '2D Cartoon/Comic', '2D Pixel', '3D Spiel/CGI', 'Realfilm', 'Sonstiges'],
@@ -89,6 +90,7 @@
     }
   }
   const HINTS = {
+    'Reference Links': 'ein Link pro Zeile – z. B. Fandom, Wikipedia, MyAnimeList, Booru; erscheinen in der Detailansicht mit dem Namen der Seite', 'Wiki URL': 'Hauptquelle, z. B. die Fandom-Seite',
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
     'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'Bild-Adressen, die du selbst einträgst – Babepedia-Updates ändern sie nie. ✕ entfernt einen Link, ★ macht ihn zum Kachelbild.', 'Gallery Links': 'kommagetrennt',
@@ -458,7 +460,7 @@
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
-    if (IS_CHARS) { germanizeChar(e); if (migrateKinds(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } return e; }   // Babepedia-Bereinigungen gelten nur für Personen
+    if (IS_CHARS) { germanizeChar(e); if (migrateCharImgs(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } if (migrateKinds(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } return e; }   // Babepedia-Bereinigungen gelten nur für Personen
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
@@ -818,7 +820,7 @@
       kindsMigrated = 0;
       const arr = (Array.isArray(d) ? d : []).map(derive);
       if (kindsMigrated) {
-        try { await idbSet('entries', arr); toast(`Bildarten umgestellt (${kindsMigrated} Einträge): bisherige Bild-Links gelten als offiziell, hochgeladene Bilder als „unklar“.`, 'ok'); }
+        try { await idbSet('entries', arr); }
         catch (err) { toast('Speichern der Bildarten-Umstellung fehlgeschlagen: ' + (err && err.message || err), 'err'); }
       }
       return arr;
@@ -1006,6 +1008,18 @@
   // Alte Bild-Links -> 'Official Images', hochgeladene Bilder bleiben unklar, 'Cosplay Images' entfällt.
   // _imgKinds merkt sich die Umstellung (wird mitsynchronisiert), damit kein Gerät sie später wiederholt.
   let kindsMigrated = 0;
+  // Charaktere: Hauptbild-URL / Bild 2–4 gibt es nicht mehr als eigene Felder -> in die Bild-Links (Hauptbild vorne, bleibt Kachelbild)
+  const OLD_CHAR_IMG = ['Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL'];
+  function migrateCharImgs(e) {
+    const urls = OLD_CHAR_IMG.map(f => v(e, f)).filter(Boolean);
+    if (!urls.length && !OLD_CHAR_IMG.some(f => f in e)) return false;
+    if (urls.length) {
+      if (!v(e, 'Cover')) e.Cover = urls[0];
+      e['Own Image URLs'] = [...new Set([...urls, ...splitList(e['Own Image URLs'])])].join(', ');
+    }
+    OLD_CHAR_IMG.forEach(f => delete e[f]);
+    return !!urls.length;
+  }
   function migrateKinds(e) {
     if (e._imgKinds) return false;
     const marked = new Set([...splitList(e['Scene Images']), ...splitList(e['Fan Art']), ...splitList(e['Cosplay Images'])]);   // Cosplay -> unklar
@@ -1592,6 +1606,10 @@
       }
       const item = {};
       for (const f of ALL_FIELDS) if (raw[f] !== undefined && raw[f] !== null) item[f] = String(raw[f]).trim();
+      if (IS_CHARS) {   // ältere Charakter-Backups: Bild-URL-Felder -> Bild-Links
+        const old = OLD_CHAR_IMG.map(f => String(raw[f] || '').trim()).filter(Boolean);
+        if (old.length) { if (!item.Cover) item.Cover = old[0]; item['Own Image URLs'] = [...new Set([...old, ...splitList(item['Own Image URLs'])])].join(', '); }
+      }
       if (!item.Name) { skipped++; continue; }
       const k = keyOf(item);
       let existing = (raw._id && byId.get(raw._id)) || index.get(k);
@@ -1990,6 +2008,7 @@
     { k: 'score', label: 'Tool-Note nicht vergeben', test: e => rateable(e) && !hasScore(e) },
     { k: 'primary', label: 'Hauptbereich nicht bestätigt', hint: 'mehrere Bereiche, Hauptbereich automatisch', bp: true, test: e => catList(e).length > 1 && !(primaryCat(e) || {}).manual },
     { k: 'missing', label: 'Werte fehlen', hint: () => CORE_FIELDS.filter(([f]) => f !== '__img').map(([, l]) => l).join(', '), test: e => CORE_FIELDS.some(([f]) => f !== '__img' && isMissing(e, f)) },
+    { k: 'quick', label: 'Schnell angelegt – noch ausfüllen', hint: 'bis du den Eintrag einmal über „Bearbeiten“ speicherst', chars: true, test: e => !!e._quick },
     { k: 'adult', label: 'Volljährig ungeklärt', chars: true, test: e => v(e, 'Adult') !== 'ja' && v(e, 'Adult') !== 'nein' },
     { k: 'kind', label: 'Bilder mit unklarer Bildart', chars: true, test: e => images(e).some(u => imgKind(e, u) === 'unk') },
     { k: 'pending', label: 'Babepedia-Update offen', bp: true, test: e => pendingUpdates.some(p => p.id === e._id) },
@@ -2167,11 +2186,11 @@
     'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Cover Online': 'Online-Ersatz fürs Kachelbild', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies', 'Gender': 'Geschlecht',
-    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link'
+    'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link', 'Reference Links': 'Referenz-Links'
   };
   if (IS_CHARS) Object.assign(FIELD_LABELS, { 'Hair color': 'Haarfarbe', 'Eye color': 'Augenfarbe', 'Body type': 'Figur', 'Bra/Cup': 'Cup', 'Height': 'Größe', 'Notes': 'Notizen', 'Favorite': 'Favorit', 'Main Image URL': 'Hauptbild-URL' });
   const lab = (f) => FIELD_LABELS[f] || f;
-  const CARD_FIELD_CHOICES = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'First Appearance', 'Hair color', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'Adult',
+  const CARD_FIELD_CHOICES = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Role', 'First Appearance', 'Hair color', 'Eye color', 'Body type', 'Adult',
     'Voice Actor', 'Actress', 'AKA', 'Tags', 'Cover Checked', 'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Nationality', 'Alter', 'Geburtsjahr', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Boobs', 'Hair color', 'Eye color', 'Body type',
     'Ethnicity', 'Professions', 'Profession Category', 'Birthplace', 'Born', 'Years active', 'Tattoos', 'Piercings', 'Sexuality', 'AKA', 'Tags',
     'Score', '__cats', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'User Rating', 'Global Rating', 'Votes', 'Rank', 'Highest Rank', 'Babe ID', 'Scraped At'];
@@ -2182,7 +2201,7 @@
     ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']]
     : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']];
-  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Gender', 'Role', 'Adult', 'Eye color', 'Body type', 'Bra/Cup', 'Height', 'First Appearance', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
+  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Role', 'Adult', 'Eye color', 'Body type', 'First Appearance', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
     'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
     'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
@@ -2933,6 +2952,18 @@
     return deList(f, val) + (UNITS[f] || '');
   }
 
+  // Charaktere: Referenz-Links mit Namen der Seite
+  const REF_SITES = [[/fandom\.com/, '📚', 'Fandom'], [/wikipedia\.org/, '🌐', 'Wikipedia'], [/myanimelist\.net/, '🎌', 'MyAnimeList'], [/anilist\.co/, '🎌', 'AniList'],
+    [/anidb\.net/, '🎌', 'AniDB'], [/vndb\.org/, '🎮', 'VNDB'], [/danbooru|gelbooru|safebooru|yande\.re|konachan|rule34/, '🖼', 'Booru'], [/pixiv\.net/, '🎨', 'Pixiv'],
+    [/deviantart\.com/, '🎨', 'DeviantArt'], [/artstation\.com/, '🎨', 'ArtStation'], [/reddit\.com/, '👽', 'Reddit'], [/(x|twitter)\.com/, '𝕏', 'X'],
+    [/youtube\.com|youtu\.be/, '▶', 'YouTube'], [/imdb\.com/, '🎬', 'IMDb'], [/tvtropes\.org/, '📖', 'TV Tropes'], [/igdb\.com|mobygames/, '🎮', 'Spiele-DB']];
+  function refLinkHTML(u) {
+    let host = ''; try { host = new URL(u).hostname.replace(/^www\./, ''); } catch {}
+    const m = REF_SITES.find(([re]) => re.test(host));
+    let label = m ? m[2] : host;
+    if (m && m[2] === 'Fandom') { const sub = host.split('.')[0]; if (sub && sub !== 'fandom') label = sub.charAt(0).toUpperCase() + sub.slice(1) + ' Wiki'; }
+    return `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="${esc(u)}"><span>${m ? m[1] : '🔗'}</span>${esc(label || 'Link')}</a>`;
+  }
   function linkLabel(f, url) {
     if (f === 'Profile URL') return 'Babepedia';
     if (f === 'Archive URL') return '🏛️ Internet Archive';
@@ -3131,7 +3162,7 @@
     } catch (err) { btn.disabled = false; setMsg('Übergabe fehlgeschlagen: ' + (err && err.message || err)); }
   }
   // ---------- Detailansicht: linke Spalte unter dem Bild ----------
-  const FACT_FIELDS = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Gender', 'Role', 'Hair color', 'Eye color', 'Body type', 'Height', 'Voice Actor', 'Actress']
+  const FACT_FIELDS = IS_CHARS ? ['Universe', 'Origin', 'Medium', 'Style', 'Species', 'Role', 'Hair color', 'Eye color', 'Body type', 'Voice Actor', 'Actress']
     : ['Born', 'Nationality', 'Height', 'Weight', 'Measurements', 'Bra/Cup', 'Hair color', 'Eye color', 'Body type', 'Ethnicity'];
   const LINK_ICONS = { 'Profile URL': '🅱', 'Archive URL': '🏛️', 'Website': '🌐', 'Instagram': '📸', 'X / Twitter': '𝕏', 'TikTok': '♪', 'YouTube': '▶', 'Twitch': '🎮', 'Reddit': '👽', 'IMDb': '🎬', 'OnlyFans 1': '🔒', 'OnlyFans 2': '🔒', 'Fansly': '💙', 'Thronly': '👑', 'Boobpedia Link': '📖', 'Wiki URL': '📚' };
   // Bilderbereich in der Detailansicht einklappbar (links gibt es schon die Vorschaubilder); Personen standardmäßig zu, Charaktere offen (Bildarten)
@@ -3160,7 +3191,7 @@
     const cover = imgs.length ? `<button class="dx-cover cover-chk ${coverChecked(e) ? 'on' : ''}" data-cover-chk="${esc(e._id)}" title="Kachelbild als geprüft markieren (K)">${coverChecked(e) ? '✓ Kachelbild geprüft' : coverElsewhere(e) ? '📁 auf anderem Gerät geprüft' : '☐ Kachelbild prüfen'}</button>${altLine}` : altLine;
     const facts = FACT_FIELDS.map(f => [f, f === 'Nationality' ? natDisplay(e) : fmtValue(e, f)]).filter(([, x]) => x !== '');
     const card = facts.length ? `<div class="dx-card"><h3>Steckbrief</h3><dl class="dx-facts">${facts.map(([f, x]) => `<div><dt>${esc(FACT_LABELS[f] || lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>` : '';
-    const lk = links.length || galleries.length ? `<div class="dx-card"><h3>Links</h3><div class="dx-links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer" title="${esc(v(e, f))}"><span>${LINK_ICONS[f] || '🔗'}</span>${esc(linkLabel(f).replace(/^🏛️ /, ''))}</a>`).join('')}${galleries.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><span>🖼</span>Galerie ${i + 1}</a>`).join('')}</div></div>` : '';
+    const lk = links.length || galleries.length ? `<div class="dx-card"><h3>Links</h3><div class="dx-links">${links.map(f => `<a href="${esc(v(e, f))}" target="_blank" rel="noopener noreferrer" title="${esc(v(e, f))}"><span>${LINK_ICONS[f] || '🔗'}</span>${esc(linkLabel(f).replace(/^🏛️ /, ''))}</a>`).join('')}${galleries.map((u, i) => IS_CHARS ? refLinkHTML(u) : `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><span>🖼</span>Galerie ${i + 1}</a>`).join('')}</div></div>` : '';
     return thumbs + cover + card + lk;
   }
   function showDetail(id) {
@@ -3173,8 +3204,8 @@
       if (!rows.length) return '';
       return `<div class="sec dsec"><h3>${esc(title)}</h3><dl class="kv">${rows.map(([f, x]) => `<div><dt>${esc(lab(f))}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl></div>`;
     };
-    const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => /^https?:\/\//i.test(v(e, f)));
-    const galleries = splitList(e['Gallery Links']).filter(u => /^https?:\/\//i.test(u));
+    const links = ['Profile URL', 'Archive URL', ...LINK_FIELDS].filter(f => f !== 'Reference Links' && /^https?:\/\//i.test(v(e, f)));
+    const galleries = splitList(e[IS_CHARS ? 'Reference Links' : 'Gallery Links']).filter(u => /^https?:\/\//i.test(u));
     const tags = splitList(e.Tags);
 
     const pos = shown.findIndex(x => x._id === e._id);
@@ -3333,7 +3364,7 @@
         ? [...new Set(entries.map(x => v(x, f)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de')) : null;
       input = `<input type="${type}" ${name} value="${esc(val)}" ${f === 'Name' ? 'required' : ''}${sug ? ` list="dl-${id}" autocomplete="off"` : ''}>${sug ? `<datalist id="dl-${id}">${sug.map(x => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}`;
     }
-    const wide = t === 'area' || f === 'Notes' ? ' wide' : '';
+    const wide = t === 'area' || f === 'Notes' || (IS_CHARS && f === 'Wiki URL') ? ' wide' : '';
     if (IMAGE_FIELDS.includes(f)) {
       return `<div class="field${wide}"><label for="${id}">${esc(f)}</label>${input}${hint}<div class="img-prev" data-prev-for="${esc(f)}">${previewHTML(val)}</div></div>`;
     }
@@ -3475,6 +3506,7 @@
     if (id) {
       const e = byId(id);
       Object.assign(e, data, { _updated: now });
+      delete e._quick;
     } else {
       entries.push({ _id: uid(), _created: now, _updated: now, ...data });
     }
@@ -3483,6 +3515,78 @@
     const target = id || entries[entries.length - 1]._id;
     showDetail(target);
     toast(id ? 'Gespeichert.' : 'Eintrag angelegt.', 'ok');
+  }
+
+  // ---------- Charaktere: schnell hintereinander anlegen (nur Name + Universum, Rest später) ----------
+  function showQuickAdd() {
+    const unis = [...new Set(entries.map(x => v(x, 'Universe')).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+    openModal(`
+      <div class="modal-head"><h2>Schnell anlegen</h2><div class="actions">
+        <button class="btn small" data-action="new-full" title="Neuer Eintrag mit allen Feldern">Ausführliches Formular</button>
+        <button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="qa" id="qa-form" autocomplete="off" novalidate>
+        <p class="qa-help">Name und Universum eintragen, <kbd>Enter</kbd> – der Eintrag ist gespeichert und es geht direkt mit dem nächsten weiter. Das Universum bleibt stehen. Später ausfüllen: <b>📝 Zu erledigen → Schnell angelegt</b>.</p>
+        <div class="qa-row">
+          <label class="qa-f"><span>Name *</span><input name="Name" required></label>
+          <label class="qa-f"><span>Universum</span><input name="Universe" list="qa-unis"></label>
+          <button class="btn primary" type="submit">＋ Anlegen</button>
+        </div>
+        <datalist id="qa-unis">${unis.map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+        <div class="qa-msg" aria-live="polite"></div>
+        <ul class="qa-list"></ul>
+      </form>`);
+    const form = $('#qa-form', modal), nameIn = form.elements.Name, uniIn = form.elements.Universe, msg = $('.qa-msg', form), list = $('.qa-list', form);
+    const made = [];
+    let dupeOk = '';
+    // Felder, bei denen alle Einträge desselben Universums übereinstimmen, gleich mit übernehmen
+    const COPY = ['Medium', 'Style', 'Origin'];
+    const inherit = (uni) => {
+      const same = entries.filter(x => v(x, 'Universe').toLowerCase() === uni.toLowerCase());
+      const out = {};
+      if (!uni || !same.length) return out;
+      for (const f of COPY) { const vals = [...new Set(same.map(x => v(x, f)))]; if (vals.length === 1 && vals[0]) out[f] = vals[0]; }
+      return out;
+    };
+    const drawList = () => {
+      list.innerHTML = made.map(id => { const e = byId(id); if (!e) return '';
+        return `<li><span class="qa-n">${esc(v(e, 'Name'))}</span><span class="qa-u">${esc(v(e, 'Universe') || '–')}</span>${COPY.filter(f => v(e, f)).length ? `<span class="qa-x" title="aus anderen Einträgen dieses Universums übernommen">${esc(COPY.map(f => v(e, f)).filter(Boolean).join(' · '))}</span>` : ''}
+          <button type="button" class="btn small" data-qa-edit="${esc(id)}" title="Jetzt ausführlich bearbeiten">Bearbeiten</button>
+          <button type="button" class="btn small ghost" data-qa-undo="${esc(id)}" title="Wieder entfernen">✕</button></li>`; }).join('');
+      $('h2', modal).textContent = made.length ? `Schnell anlegen · ${made.length} neu` : 'Schnell anlegen';
+    };
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const name = nameIn.value.trim(), uni = uniIn.value.trim();
+      if (!name) { nameIn.focus(); return; }
+      const data = { Name: name, Universe: uni };
+      const dupe = entries.find(x => keyOf(x) === keyOf(data));
+      if (dupe && dupeOk !== keyOf(data)) {
+        dupeOk = keyOf(data);
+        msg.className = 'qa-msg warn'; msg.textContent = `„${dupe.Name}“${uni ? ` (${uni})` : ''} gibt es schon – nochmal Enter legt trotzdem einen weiteren an.`;
+        nameIn.focus(); return;
+      }
+      dupeOk = '';
+      const now = Date.now();
+      const e = { _id: uid(), _created: now, _updated: now, Favorite: 'false', _imgKinds: 1, _quick: 1, ...inherit(uni), ...data };
+      if (!uni) delete e.Universe;
+      entries.push(e); made.unshift(e._id);
+      saveQuiet(); refreshFilters(); render();
+      msg.className = 'qa-msg ok'; msg.textContent = `„${name}“ angelegt.`;
+      nameIn.value = ''; nameIn.focus(); drawList();
+    });
+    form.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const ed = ev.target.closest('[data-qa-edit]'), un = ev.target.closest('[data-qa-undo]');
+      if (ed) { showForm(ed.dataset.qaEdit); return; }
+      if (un) {
+        const id = un.dataset.qaUndo, e = byId(id);
+        entries = entries.filter(x => x._id !== id); made.splice(made.indexOf(id), 1);
+        saveQuiet(); refreshFilters(); render(); drawList();
+        msg.className = 'qa-msg'; msg.textContent = e ? `„${v(e, 'Name')}“ wieder entfernt.` : '';
+        nameIn.focus();
+      }
+    });
+    setTimeout(() => nameIn.focus(), 30);
   }
 
   function showHelp() {
@@ -4858,7 +4962,8 @@
   // ---------- Aktionen ----------
   function action(name, el) {
     switch (name) {
-      case 'new': showForm(); break;
+      case 'new': IS_CHARS ? showQuickAdd() : showForm(); break;
+      case 'new-full': showForm(); break;
       case 'edit': showForm(el.dataset.id); break;
       case 'to-ranker': openRankerSend([byId(el.dataset.id)]); break;
       case 'merge': showMerge(el.dataset.id); break;
@@ -5057,7 +5162,7 @@
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 's' && $('#entry-form')) { ev.preventDefault(); saveForm(); }
   });
 
-  $('#btn-new').addEventListener('click', () => showForm());
+  $('#btn-new').addEventListener('click', () => IS_CHARS ? showQuickAdd() : showForm());
   $('#btn-browse').addEventListener('click', browseImages);
   $('#btn-pending').addEventListener('click', showPending);
   $('#btn-random').addEventListener('click', randomEntry);
