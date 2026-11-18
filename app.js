@@ -2813,6 +2813,78 @@
     $('#map-info').innerHTML = `<b>${isoFlag(iso)} ${esc(c.de)}</b> · ${n} Eintr${n === 1 ? 'ag' : 'äge'}` + (n ? ` <button class="btn small" data-sf="${i}">Liste zeigen</button>` : '');
   }
 
+  // ---------- Eigenschaft ↔ Tool-Note (nach dem Vorbild der Tag-Statistik im Image Ranker) ----------
+  const PT_PROPS = IS_CHARS
+    ? ['Universe', 'Medium', 'Style', 'Origin', 'Species', 'Role', 'Hair color', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Tags', 'Favorite']
+    : ['__primary', 'Profession Category', 'Nationality', 'Geburtsland', 'Ethnicity', 'Hair color', 'Eye color', 'Body type', 'Boobs', 'Cup-Gruppe', 'Größenklasse', 'Gewichtsklasse',
+       'Altersgruppe', 'Geburtsjahrzehnt', 'Karrierestart', 'Sexuality', 'Tattoos', 'Piercings', 'Babepedia-Ø (grob)', 'Active', 'Tags', 'Favorite'];
+  const ptLabel = (f) => f === '__primary' ? 'Hauptbereich' : f === 'Profession Category' ? 'Berufskategorie' : lab(f);
+  function propStatsHTML(list) {
+    const f = PT_PROPS.includes(ui.ptProp) ? ui.ptProp : PT_PROPS[0];
+    const minN = [1, 2, 3, 5, 10].includes(ui.ptMin) ? ui.ptMin : 3;
+    const sort = ui.ptSort || { k: 'avg', d: -1 };
+    const sc = (e) => num(v(e, 'Score'));
+    const rated = list.filter(e => sc(e) != null);
+    const mean = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+    const overall = mean(rated.map(sc));
+    const catAll = Object.fromEntries(SCORE_CATS.map(c => [c.f, mean(rated.map(e => num(v(e, c.f))).filter(x => x != null))]));
+    const fmt = (x, d = 1) => x == null ? '–' : x.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const ord = GROUPED[f] && GROUPED[f].order;
+    const groups = new Map();
+    for (const e of list) {
+      const vals = [...new Set(statValues(e, f).map(x => TYPES[f] === 'bool' || f === 'Favorite' ? (isTrue(x) || x === 'Ja' ? 'Ja' : 'Nein') : x))];
+      for (const x of vals.length ? vals : ['__none__']) { if (!groups.has(x)) groups.set(x, []); groups.get(x).push(e); }
+    }
+    let rows = [...groups].map(([key, items]) => {
+      const r = items.filter(e => sc(e) != null), xs = r.map(sc).sort((a, b) => a - b);
+      const best = r.slice().sort((a, b) => sc(b) - sc(a) || v(a, 'Name').localeCompare(v(b, 'Name'), 'de'))[0];
+      // Kategorie, in der dieser Wert am deutlichsten über dem Schnitt liegt
+      let strong = null;
+      for (const c of SCORE_CATS) {
+        const m = mean(r.map(e => num(v(e, c.f))).filter(x => x != null)); if (m == null || catAll[c.f] == null) continue;
+        const d = m - catAll[c.f]; if (!strong || Math.abs(d) > Math.abs(strong.d)) strong = { c, d };
+      }
+      const label = key === '__none__' ? '(ohne Angabe)' : f === 'Nationality' ? key : deVal(f === '__primary' ? 'Profession Category' : f, key);
+      return { key, label, none: key === '__none__', n: items.length, rated: r.length, avg: mean(xs), med: xs.length ? (xs.length % 2 ? xs[xs.length >> 1] : (xs[xs.length / 2 - 1] + xs[xs.length / 2]) / 2) : null,
+        top: xs.length ? xs[xs.length - 1] : null, best, strong, fav: items.filter(e => isTrue(e.Favorite)).length,
+        test: key === '__none__' ? (e => !statValues(e, f).length) : (e => statValues(e, f).map(x => f === 'Favorite' ? (isTrue(x) || x === 'Ja' ? 'Ja' : 'Nein') : x).includes(key)) };
+    });
+    const hidden = rows.filter(r => !r.none && r.rated < minN).length;
+    rows = rows.filter(r => r.none || r.rated >= minN);
+    const ordIdx = (r) => ord ? ord.indexOf(r.key) : -1;
+    rows.sort((a, b) => {
+      if (a.none !== b.none) return a.none ? 1 : -1;
+      if (sort.k === 'label') return ord ? sort.d * (ordIdx(a) - ordIdx(b)) : sort.d * a.label.localeCompare(b.label, 'de');
+      const x = a[sort.k], y = b[sort.k];
+      return sort.d * ((x == null ? -1 : x) - (y == null ? -1 : y)) || b.rated - a.rated;
+    });
+    const th = (k, t, cls = '') => `<th class="${cls}"><button data-pt-sort="${k}">${t}${sort.k === k ? (sort.d < 0 ? ' ▼' : ' ▲') : ''}</button></th>`;
+    const tr = rows.map(r => {
+      const ref = statRefs.push({ label: r.label, flabel: `${ptLabel(f)}: ${r.label}`, test: r.test }) - 1;
+      const d = r.avg != null && overall != null ? r.avg - overall : null;
+      const img = r.best && images(r.best)[0];
+      return `<tr class="${r.none ? 'none' : ''}">
+        <td class="pt-v"><button class="pt-flt" data-sf="${ref}" title="Liste nach diesem Wert filtern">${f === 'Nationality' && !r.none ? `${natFlagDE.get(r.key) || ''} ` : ''}${esc(r.label)}</button></td>
+        <td class="num">${r.n}</td>
+        <td class="num">${r.rated}</td>
+        <td class="num"><b>${fmt(r.avg)}</b>${d != null && r.rated ? ` <span class="pt-d ${d > 0.05 ? 'up' : d < -0.05 ? 'down' : ''}">${d > 0 ? '+' : ''}${fmt(d)}</span>` : ''}</td>
+        <td class="num">${fmt(r.med)}</td>
+        <td class="pt-s">${r.strong && Math.abs(r.strong.d) >= 0.15 ? `<span class="${r.strong.d > 0 ? 'up' : 'down'}" title="Kategorie mit der größten Abweichung vom Schnitt">${r.strong.c.short} ${r.strong.d > 0 ? '+' : ''}${fmt(r.strong.d)}</span>` : '<span class="muted">–</span>'}</td>
+        <td class="pt-b">${r.best ? `<button data-pt-open="${esc(r.best._id)}" title="Detailansicht öffnen">${img ? `<img src="${esc(thumbUrl(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : ''}<span>${esc(v(r.best, 'Name'))}</span><b>${fmt(sc(r.best))}</b></button>` : '<span class="muted">–</span>'}</td>
+      </tr>`;
+    }).join('');
+    return `<section class="st-card wide pt">
+      <div class="pt-head">
+        <label>Eigenschaft <select id="pt-prop">${PT_PROPS.map(p => `<option value="${esc(p)}" ${p === f ? 'selected' : ''}>${esc(ptLabel(p))}</option>`).join('')}</select></label>
+        <label>mind. <select id="pt-min">${[1, 2, 3, 5, 10].map(n => `<option value="${n}" ${n === minN ? 'selected' : ''}>${n}</option>`).join('')}</select> bewertet</label>
+        <span class="muted">Ø Tool-Note aller bewerteten: <b>${fmt(overall)}</b> (${rated.length})${hidden ? ` · ${hidden} Wert${hidden === 1 ? '' : 'e'} mit weniger Bewertungen ausgeblendet` : ''}</span>
+      </div>
+      ${rows.length ? `<div class="pt-wrap"><table class="pt-t"><thead><tr>${th('label', 'Wert', 'l')}${th('n', 'Einträge')}${th('rated', 'bewertet')}${th('avg', 'Ø Note')}${th('med', 'Median')}<th class="l" title="Bewertungskategorie mit der größten Abweichung vom Schnitt">auffällig</th>${th('top', 'Bester Eintrag', 'l')}</tr></thead><tbody>${tr}</tbody></table></div>`
+        : '<p class="muted">Noch keine Werte mit genug Bewertungen.</p>'}
+      <p class="muted pt-hint">Einträge mit mehreren Werten zählen in jeder ihrer Gruppen. Klick auf einen Wert filtert die Liste, auf den Namen öffnet den Eintrag.</p>
+    </section>`;
+  }
+
   function statsHTML(list) {
     statRefs = [];
     const total = list.length;
@@ -2917,6 +2989,7 @@
       <div class="st-tiles">${tiles}</div>
       <p class="muted st-hint">Gilt für die aktuell gefilterte Liste. Klick auf eine Zeile oder Säule filtert die Liste danach.</p>
       ${IS_CHARS ? `${group('rating', 'Bewertungen', [scoreMatrixHTML(list), hist('Score', { span: true, unit: 'bewertet' }), statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 })])}
+      ${group('props', 'Eigenschaft ↔ Tool-Note', [propStatsHTML(list)])}
       ${group('origin', 'Herkunft', [catBy['Universe'], catBy['Medium'], catBy['Style'], catBy['Origin'], catBy['Species'], catBy['Role'], catBy['Voice Actor']])}
       ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type']])}
       ${group('data', 'Sammlung & Daten', [catBy['Adult'], catBy['Favorite'], catBy['Tags'], statSection('Ausgefüllt (Klick = wo es fehlt)', compRows, total, 0, { limit: 20 })])}` : `
@@ -2927,6 +3000,7 @@
         statSection('Image Ranker – Tiers', tierRows, rk, 0, { limit: 20 }),
         hist('Global Rating', { span: true }),
         hist('User Rating', { note: 'ohne gelöschte Profile' })])}
+      ${group('props', 'Eigenschaft ↔ Tool-Note', [propStatsHTML(list)])}
       ${group('origin', 'Herkunft', [mapSectionHTML(), catBy['Nationality'], catBy['Geburtsland'], catBy['Birthplace'], catBy['Ethnicity']])}
       ${group('person', 'Person & Beruf', [hist('Alter', { span: true }), hist('Geburtsjahr'), catBy['__primary'], catBy['Profession Category'], catBy['Professions'], catBy['Sexuality'], catBy['Active']])}
       ${group('look', 'Aussehen', [catBy['Hair color'], catBy['Eye color'], catBy['Body type'], catBy['Boobs'], hist('Height', { span: true }), hist('Weight', { span: true }),
@@ -5276,11 +5350,18 @@
       }
       if (cty) { mapPick(cty.dataset.iso); return; }
     }
+    const ptOpen = ev.target.closest('[data-pt-open]'); if (ptOpen) { showDetail(ptOpen.dataset.ptOpen); return; }
+    const ptSort = ev.target.closest('[data-pt-sort]');
+    if (ptSort) { const k = ptSort.dataset.ptSort, cur = ui.ptSort || { k: 'avg', d: -1 }; ui.ptSort = { k, d: cur.k === k ? -cur.d : (k === 'label' ? 1 : -1) }; saveUI(); render(); return; }
     const b = ev.target.closest('[data-sf]'); if (!b || ui.view !== 'stats') return;
     if (b.closest('summary')) return;
     const r = statRefs[Number(b.dataset.sf)]; if (!r || !r.test) return;
     statFilter = { label: r.flabel || r.label, test: r.test };
     ui.view = ui.lastListView || 'grid'; saveUI(); render(); window.scrollTo(0, 0);
+  });
+  $('#main').addEventListener('change', (ev) => {
+    if (ev.target.id === 'pt-prop') { ui.ptProp = ev.target.value; saveUI(); render(); }
+    else if (ev.target.id === 'pt-min') { ui.ptMin = Number(ev.target.value); saveUI(); render(); }
   });
   $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
   $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
