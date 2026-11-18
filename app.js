@@ -4153,7 +4153,17 @@
     img.onload = () => {
       clearTimeout(s.loadT);
       if (!slide || slide.i !== j) return;
-      if (s.cfg.kb) { img.style.setProperty('--kx', (Math.random() * 6 - 3).toFixed(1) + '%'); img.style.setProperty('--ky', (Math.random() * 6 - 3).toFixed(1) + '%'); s.el.style.setProperty('--sl-dur', (s.cfg.sec + s.cfg.fade) + 's'); img.style.animation = 'none'; void img.offsetWidth; img.style.animation = ''; }
+      // sehr schmale Bilder (Ganzkörper): auf Breite ziehen (max. doppelte Größe) und langsam von oben nach unten abfahren
+      const W = back.clientWidth, H = back.clientHeight, ir = img.naturalWidth / (img.naturalHeight || 1);
+      const pw = Math.min(W, H * ir * 2), ph = pw / ir, pan = ph - H > H * 0.15 && ir < 0.6 && ir < (W / H) * 0.72;
+      back.classList.toggle('pan', pan);
+      if (pan) {
+        Object.assign(img.style, { inset: 'auto', top: '0', left: Math.round((W - pw) / 2) + 'px', width: Math.round(pw) + 'px', height: Math.round(ph) + 'px' });
+        img.style.setProperty('--pan', -Math.round(ph - H) + 'px');
+        s.el.style.setProperty('--sl-dur', (s.cfg.sec + s.cfg.fade) + 's');
+        img.style.animation = 'none'; void img.offsetWidth; img.style.animation = '';
+      } else ['inset', 'top', 'left', 'width', 'height'].forEach(k => img.style.removeProperty(k));
+      if (s.cfg.kb && !pan) { img.style.setProperty('--kx', (Math.random() * 6 - 3).toFixed(1) + '%'); img.style.setProperty('--ky', (Math.random() * 6 - 3).toFixed(1) + '%'); s.el.style.setProperty('--sl-dur', (s.cfg.sec + s.cfg.fade) + 's'); img.style.animation = 'none'; void img.offsetWidth; img.style.animation = ''; }
       back.style.setProperty('--sl-bg', `url("${src.replace(/"/g, '%22')}")`);
       back.classList.add('on'); layers[s.front].classList.remove('on'); s.front = 1 - s.front;
       // Infos
@@ -4172,6 +4182,22 @@
     clearTimeout(s.loadT); s.loadT = setTimeout(() => { if (slide && slide.i === j && !img.complete) img.onerror(); }, 10000);
     img.src = src;
   }
+  // Bilder, die gar nicht ins Kachel-Format passen (v. a. schmale Ganzkörperbilder): ganz zeigen, Rest mit unscharfer Kopie füllen
+  const FIT_SEL = '.card .img img, .gallery .main img, .lb-img img, .sg-img img, .rt-cmp-img img';
+  function fitCheck(img) {
+    const box = img.parentElement; if (!box) return;
+    const w = img.naturalWidth, h = img.naturalHeight, bw = box.clientWidth, bh = box.clientHeight;
+    if (!w || !h || !bw || !bh) return;
+    const r = (w / h) / (bw / bh), odd = r < 0.72 || r > 1.6;
+    box.classList.toggle('fit-blur', odd);
+    let bg = box.querySelector(':scope > img.fit-bg');
+    if (odd) {
+      if (!bg) { bg = document.createElement('img'); bg.className = 'fit-bg'; bg.alt = ''; bg.setAttribute('aria-hidden', 'true'); bg.referrerPolicy = 'no-referrer'; bg.decoding = 'async'; box.appendChild(bg); }
+      const src = img.currentSrc || img.src; if (bg.getAttribute('src') !== src) bg.src = src;
+    } else if (bg) bg.remove();
+  }
+  document.addEventListener('load', (ev) => { const t = ev.target; if (t.tagName === 'IMG' && !t.classList.contains('fit-bg') && t.matches(FIT_SEL)) fitCheck(t); }, true);
+
   function stopSlide() {
     if (!slide) return;
     clearTimeout(slide.timer); cancelAnimationFrame(slide.raf); clearTimeout(slide.hideT); clearTimeout(slide.loadT);

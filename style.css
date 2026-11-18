@@ -1441,3 +1441,11 @@ div.dx-th { cursor: zoom-in; }
 .pt-b span { text-decoration: underline dotted; text-underline-offset: 3px; }
 .pt-b b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .pt-hint { font-size: 12px; margin: 8px 0 0; }
+/* Unpassende Seitenverhältnisse (schmale Ganzkörperbilder): ganzes Bild, Rest mit unscharfer Kopie */
+.fit-blur { isolation: isolate; overflow: hidden; position: relative; }
+.fit-blur > img:not(.fit-bg) { object-fit: contain !important; object-position: 50% 50% !important; }
+.fit-blur > img.fit-bg { position: absolute !important; inset: -10% !important; width: 120% !important; height: 120% !important; max-width: none !important; object-fit: cover !important; filter: blur(16px) brightness(.5) saturate(1.15); z-index: -1; pointer-events: none; opacity: 1 !important; transform: none !important; border-radius: 0 !important; }
+/* Diashow: schmale Bilder von oben nach unten abfahren */
+.slide .sl-layer.pan img { object-fit: fill !important; animation: none; }
+.slide .sl-layer.pan.on img { animation: sl-pan var(--sl-dur, 6s) ease-in-out forwards !important; }
+@keyframes sl-pan { 0%, 8% { transform: translateY(0); } 92%, 100% { transform: translateY(var(--pan, 0)); } }
