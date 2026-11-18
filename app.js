@@ -2190,6 +2190,28 @@
     return '';
   }
   const cupGroupShort = (g) => g ? g.replace(/ \(.*\)$/, '') : '';
+  // Grobe Gruppen für Filter mit sehr vielen, sehr genauen Werten. Werden nur berechnet, nie gespeichert.
+  // src = Feld, das im Filter dadurch ersetzt wird; order = Reihenfolge der Gruppen
+  const band = (x, bands) => { if (x == null || isNaN(x)) return ''; const b = bands.find(([max]) => x < max); return b ? b[1] : ''; };
+  const yearOf = (s) => { const m = String(s || '').match(/(1[89]\d\d|20\d\d)/); return m ? +m[1] : null; };
+  const GROUPED = IS_CHARS ? {
+    'Erster Auftritt (Jahrzehnt)': { src: 'First Appearance', of: e => { const y = yearOf(v(e, 'First Appearance')); return y ? `${Math.floor(y / 10) * 10}er` : ''; } },
+  } : {
+    'Cup-Gruppe': { src: 'Bra/Cup', order: CUP_GROUPS, of: e => cupGroup(e) },
+    'Größenklasse': { src: 'Height', order: ['unter 158 cm', '158–164 cm', '165–171 cm', '172–177 cm', 'ab 178 cm'],
+      of: e => band(num(v(e, 'Height')), [[158, 'unter 158 cm'], [165, '158–164 cm'], [172, '165–171 cm'], [178, '172–177 cm'], [Infinity, 'ab 178 cm']]) },
+    'Gewichtsklasse': { src: 'Weight', order: ['unter 48 kg', '48–52 kg', '53–57 kg', '58–64 kg', 'ab 65 kg'],
+      of: e => band(num(v(e, 'Weight')), [[48, 'unter 48 kg'], [53, '48–52 kg'], [58, '53–57 kg'], [65, '58–64 kg'], [Infinity, 'ab 65 kg']]) },
+    'Geburtsjahrzehnt': { src: 'Geburtsjahr', of: e => { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? `${Math.floor(+m[1] / 10) * 10}er` : ''; } },
+    'Altersgruppe': { src: 'Alter', order: ['18–24', '25–29', '30–34', '35–39', '40–49', 'ab 50', 'unter 18'],
+      of: e => { const a = age(e); return a == null ? '' : band(a, [[18, 'unter 18'], [25, '18–24'], [30, '25–29'], [35, '30–34'], [40, '35–39'], [50, '40–49'], [Infinity, 'ab 50']]); } },
+    'Karrierestart': { src: 'Years active', order: ['vor 2000', '2000–2009', '2010–2014', '2015–2019', 'ab 2020'],
+      of: e => band(yearOf(v(e, 'Years active')), [[2000, 'vor 2000'], [2010, '2000–2009'], [2015, '2010–2014'], [2020, '2015–2019'], [Infinity, 'ab 2020']]) },
+    'Babepedia-Ø (grob)': { src: 'Global Rating', order: ['ab 8,9', '8,8–8,89', '8,7–8,79', '8,5–8,69', '8,0–8,49', 'unter 8,0'],
+      of: e => band(num(v(e, 'Global Rating')), [[8, 'unter 8,0'], [8.5, '8,0–8,49'], [8.7, '8,5–8,69'], [8.8, '8,7–8,79'], [8.9, '8,8–8,89'], [Infinity, 'ab 8,9']]) },
+    'Geburtsland': { src: 'Birthplace', of: e => { const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return ''; const last = bp.split(',').pop().trim(); return last ? (COUNTRY_ALIAS[last.toLowerCase()] || last) : ''; } },
+  };
+  const GROUP_FOR_SRC = Object.fromEntries(Object.entries(GROUPED).map(([k, g]) => [g.src, k]));
   // Anzeige-Namen (die Feldnamen in den Daten bleiben englisch)
   const FIELD_LABELS = {
     'Image Folder': 'Bilder-Ordner (PC)',
@@ -2220,9 +2242,9 @@
     ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']]
     : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']];
-  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Role', 'Adult', 'Eye color', 'Body type', 'First Appearance', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
-    'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Birthplace', 'Geburtsjahr', 'Alter', 'Height', 'Cup-Gruppe', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings',
-    'Measurements', 'Weight', 'Years active', 'Tags', 'Score', 'User Rating', 'Global Rating', 'Exact Birthdate', 'Favorite',
+  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Role', 'Adult', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
+    'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Geburtsland', 'Geburtsjahrzehnt', 'Altersgruppe', 'Größenklasse', 'Gewichtsklasse', 'Cup-Gruppe', 'Boobs', 'Tattoos', 'Piercings',
+    'Karrierestart', 'Tags', 'Score', 'User Rating', 'Babepedia-Ø (grob)', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
   const DEF_CARD_FIELDS = IS_CHARS ? ['Universe', 'Medium'] : ['Nationality', 'Alter', 'Height'];
@@ -2232,12 +2254,14 @@
   if (!ui.cardBadgesV3) { if (!IS_CHARS && !ui.cardBadges.includes('primary')) ui.cardBadges.push('primary'); ui.cardBadgesV3 = true; }
   if (!ui.hiddenFilters || typeof ui.hiddenFilters !== 'object') ui.hiddenFilters = {};
   if (!Array.isArray(ui.extraFilters)) ui.extraFilters = [];
+  // genaue Felder in den Zusatzfiltern durch ihre grobe Gruppe ersetzen
+  ui.extraFilters = [...new Set(ui.extraFilters.filter(f => f !== 'Measurements').map(f => GROUP_FOR_SRC[f] || f))];
   const xfVals = {};   // aktuelle Auswahl der Zusatzfilter (nicht gespeichert)
 
   function fieldValues(e, f) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
     if (f === 'Geburtsjahr') { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? [m[1]] : []; }
-    if (f === 'Cup-Gruppe') { const g = cupGroup(e); return g ? [g] : []; }
+    if (GROUPED[f]) { const g = GROUPED[f].of(e); return g ? [g] : []; }
     if (f === 'Nationality') return natNames(e);
     const raw = v(e, f);
     if (!raw || raw.toLowerCase() === 'n/a') return [];
@@ -2297,7 +2321,8 @@
       const counts = new Map(); let empty = 0;
       for (const e of entries) { const vals = xfValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
       const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating', 'Score', 'Global Rating'].includes(f) || / Score$/.test(f);
-      const keys = [...counts.keys()].sort((a, b) => f === 'Cup-Gruppe' ? CUP_GROUPS.indexOf(a) - CUP_GROUPS.indexOf(b) : isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
+      const ord = GROUPED[f] && GROUPED[f].order;
+      const keys = [...counts.keys()].sort((a, b) => ord ? ord.indexOf(a) - ord.indexOf(b) : isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
       return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(deVal(f, k))} (${counts.get(k)})</option>`).join('')}</select>`;
     }).join('');
