@@ -1475,3 +1475,7 @@ div.dx-th { cursor: zoom-in; }
 .ce-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 700px) { .ce-body { grid-template-columns: 1fr; } .ce-frame { height: auto; width: 100%; } .ce-mini { width: 90px; } }
 .crop-box { position: relative; overflow: hidden; }
+/* Feinwerte */
+.sc-fine { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-fine.up { color: var(--good); }
+.sc-fine.down { color: #f07a7a; }

@@ -909,6 +909,7 @@
   async function save() {
     try {
       stampFields();
+      fineCache = null;
       await idbSet('entries', entries);
       if (channel) channel.postMessage('changed');
       if (SYNC) SYNC.changed();
@@ -2155,7 +2156,8 @@
       updated: (e) => -(e._updated || 0),
       global: (e) => -(num(e['Global Rating']) ?? -1),
       mine: (e) => -(num(e['My Rating']) ?? -1),
-      score: (e) => -(num(e.Score) ?? -1),
+      score: (e) => { const x = num(e.Score); if (x == null) return 1; const f = fineScoreOf(e); return -x - (f ? f.ten : x) / 1000; },   // Gleichstände nach feiner Tool-Note
+      scorefine: (e) => { const f = fineScoreOf(e); return f ? -f.ten : 1; },
       rank: (e) => num(e.Rank) ?? 1e9,
       young: (e) => age(e) ?? 999,
       old: (e) => -(age(e) ?? -1),
@@ -2460,8 +2462,8 @@
   const lbCfg = () => Object.assign({ open: true, by: 'score', scope: 'all', n: 50 }, ui.lb || {});
   const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
   const LB_BY = () => [
-    ['score', 'Tool-Note', e => { const s = scoreOf(e); return s ? s.ten : null; }, x => fmt1(x), -1],
-    ...SCORE_CATS.map(c => [c.f, c.label, e => { const x = num(v(e, c.f)); return x == null || symUnknown(c, x) ? null : x; }, x => fmtV(x), -1]),
+    ['score', 'Tool-Note', e => { const s = fineScoreOf(e); return s ? s.ten : null; }, x => fmt2(x), -1],
+    ...SCORE_CATS.map(c => [c.f, c.label, e => { const x = num(v(e, c.f)); if (x == null || symUnknown(c, x)) return null; const fv = fineVal(e, c.f); return fv ? fv.x : x; }, x => fmt2(x), -1]),
     ...(IS_CHARS ? [] : [
       ['global', 'Babepedia Ø', e => num(e['Global Rating']), x => x.toFixed(2).replace('.', ','), -1],
       ['bprank', 'Babepedia-Rang', e => { const x = num(e.Rank); return x > 0 ? x : null; }, x => '#' + x, 1],
@@ -2837,7 +2839,8 @@
     }
     let rows = [...groups].map(([key, items]) => {
       const r = items.filter(e => sc(e) != null), xs = r.map(sc).sort((a, b) => a - b);
-      const best = r.slice().sort((a, b) => sc(b) - sc(a) || v(a, 'Name').localeCompare(v(b, 'Name'), 'de'))[0];
+      const fsc = (e) => { const f = fineScoreOf(e); return f ? f.ten : sc(e); };
+      const best = r.slice().sort((a, b) => sc(b) - sc(a) || fsc(b) - fsc(a) || v(a, 'Name').localeCompare(v(b, 'Name'), 'de'))[0];
       // Kategorie, in der dieser Wert am deutlichsten über dem Schnitt liegt
       let strong = null;
       for (const c of SCORE_CATS) {
@@ -3098,7 +3101,9 @@
     const vals = c.vals || (c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5]);
     const btns = vals.map(n => `<button class="sc-btn ${cur === n ? 'on' : ''} ${n % 1 ? 'half' : ''}" data-score="${c.f}" data-val="${n}" data-id="${esc(e._id)}" title="${esc(c.f === 'Sympathy Score' ? SYMPATHY_LABELS[n] : String(n).replace('.', ','))}">${n % 1 ? (cur === n ? Math.floor(n) + '½' : '½') : n}</button>`).join('');
     const extra = c.f === 'Sympathy Score' ? `<span class="sc-note">${cur ? esc(SYMPATHY_LABELS[cur]) : `nicht gesetzt – zählt als ${String(SCORE_W.symDefault).replace('.', ',')} (wirkt durchschnittlich)`}</span>` : (c.hint ? `<span class="sc-note">${esc(c.hint)}</span>` : '');
-    return `<div class="sc-row ${active ? 'active' : ''}" data-sc-idx="${idx}"><span class="sc-lbl">${esc(c.label)}</span><span class="sc-btns">${btns}${cur != null ? `<button class="sc-clear" data-score="${c.f}" data-val="" data-id="${esc(e._id)}" title="entfernen">✕</button>` : ''}</span>${extra}</div>`;
+    const fv = cur != null && !symUnknown(c, cur) ? fineVal(e, c.f) : null;
+    const fineTag = fv ? `<small class="sc-fine ${fv.x - cur > 0.04 ? 'up' : fv.x - cur < -0.04 ? 'down' : ''}" title="Feinwert aus ${fv.n} Duell${fv.n === 1 ? '' : 'en'}: innerhalb deiner Stufe ${fv.x - cur > 0.04 ? 'eher oben' : fv.x - cur < -0.04 ? 'eher unten' : 'mittig'}">${fmt2(fv.x)}</small>` : '';
+    return `<div class="sc-row ${active ? 'active' : ''}" data-sc-idx="${idx}"><span class="sc-lbl">${esc(c.label)}${fineTag}</span><span class="sc-btns">${btns}${cur != null ? `<button class="sc-clear" data-score="${c.f}" data-val="" data-id="${esc(e._id)}" title="entfernen">✕</button>` : ''}</span>${extra}</div>`;
   }
   function scoreSummary(e) {
     const s = scoreOf(e);
@@ -3296,7 +3301,8 @@
   // Kennzahlen oben in der Detailansicht als Kacheln (statt einer Chip-Reihe)
   function dxStatsHTML(e) {
     const t = [], sc = scoreOf(e);
-    if (sc) t.push(`<div class="dx-stat main"><span>Tool-Note</span><b>${sc.ten.toFixed(1).replace('.', ',')}</b><small>/ 10</small></div>`);
+    const fs = sc && fineScoreOf(e);
+    if (sc) t.push(`<div class="dx-stat main"${fs && fs.fine ? ` title="Feine Tool-Note: aus deinen Werten und den Abgleich-Duellen berechnet (Feinwerte je Kategorie)"` : ''}><span>Tool-Note</span><b>${sc.ten.toFixed(1).replace('.', ',')}</b><small>${fs && fs.fine ? `fein ${fmt2(fs.ten)}` : '/ 10'}</small></div>`);
     if (v(e, 'Global Rating')) t.push(`<div class="dx-stat" title="Durchschnitt aller Nutzer auf Babepedia"><span>Babepedia Ø</span><b>${esc(v(e, 'Global Rating').replace('.', ','))}</b>${v(e, 'Votes') ? `<small>${esc(v(e, 'Votes'))} Stimmen</small>` : ''}</div>`);
     if (v(e, 'Rank')) t.push(`<div class="dx-stat"><span>Babepedia-Rang</span><b>#${esc(v(e, 'Rank'))}</b>${v(e, 'Highest Rank') ? `<small>bester #${esc(v(e, 'Highest Rank'))}</small>` : ''}</div>`);
     if (e._ranker) t.push(`<a class="dx-stat link" href="/Image-Ranker/#bo=${encodeURIComponent(e._id)}" target="_blank" rel="noopener" title="Im Image Ranker öffnen (${esc(e._ranker.tab)})"><span>Ranker ↗</span><b style="color:${rkColor(e._ranker.tier)}">${esc(e._ranker.tier)}</b><small>Platz ${e._ranker.rank}/${e._ranker.total} · Score ${e._ranker.score}</small></a>`);
@@ -4616,7 +4622,10 @@
       const scoreB = (b) => {
         const d = val(b) - va, lb = L(b);
         const fit = dir ? (Math.sign(d) === dir ? 1 : d === 0 ? 0.45 : 0) : (d === 0 ? 1 : 0.55);
-        return 1.3 * fit + 0.5 * Math.min(lb.n, 6) / 6 + 0.45 * rnd();
+        // gleiche Stufe und Feinwerte nah beieinander: Reihenfolge noch offen → für die Feinwerte am aufschlussreichsten
+        let tie = 0;
+        if (d === 0) { const fa = fineVal(a, c.f), fb = fineVal(b, c.f); tie = 0.5 * (1 - Math.min(1, Math.abs((fa ? fa.x : va) - (fb ? fb.x : va)) / 0.25)); }
+        return 1.3 * fit + tie + 0.5 * Math.min(lb.n, 6) / 6 + 0.45 * rnd();
       };
       const b = opts.map(x => [scoreB(x), x]).sort((x, y) => y[0] - x[0])[0][1];
       return rnd() < .5 ? [a, b] : [b, a];
@@ -4775,9 +4784,64 @@
     }
     return out.sort((a, b) => b.conf - a.conf || b.n - a.n);
   }
+  // ---------- Feinwerte: genauere Kategorie-Werte aus eigenem Wert + Abgleich-Duellen ----------
+  // Gleiches Modell wie die Vorschläge (logistisch, Prior = eigener Wert), aber stetig und auf ±0,5 um den eigenen
+  // Wert begrenzt: der eigene Wert bleibt die grobe Stufe, der Feinwert ordnet innerhalb der Stufe.
+  // Gegner zählen mit ihrem Feinwert (gemeinsam in mehreren Durchgängen). Nur berechnet, nie gespeichert.
+  const FINE_SPAN = 0.5, FINE_STEP = 0.02, FINE_ROUNDS = 4;
+  var fineCache = null;
+  function fineModel() {
+    if (fineCache) return fineCache;
+    const own = new Map();   // "id|cat" -> eigener Wert
+    const games = new Map(); // "id|cat" -> [{ opp: "id|cat", s }]
+    for (const d of latestDuels()) {
+      const c = SCORE_CATS.find(x => x.f === d.cat); if (!c) continue;
+      const A = byId(d.a), B = byId(d.b); if (!A || !B || !rateable(A) || !rateable(B)) continue;
+      const va = num(v(A, c.f)), vb = num(v(B, c.f));
+      if (va == null || vb == null || symUnknown(c, va) || symUnknown(c, vb)) continue;
+      const ka = A._id + '|' + c.f, kb = B._id + '|' + c.f, sa = d.r === 'a' ? 1 : d.r === 'b' ? 0 : 0.5;
+      own.set(ka, va); own.set(kb, vb);
+      if (!games.has(ka)) games.set(ka, []); if (!games.has(kb)) games.set(kb, []);
+      games.get(ka).push({ opp: kb, s: sa }); games.get(kb).push({ opp: ka, s: 1 - sa });
+    }
+    let fine = new Map(own);
+    for (let r = 0; r < FINE_ROUNDS; r++) {
+      const next = new Map();
+      for (const [k, list] of games) {
+        const x0 = own.get(k), c = SCORE_CATS.find(x => x.f === k.slice(k.indexOf('|') + 1)), steps = catSteps(c);
+        const lo = Math.max(steps[0], x0 - FINE_SPAN), hi = Math.min(steps[steps.length - 1], x0 + FINE_SPAN);
+        let best = x0, mx = -Infinity; const lp = [];
+        for (let g = lo; g <= hi + 1e-9; g += FINE_STEP) {
+          let l = -((g - x0) ** 2) / (2 * CB_PRIOR_SD ** 2);
+          for (const o of list) { const p = 1 / (1 + Math.exp(-CB_K * (g - fine.get(o.opp)))); l += o.s * Math.log(p) + (1 - o.s) * Math.log(1 - p); }
+          lp.push([g, l]); if (l > mx) mx = l;
+        }
+        // wahrscheinlichster Wert (der Mittelwert würde an den Skalenenden künstlich nach innen gezogen, z. B. jede 5 unter 5)
+        for (const [g, l] of lp) if (l === mx) { best = g; break; }
+        next.set(k, best);
+      }
+      fine = new Map([...own, ...next]);
+    }
+    const n = new Map(); for (const [k, list] of games) n.set(k, list.length);
+    return (fineCache = { fine, n });
+  }
+  // Feinwert einer Kategorie (oder null, wenn es keine Duelle gibt → dann gilt der eigene Wert)
+  function fineVal(e, f) { const m = fineModel(), k = e._id + '|' + f; return m.fine.has(k) && m.n.get(k) ? { x: m.fine.get(k), n: m.n.get(k) } : null; }
+  // Feine Tool-Note: dieselbe Formel wie scoreOf, mit Feinwerten wo vorhanden
+  function fineScoreOf(e) {
+    const sc = scoreOf(e); if (!sc) return null;
+    let any = false;
+    const pseudo = Object.create(e);
+    for (const c of SCORE_CATS) { const fv = fineVal(e, c.f); if (fv) { pseudo[c.f] = String(fv.x); any = true; } }
+    if (!any) return { ten: sc.ten, fine: false };
+    const s2 = scoreOf(pseudo);
+    return s2 ? { ten: s2.ten, fine: true } : { ten: sc.ten, fine: false };
+  }
+  const fmt2 = (x) => x.toFixed(2).replace('.', ',');
+
   let cbSugCache = null, cbSugIdx = null;
   const cbSugs = () => cbSugCache || (cbSugCache = calibSuggestions());
-  const cbSugDirty = () => { cbSugCache = null; cbSugIdx = null; calibBadgeSoon(); };
+  const cbSugDirty = () => { cbSugCache = null; cbSugIdx = null; fineCache = null; calibBadgeSoon(); };
   function sugIndex() {
     if (!cbSugIdx) { cbSugIdx = new Map(); for (const x of cbSugs()) { const k = x.e._id; if (!cbSugIdx.has(k)) cbSugIdx.set(k, []); cbSugIdx.get(k).push(x); } }
     return cbSugIdx;
@@ -5551,7 +5615,7 @@
         entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
         fuSnapshot();
         if (syncMerged) { toast(`Abgleich: ${syncMerged} Eintr${syncMerged === 1 ? 'ag' : 'äge'} Feld für Feld zusammengeführt – Änderungen beider Geräte bleiben erhalten.`, 'ok'); syncMerged = 0; }
-        if (Array.isArray(d.duels)) duels = d.duels.filter(x => x && x.id);
+        if (Array.isArray(d.duels)) { duels = d.duels.filter(x => x && x.id); fineCache = null; if (typeof cbSugDirty === "function") cbSugDirty(); }
         if (d.pairsResetAt && typeof d.pairsResetAt === 'object') { pairsResetAt = d.pairsResetAt; try { await idbSet('pairsResetAt', pairsResetAt); } catch {} }
         if (Array.isArray(d.primaryOrder)) { primaryOrder = normPrimaryOrder(d.primaryOrder); try { await idbSet('primaryOrder', primaryOrder); } catch {} }
         try { await save(); await idbSet('duels', duels); } catch { return false; }
