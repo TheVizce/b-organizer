@@ -2142,6 +2142,7 @@
         if (rf === 'site-only' && st !== 'site-only') return false;
         if (rf === 'mine-only' && st !== 'mine-only') return false;
         if (rf === 'none' && st !== 'none') return false;
+        if (rf === 'bp7' && !(!isTrue(e['Profile Deleted']) && num(e['User Rating']) === 7 && num(e['My Rating']) !== 7)) return false;
         if (rf === 'scored' && !hasScore(e)) return false;
         if (rf === 'unscored' && hasScore(e)) return false;
         if (rf === 'sc-diff' && !(hasScore(e) && siteRating(e) != null && Number(v(e, 'My Rating')) !== siteRating(e))) return false;
