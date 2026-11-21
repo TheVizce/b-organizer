@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Babepedia Batch Extractor & Auto-Fetcher (Babe Organizer)
 // @namespace    http://tampermonkey.net/
-// @version      14.28
+// @version      14.29
 // @description  Auto-fetch profile data + Safe List Moving with Multi-Page / Loop Support + Übertragung an den Babe Organizer (GitHub Pages)
 // @author       Mudkip
 // @match        https://www.babepedia.com/*
@@ -1272,10 +1272,12 @@
 
     // ---- Battle-Standings ----
     const isStandings = () => /^\/battles\/standings/i.test(location.pathname);
+    // Seit Nov. 2026 verlinken die Standings auf /battles/babe/<Name> statt auf die Profilseite /babe/<Name>
+    const toProfileUrl = (u) => u.replace(/\/battles\/babe\//i, '/babe/').split('#')[0];
     function standingsRowsFrom(doc) {
         return [...doc.querySelectorAll('#battle-standings li.bb-row')].map(li => {
-            const a = li.querySelector('a.bb-row-name');
-            return a ? { li, url: new URL(a.getAttribute('href'), 'https://www.babepedia.com').href, id: li.getAttribute('data-babe') || '' } : null;
+            const a = li.querySelector('a.bb-row-name') || li.querySelector('a[href*="/babe/"]');
+            return a ? { li, url: toProfileUrl(new URL(a.getAttribute('href'), 'https://www.babepedia.com').href), id: li.getAttribute('data-babe') || '' } : null;
         }).filter(Boolean);
     }
     const isKnown = (row, known) => (row.id && known.ids.has(String(row.id))) || known.slugs.has(slugOfUrl(row.url));

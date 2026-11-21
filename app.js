@@ -460,6 +460,8 @@
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
     if (IS_CHARS) { germanizeChar(e); if (migrateCharImgs(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } if (dropCharGender(e)) kindsMigrated++; if (migrateKinds(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } return e; }   // Babepedia-Bereinigungen gelten nur für Personen
+    // Standings verlinken seit Nov. 2026 auf /battles/babe/<Name> – Profil-Link ist /babe/<Name>
+    if (/\/battles\/babe\//i.test(e['Profile URL'] || '')) { e['Profile URL'] = e['Profile URL'].replace(/\/battles\/babe\//i, '/babe/'); deriveChanged = true; }
     mergeNationality(e);
     cleanValues(e);
     normalizeArchiveEntry(e);
