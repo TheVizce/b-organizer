@@ -1517,3 +1517,4 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .rc-item img, .rc-item .placeholder { width: 40px; height: 50px; object-fit: cover; border-radius: 6px; flex: none; font-size: 12px; display: grid; place-items: center; }
 .rc-item span { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .rc-item em { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; }
+.selbar[hidden], .fbar[hidden] { display: none !important; }
