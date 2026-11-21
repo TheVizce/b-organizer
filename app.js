@@ -5291,6 +5291,10 @@
       }
       case 'import-file': $('#file-input').click(); break;
       case 'folder': pickFolder(); break;
+      case 'review-toggle':
+        ui.reviewUpdates = !ui.reviewUpdates; saveUI();
+        toast(ui.reviewUpdates ? 'Änderungen aus Updates werden wieder zum Prüfen angezeigt.' : 'Änderungen aus Updates werden direkt übernommen.', 'ok');
+        break;
       case 'folder-match': showFolderMatch(); break;
       case 'export-json':
         (async () => {
@@ -5330,7 +5334,12 @@
   document.addEventListener('click', (ev) => {
     const t = ev.target;
     const menu = $('#menu');
-    if (t.closest('#btn-menu')) { menu.hidden = !menu.hidden; return; }
+    if (t.closest('#btn-menu')) {
+      menu.hidden = !menu.hidden;
+      const rv = $('[data-action="review-toggle"]', menu);
+      if (rv) rv.textContent = ui.reviewUpdates ? '✓ Änderungen bei Updates vorher prüfen' : '☐ Änderungen bei Updates vorher prüfen (aus – wird direkt übernommen)';
+      return;
+    }
     if (!t.closest('#menu')) menu.hidden = true;
 
     if (t.closest('.undo-btn')) { undoLast(); return; }
