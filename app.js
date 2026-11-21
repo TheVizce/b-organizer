@@ -2109,6 +2109,11 @@
       if (fav && !isTrue(e.Favorite)) return false;
       for (const [f, want] of xf) {
         const vals = xfValues(e, f);
+        if (want.startsWith('__ge:') || want.startsWith('__le:')) {
+          const ord = xfOrder[f] || [], at = ord.indexOf(want.slice(5)), i = vals.length ? Math.max(...vals.map(x => ord.indexOf(x))) : -1;
+          if (i < 0 || at < 0 || (want[2] === 'g' ? i < at : i > at)) return false;
+          continue;
+        }
         if (want === '__empty' ? vals.length : !vals.includes(want)) return false;
       }
       if (cf && (cf.startsWith('P:') ? (primaryCat(e) || {}).cat !== cf.slice(2) : !catList(e).includes(cf))) return false;
@@ -2207,11 +2212,11 @@
     'Gewichtsklasse': { src: 'Weight', order: ['unter 48 kg', '48–52 kg', '53–57 kg', '58–64 kg', 'ab 65 kg'],
       of: e => band(num(v(e, 'Weight')), [[48, 'unter 48 kg'], [53, '48–52 kg'], [58, '53–57 kg'], [65, '58–64 kg'], [Infinity, 'ab 65 kg']]) },
     'Geburtsjahrzehnt': { src: 'Geburtsjahr', of: e => { const m = String(v(e, 'Born')).match(/(\d{4})$/); return m ? `${Math.floor(+m[1] / 10) * 10}er` : ''; } },
-    'Altersgruppe': { src: 'Alter', order: ['18–24', '25–29', '30–34', '35–39', '40–49', 'ab 50', 'unter 18'],
+    'Altersgruppe': { src: 'Alter', order: ['unter 18', '18–24', '25–29', '30–34', '35–39', '40–49', 'ab 50'],
       of: e => { const a = age(e); return a == null ? '' : band(a, [[18, 'unter 18'], [25, '18–24'], [30, '25–29'], [35, '30–34'], [40, '35–39'], [50, '40–49'], [Infinity, 'ab 50']]); } },
     'Karrierestart': { src: 'Years active', order: ['vor 2000', '2000–2009', '2010–2014', '2015–2019', 'ab 2020'],
       of: e => band(yearOf(v(e, 'Years active')), [[2000, 'vor 2000'], [2010, '2000–2009'], [2015, '2010–2014'], [2020, '2015–2019'], [Infinity, 'ab 2020']]) },
-    'Babepedia-Ø (grob)': { src: 'Global Rating', order: ['ab 8,9', '8,8–8,89', '8,7–8,79', '8,5–8,69', '8,0–8,49', 'unter 8,0'],
+    'Babepedia-Ø (grob)': { src: 'Global Rating', order: ['unter 8,0', '8,0–8,49', '8,5–8,69', '8,7–8,79', '8,8–8,89', 'ab 8,9'],
       of: e => band(num(v(e, 'Global Rating')), [[8, 'unter 8,0'], [8.5, '8,0–8,49'], [8.7, '8,5–8,69'], [8.8, '8,7–8,79'], [8.9, '8,8–8,89'], [Infinity, 'ab 8,9']]) },
     'Geburtsland': { src: 'Birthplace', of: e => { const bp = v(e, 'Birthplace'); if (!bp || bp.toLowerCase() === 'n/a') return ''; const last = bp.split(',').pop().trim(); return last ? (COUNTRY_ALIAS[last.toLowerCase()] || last) : ''; } },
   };
@@ -2261,6 +2266,7 @@
   // genaue Felder in den Zusatzfiltern durch ihre grobe Gruppe ersetzen
   ui.extraFilters = [...new Set(ui.extraFilters.filter(f => f !== 'Measurements').map(f => GROUP_FOR_SRC[f] || f))];
   const xfVals = {};   // aktuelle Auswahl der Zusatzfilter (nicht gespeichert)
+  const xfOrder = {};  // Feld -> Werte in Reihenfolge (für „mindestens“/„höchstens“)
 
   function fieldValues(e, f) {
     if (f === 'Alter') { const a = age(e); return a == null ? [] : [String(a)]; }
@@ -2328,7 +2334,26 @@
       const ord = GROUPED[f] && GROUPED[f].order;
       const keys = [...counts.keys()].sort((a, b) => ord ? ord.indexOf(a) - ord.indexOf(b) : isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
-      return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(deVal(f, k))} (${counts.get(k)})</option>`).join('')}</select>`;
+      // geordnete Werte (Zahlen, Noten, Gruppen): zusätzlich „mindestens …“ / „höchstens …“
+      const ordered = (isNum || !!ord) && keys.length > 2;
+      xfOrder[f] = ordered ? keys : null;
+      let range = '';
+      if (ordered) {
+        let acc = 0; const ge = keys.map(k => counts.get(k)).reverse().map(n => (acc += n)).reverse(); acc = 0; const le = keys.map(k => (acc += counts.get(k)));
+        // „≥ 4,0–4,9“ → „≥ 4,0“, „≤ 158–164 cm“ → „≤ 164 cm“, „ab 178 cm“ → „≥ 178 cm“
+        const bound = (k, ge) => {
+          const t = deVal(f, k).replace(/(\d)\.(\d)/g, '$1,$2'), m = t.match(/^(\d[\d,]*)\s*–\s*(\d[\d,]*)(.*)$/);
+          if (m) return (ge ? '≥ ' + m[1] : '≤ ' + m[2]) + m[3];
+          const ab = t.match(/^ab (.*)$/), un = t.match(/^unter (.*)$/);
+          if (ab) return (ge ? '≥ ' : '≤ ') + ab[1] + (ge ? '' : ' +');
+          if (un) return (ge ? '≥ ' : '< ') + un[1];
+          return (ge ? '≥ ' : '≤ ') + t;
+        };
+        const o = (pre, k, n, sym) => `<option value="${pre}${esc(k)}" ${cur === pre + k ? 'selected' : ''}>${esc(bound(k, sym === '≥'))} (${n})</option>`;
+        range = `<optgroup label="mindestens">${keys.slice(1).map((k, i) => o('__ge:', k, ge[i + 1], '≥')).join('')}</optgroup>`
+          + `<optgroup label="höchstens">${keys.slice(0, -1).map((k, i) => o('__le:', k, le[i], '≤')).join('')}</optgroup>`;
+      }
+      return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${range}${ordered ? '<optgroup label="genau">' : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(deVal(f, k))} (${counts.get(k)})</option>`).join('')}${ordered ? '</optgroup>' : ''}</select>`;
     }).join('');
   }
 
