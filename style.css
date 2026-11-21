@@ -1479,3 +1479,41 @@ div.dx-th { cursor: zoom-in; }
 .sc-fine { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sc-fine.up { color: var(--good); }
 .sc-fine.down { color: #f07a7a; }
+/* Filterleiste: Ansichten + aktive Filter */
+.fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 20px 4px; font-size: 13px; }
+.fb-views, .fb-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fb-h { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.fb-view { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.fb-view > button:first-child { background: none; border: 0; color: var(--text, #eee); font: inherit; padding: 4px 4px 4px 12px; cursor: pointer; }
+.fb-view.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.fb-view.on > button:first-child { color: var(--accent); font-weight: 600; }
+.fb-x { background: none; border: 0; color: var(--muted); font-size: 15px; line-height: 1; padding: 4px 9px 4px 5px; cursor: pointer; }
+.fb-x:hover { color: var(--text, #fff); }
+.fb-view .fb-x { opacity: 0; transition: opacity .15s; }
+.fb-view:hover .fb-x, .fb-view:focus-within .fb-x { opacity: 1; }
+@media (hover: none) { .fb-view .fb-x { opacity: .7; } }
+.fb-save, .fb-clear { background: none; border: 1px dashed var(--border); color: var(--muted); border-radius: 999px; padding: 4px 12px; font: inherit; cursor: pointer; }
+.fb-save:hover, .fb-clear:hover { color: var(--text, #fff); border-color: var(--muted); }
+.fb-clear { border-style: solid; border-color: transparent; }
+.fb-chip { display: inline-flex; align-items: center; gap: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); color: var(--text, #eee); padding-left: 11px; max-width: 100%; }
+.fb-chip > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 4px 0; }
+.vw-sum { display: flex; flex-wrap: wrap; gap: 6px; }
+.vw-sum .fb-chip { padding-right: 11px; }
+/* Mehrfachauswahl */
+#btn-select.on { border-color: var(--accent); color: var(--accent); }
+.card.sel { outline: 3px solid var(--accent); outline-offset: -3px; }
+.card.sel::after { content: '✓'; position: absolute; left: 10px; top: 10px; z-index: 5; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.sel-mode .card:not(.sel)::after { content: ''; position: absolute; left: 10px; top: 10px; z-index: 5; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,.8); background: rgba(0,0,0,.35); }
+tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.selbar { position: fixed; left: 0; right: 0; margin-inline: auto; width: max-content; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 150; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: calc(100vw - 24px);
+  padding: 8px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface, #15171d); box-shadow: 0 12px 40px rgba(0,0,0,.55); font-size: 13px; }
+.sb-n { padding: 0 6px; white-space: nowrap; }
+.sb-sp { flex: 1; min-width: 4px; }
+.has-selbar #main { padding-bottom: 90px; }
+/* Zuletzt angesehen */
+.rc-list { display: grid; gap: 6px; padding: 14px 18px 18px; max-height: 70vh; overflow: auto; }
+.rc-item { display: flex; align-items: center; gap: 12px; padding: 6px 10px 6px 6px; border-radius: 10px; border: 1px solid transparent; background: var(--surface-2); color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.rc-item:hover { border-color: var(--border); }
+.rc-item img, .rc-item .placeholder { width: 40px; height: 50px; object-fit: cover; border-radius: 6px; flex: none; font-size: 12px; display: grid; place-items: center; }
+.rc-item span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.rc-item em { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; }

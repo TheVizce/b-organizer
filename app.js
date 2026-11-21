@@ -2092,7 +2092,7 @@
   // Prüffunktion für die aktuellen Filter (auch einzeln nutzbar: passt ein geänderter Eintrag noch?)
   function filterPred() {
     const q = $('#q').value.trim().toLowerCase();
-    const terms = q ? q.split(/\s+/) : [];
+    const { terms, conds } = parseSearch(q);
     const fv = Object.fromEntries(Object.entries(FILTERS).map(([id, f]) => [f, $('#' + id).value]));
     const act = $('#f-active').value;
     const fav = $('#f-fav').checked;
@@ -2109,6 +2109,11 @@
       if (fav && !isTrue(e.Favorite)) return false;
       for (const [f, want] of xf) {
         const vals = xfValues(e, f);
+        if (want.startsWith('__rg:')) {
+          const ord = xfOrder[f] || [], [lo, hi] = want.slice(5).split('|').map(k => ord.indexOf(k)), i = vals.length ? Math.max(...vals.map(x => ord.indexOf(x))) : -1;
+          if (i < 0 || lo < 0 || hi < 0 || i < Math.min(lo, hi) || i > Math.max(lo, hi)) return false;
+          continue;
+        }
         if (want.startsWith('__ge:') || want.startsWith('__le:')) {
           const ord = xfOrder[f] || [], at = ord.indexOf(want.slice(5)), i = vals.length ? Math.max(...vals.map(x => ord.indexOf(x))) : -1;
           if (i < 0 || at < 0 || (want[2] === 'g' ? i < at : i > at)) return false;
@@ -2146,10 +2151,11 @@
         if (!val) continue;
         if (f === 'Nationality' ? !natNames(e).some(n => deNat(n) === val) : v(e, f) !== val) return false;
       }
+      for (const c of conds) if (searchCond(e, c) === c.neg) return false;
       if (terms.length) {
         const hay = (IS_CHARS ? [e.Name, e.AKA, e['Full Name'], e.Universe, e.Origin, e.Tags, e.Notes, e['Voice Actor'], e.Actress]
           : [e.Name, e.AKA, e.Tags, e.Notes, e.Birthplace, e.Professions, e['Profession Category'], e.Nationality]).join(' ').toLowerCase();
-        if (!terms.every(t => hay.includes(t))) return false;
+        if (!terms.every(t => t.neg ? !hay.includes(t.t) : hay.includes(t.t))) return false;
       }
       return true;
     };
@@ -2350,7 +2356,9 @@
           return (ge ? '≥ ' : '≤ ') + t;
         };
         const o = (pre, k, n, sym) => `<option value="${pre}${esc(k)}" ${cur === pre + k ? 'selected' : ''}>${esc(bound(k, sym === '≥'))} (${n})</option>`;
-        range = `<optgroup label="mindestens">${keys.slice(1).map((k, i) => o('__ge:', k, ge[i + 1], '≥')).join('')}</optgroup>`
+        let rgOpt = '';
+        if (cur.startsWith('__rg:')) { const [lo, hi] = cur.slice(5).split('|'); rgOpt = `<option value="${esc(cur)}" selected>${esc(bound(lo, true).replace(/^≥ /, ''))} – ${esc(bound(hi, false).replace(/^[≤<] /, ''))}</option>`; }
+        range = `<optgroup label="Bereich">${rgOpt}<option value="__rgpick">zwischen …</option></optgroup><optgroup label="mindestens">${keys.slice(1).map((k, i) => o('__ge:', k, ge[i + 1], '≥')).join('')}</optgroup>`
           + `<optgroup label="höchstens">${keys.slice(0, -1).map((k, i) => o('__le:', k, le[i], '≤')).join('')}</optgroup>`;
       }
       return `<select data-xf="${esc(f)}" title="${esc(lab(f))}"><option value="">${esc(lab(f))}: alle</option>${empty ? `<option value="__empty" ${cur === '__empty' ? 'selected' : ''}>${esc(lab(f))}: (leer) – ${empty}</option>` : ''}${range}${ordered ? '<optgroup label="genau">' : ''}${keys.map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(deVal(f, k))} (${counts.get(k)})</option>`).join('')}${ordered ? '</optgroup>' : ''}</select>`;
@@ -2564,8 +2572,220 @@
     const tb = $('.topbar');
     if (tb && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', tb.offsetHeight + 'px')).observe(tb);
   }
+  // ===================== Filter: merken, Leiste, Ansichten, Suche, Auswahl, zuletzt angesehen =====================
+  let views = [];   // gespeicherte Ansichten (synchronisiert): { id, name, st, at }
+  const SIMPLE_F = () => [...Object.keys(FILTERS), 'f-active', 'f-rating', 'f-cat', 'f-ranker', 'f-missing', 'f-status'];
+  function getFilterState() {
+    const sel = {}; for (const id of SIMPLE_F()) { const x = $('#' + id).value; if (x) sel[id] = x; }
+    const xf = {}; for (const [k, x] of Object.entries(xfVals)) if (x) xf[k] = x;
+    return { q: $('#q').value.trim(), sel, fav: $('#f-fav').checked, xf, todo: (ui.todo || []).slice(), sort: ui.sort };
+  }
+  function setFilterState(st, withSort = true) {
+    if (!st) return;
+    $('#q').value = st.q || '';
+    for (const id of SIMPLE_F()) $('#' + id).value = (st.sel || {})[id] || '';
+    $('#f-fav').checked = !!st.fav;
+    for (const k of Object.keys(xfVals)) delete xfVals[k];
+    for (const [k, x] of Object.entries(st.xf || {})) { if (!ui.extraFilters.includes(k)) ui.extraFilters.push(k); xfVals[k] = x; }
+    ui.todo = Array.isArray(st.todo) ? st.todo.slice() : [];
+    if (withSort && st.sort) ui.sort = st.sort;
+    statFilter = null;
+    renderExtraFilters(); if (typeof todoButtonLabel === 'function') todoButtonLabel(); saveUI();
+  }
+  const sameState = (a, b) => { const n = (x) => JSON.stringify({ q: x.q || '', sel: x.sel || {}, fav: !!x.fav, xf: x.xf || {}, todo: (x.todo || []).slice().sort(), sort: x.sort || '' }); return n(a) === n(b); };
+  let persistT = null;
+  function persistFiltersSoon() { clearTimeout(persistT); persistT = setTimeout(() => { ui.flt = getFilterState(); saveUI(); }, 400); }
+
+  // Leiste über der Liste: gespeicherte Ansichten + aktive Filter einzeln entfernbar
+  function filterChips() {
+    const out = [], st = getFilterState();
+    const optText = (el) => { const o = el.options[el.selectedIndex]; return o ? o.textContent.replace(/\s*\(\d+\)\s*$/, '').replace(/\s*–\s*\d+$/, '').trim() : el.value; };
+    if (st.q) out.push(['q', `Suche „${st.q}“`]);
+    for (const id of Object.keys(st.sel)) {
+      const el = $('#' + id), head = (el.options[0] ? el.options[0].textContent : '').split(':')[0].trim(), t = optText(el);
+      out.push(['sel:' + id, t.includes(':') || !head ? t : `${head}: ${t}`]);
+    }
+    if (st.fav) out.push(['fav', 'nur Favoriten']);
+    for (const f of Object.keys(st.xf)) { const el = $(`[data-xf="${CSS.escape(f)}"]`); const t = el ? optText(el) : st.xf[f]; out.push(['xf:' + f, t.includes(':') ? t : `${lab(f)}: ${t}`]); }
+    for (const k of st.todo) { const t = TODOS.find(x => x.k === k); if (t) out.push(['todo:' + k, '📝 ' + t.label]); }
+    if (statFilter) out.push(['stat', '📊 ' + statFilter.label]);
+    return out;
+  }
+  function renderFilterBar() {
+    const bar = $('#fbar'); if (!bar) return;
+    const chips = filterChips(), st = getFilterState();
+    const vw = views.map(x => `<span class="fb-view${sameState(x.st, st) ? ' on' : ''}"><button data-view-apply="${esc(x.id)}" title="Ansicht „${esc(x.name)}“ anwenden">${esc(x.name)}</button><button class="fb-x" data-view-del="${esc(x.id)}" title="Ansicht löschen" aria-label="Ansicht löschen">×</button></span>`).join('');
+    const canSave = chips.length || st.sort !== 'name';
+    bar.hidden = !views.length && !chips.length;
+    bar.innerHTML = `${views.length || canSave ? `<div class="fb-views"><span class="fb-h">Ansichten</span>${vw}${canSave ? '<button class="fb-save" data-view-save title="Aktuelle Filter und Sortierung als Ansicht speichern">＋ speichern</button>' : ''}</div>` : ''}
+      ${chips.length ? `<div class="fb-chips">${chips.map(([k, t]) => `<span class="fb-chip"><span>${esc(t)}</span><button class="fb-x" data-chip="${esc(k)}" title="Filter entfernen" aria-label="Filter entfernen">×</button></span>`).join('')}${chips.length > 1 ? '<button class="fb-clear" data-chip="__all">alle entfernen</button>' : ''}</div>` : ''}`;
+  }
+  function removeChip(k) {
+    if (k === '__all') { $('#btn-reset').click(); return; }
+    if (k === 'q') $('#q').value = '';
+    else if (k === 'fav') $('#f-fav').checked = false;
+    else if (k === 'stat') statFilter = null;
+    else if (k.startsWith('sel:')) $('#' + k.slice(4)).value = '';
+    else if (k.startsWith('xf:')) { delete xfVals[k.slice(3)]; renderExtraFilters(); }
+    else if (k.startsWith('todo:')) { ui.todo = (ui.todo || []).filter(x => x !== k.slice(5)); saveUI(); if (typeof todoButtonLabel === 'function') todoButtonLabel(); }
+    render();
+  }
+  async function saveViews() {
+    try { await idbSet('views', views); if (SYNC) SYNC.changed(); } catch (err) { toast('Ansichten konnten nicht gespeichert werden: ' + (err && err.message || err), 'err'); }
+  }
+  function saveViewDialog() {
+    const st = getFilterState(), cur = views.find(x => sameState(x.st, st));
+    openModal(`<div class="modal-head"><h2>Ansicht speichern</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="qa" id="vw-form" autocomplete="off">
+        <p class="qa-help">Speichert die aktuellen Filter, Zusatzfilter, „Zu erledigen“ und die Sortierung. Gleicher Name = vorhandene Ansicht überschreiben. Wird zwischen deinen Geräten abgeglichen.</p>
+        <div class="qa-row" style="grid-template-columns:1fr auto"><label class="qa-f"><span>Name</span><input name="n" required maxlength="40" value="${esc(cur ? cur.name : '')}" list="vw-names"></label><button class="btn primary" type="submit">Speichern</button></div>
+        <datalist id="vw-names">${views.map(x => `<option value="${esc(x.name)}">`).join('')}</datalist>
+        <div class="vw-sum">${filterChips().map(([, t]) => `<span class="fb-chip"><span>${esc(t)}</span></span>`).join('')}<span class="fb-chip"><span>Sortierung: ${esc(($('#sort').selectedOptions[0] || {}).textContent || ui.sort)}</span></span></div>
+      </form>`);
+    const form = $('#vw-form', modal), inp = form.elements.n;
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const name = inp.value.trim(); if (!name) return;
+      const old = views.find(x => x.name.toLowerCase() === name.toLowerCase());
+      if (old) Object.assign(old, { name, st, at: Date.now() }); else views.push({ id: uid(), name, st, at: Date.now() });
+      saveViews(); closeModal(true); render(); toast(`Ansicht „${name}“ gespeichert.`, 'ok');
+    });
+  }
+
+  // „zwischen …“ für geordnete Zusatzfilter
+  function pickRange(f) {
+    const ord = xfOrder[f] || []; if (ord.length < 2) return;
+    const cur = (xfVals[f] || '').startsWith('__rg:') ? xfVals[f].slice(5).split('|') : [ord[0], ord[ord.length - 1]];
+    const opts = (sel) => ord.map(k => `<option value="${esc(k)}" ${k === sel ? 'selected' : ''}>${esc(deVal(f, k).replace(/(\d)\.(\d)/g, '$1,$2'))}</option>`).join('');
+    openModal(`<div class="modal-head"><h2>${esc(lab(f))}: Bereich</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="qa" id="rg-form"><div class="qa-row"><label class="qa-f"><span>von</span><select name="lo">${opts(cur[0])}</select></label><label class="qa-f"><span>bis (einschließlich)</span><select name="hi">${opts(cur[1])}</select></label><button class="btn primary" type="submit">Übernehmen</button></div></form>`);
+    $('#rg-form', modal).addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      let lo = ev.target.elements.lo.value, hi = ev.target.elements.hi.value;
+      if (ord.indexOf(lo) > ord.indexOf(hi)) [lo, hi] = [hi, lo];
+      xfVals[f] = `__rg:${lo}|${hi}`; closeModal(true); renderExtraFilters(); render();
+    });
+  }
+
+  // Suche mit Feldangaben: nat:schweiz  cup>=d  note>=7  -tag:blond  (Rest: freie Wörter, „-wort“ = ohne)
+  const SEARCH_KEYS = IS_CHARS
+    ? { name: 'Name', uni: 'Universe', universum: 'Universe', medium: 'Medium', stil: 'Style', spezies: 'Species', rolle: 'Role', herkunft: 'Origin', haar: 'Hair color', augen: 'Eye color', figur: 'Body type',
+        tag: 'Tags', tags: 'Tags', notiz: 'Notes', sprecherin: 'Voice Actor', note: 'Score', gesicht: 'Face Score', body: 'Body Score', hot: 'Hot Score', cute: 'Cute Score', sym: 'Sympathy Score', jahr: 'First Appearance' }
+    : { name: 'Name', nat: 'Nationality', land: 'Nationality', haar: 'Hair color', augen: 'Eye color', figur: 'Body type', cup: 'Bra/Cup', größe: 'Height', groesse: 'Height', gr: 'Height', gewicht: 'Weight',
+        alter: 'Alter', jahr: 'Geburtsjahr', note: 'Score', gesicht: 'Face Score', body: 'Body Score', hot: 'Hot Score', cute: 'Cute Score', sym: 'Sympathy Score', bp: 'Global Rating', rang: 'Rank',
+        tag: 'Tags', tags: 'Tags', beruf: 'Professions', bereich: 'Profession Category', notiz: 'Notes', ethnie: 'Ethnicity', ort: 'Birthplace', tattoo: 'Tattoos', piercing: 'Piercings' };
+  const CUP_RANK = ['AAA', 'AA', 'A', 'B', 'C', 'D', 'DD', 'DDD', 'E', 'F', 'FF', 'G', 'GG', 'H', 'HH', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+  const cupRank = (x) => { const m = String(x || '').toUpperCase().match(/[A-Z]+/); if (!m) return null; const i = CUP_RANK.indexOf(m[0]); return i < 0 ? (m[0].startsWith('Z') ? 40 : null) : i; };
+  function parseSearch(q) {
+    const terms = [], conds = [];
+    for (const raw of q ? q.split(/\s+/) : []) {
+      const neg = raw.length > 1 && raw[0] === '-', t = neg ? raw.slice(1) : raw;
+      const m = t.match(/^([a-zäöüß]+)(:>=|:<=|:>|:<|:=|>=|<=|>|<|=|:)(.+)$/i);
+      if (m && SEARCH_KEYS[m[1].toLowerCase()]) { conds.push({ f: SEARCH_KEYS[m[1].toLowerCase()], op: m[2].replace(':', '') || ':', val: m[3], neg }); continue; }
+      terms.push({ t, neg });
+    }
+    return { terms, conds };
+  }
+  function searchCond(e, c) {
+    const vals = c.f === 'Score' ? [v(e, 'Score')].filter(Boolean) : fieldValues(e, c.f);
+    if (!vals.length) return false;
+    if (c.op === ':' || c.op === '=') {
+      const w = c.val.toLowerCase().replace(/_/g, ' ');
+      return vals.some(x => { const a = String(x).toLowerCase(), b = String(c.f === 'Nationality' ? deNat(x) : deVal(c.f, x)).toLowerCase(); return c.op === '=' ? a === w || b === w : a.includes(w) || b.includes(w); });
+    }
+    const cmp = (a, b) => c.op === '>=' ? a >= b : c.op === '<=' ? a <= b : c.op === '>' ? a > b : a < b;
+    if (c.f === 'Bra/Cup') { const b = cupRank(c.val); return b != null && vals.some(x => { const a = cupRank(x); return a != null && cmp(a, b); }); }
+    const b = num(c.val.replace(',', '.')); if (b == null) return false;
+    return vals.some(x => { const a = num(String(x).replace(',', '.')); return a != null && cmp(a, b); });
+  }
+
+  // Mehrfachauswahl: Strg/⌘-Klick (Umschalt = Bereich) oder „☑ Auswählen“ (dann reicht Antippen)
+  const selIds = new Set(); let selMode = false, selLast = null;
+  function selClick(id, range) {
+    if (range && selLast && shown.length) {
+      const a = shown.findIndex(x => x._id === selLast), b = shown.findIndex(x => x._id === id);
+      if (a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) selIds.add(shown[i]._id);
+    } else if (selIds.has(id)) selIds.delete(id); else selIds.add(id);
+    selLast = id; markSel(); renderSelBar();
+  }
+  function markSel() { $$('#main [data-id].card, #main tr[data-id]').forEach(el => el.classList.toggle('sel', selIds.has(el.dataset.id))); }
+  function setSelMode(on) { selMode = on; document.body.classList.toggle('sel-mode', on); if (!on) selIds.clear(); markSel(); renderSelBar(); }
+  function renderSelBar() {
+    const bar = $('#selbar'); if (!bar) return;
+    for (const id of [...selIds]) if (!byId(id)) selIds.delete(id);
+    const n = selIds.size, show = selMode || n > 0;
+    bar.hidden = !show; document.body.classList.toggle('has-selbar', show);
+    const b = $('#btn-select'); if (b) b.classList.toggle('on', selMode);
+    if (!show) return;
+    bar.innerHTML = `<span class="sb-n"><b>${n}</b> ausgewählt</span>
+      <button class="btn small ghost" data-sb="all" title="Alle angezeigten Einträge auswählen">Alle angezeigten</button>
+      <span class="sb-sp"></span>
+      <button class="btn small" data-sb="tag" ${n ? '' : 'disabled'}>🏷 Tag hinzufügen</button>
+      <button class="btn small" data-sb="field" ${n ? '' : 'disabled'}>✎ Feld setzen…</button>
+      <button class="btn small" data-sb="cover" ${n ? '' : 'disabled'} title="Kachelbild bei allen ausgewählten als geprüft markieren">✓ Kachelbild geprüft</button>
+      <button class="btn small" data-sb="ranker" ${n ? '' : 'disabled'}>🏆 An Ranker</button>
+      <button class="btn small danger" data-sb="del" ${n ? '' : 'disabled'}>🗑 Löschen</button>
+      <button class="btn small ghost" data-sb="off" title="Auswahl beenden (Esc)">✕</button>`;
+  }
+  const selList = () => [...selIds].map(byId).filter(Boolean);
+  function bulkDone(msg) { saveQuiet(); refreshFilters(); render(); toast(msg, 'ok'); }
+  function bulkField() {
+    const list = selList(), skip = new Set(['Name', 'Own Images', 'Cover', 'Cover Online', 'Cover Crop', 'Image Folder']);
+    const fields = ALL_FIELDS.filter(f => !skip.has(f) && TYPES[f] !== 'area' || f === 'Tags');
+    openModal(`<div class="modal-head"><h2>Feld setzen · ${list.length} Einträge</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <form class="qa" id="bf-form" autocomplete="off">
+        <div class="qa-row" style="grid-template-columns:1fr 1.3fr"><label class="qa-f"><span>Feld</span><select name="f">${fields.map(f => `<option value="${esc(f)}">${esc(lab(f))}</option>`).join('')}</select></label>
+          <label class="qa-f"><span>Wert (leer = Feld leeren)</span><input name="v" list="bf-vals"></label></div>
+        <datalist id="bf-vals"></datalist>
+        <label class="chk"><input type="checkbox" name="empty" checked> nur wo noch leer</label>
+        <div><button class="btn primary" type="submit">Übernehmen</button></div>
+      </form>`);
+    const form = $('#bf-form', modal);
+    const fillVals = () => { const f = form.elements.f.value; $('#bf-vals', modal).innerHTML = [...new Set(entries.map(e => v(e, f)).filter(Boolean))].slice(0, 200).map(x => `<option value="${esc(x)}">`).join(''); };
+    form.elements.f.addEventListener('change', fillVals); fillVals();
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const f = form.elements.f.value, val = form.elements.v.value.trim(), onlyEmpty = form.elements.empty.checked;
+      let n = 0;
+      for (const e of list) { if (onlyEmpty && v(e, f)) continue; if (v(e, f) === val) continue; e[f] = val; e._updated = Date.now(); derive(e); n++; }
+      closeModal(true); bulkDone(`${lab(f)} bei ${n} Eintr${n === 1 ? 'ag' : 'ägen'} gesetzt.`);
+    });
+  }
+  function bulkAction(k) {
+    const list = selList();
+    if (k === 'all') { shown.forEach(e => selIds.add(e._id)); markSel(); renderSelBar(); return; }
+    if (k === 'off') { setSelMode(false); return; }
+    if (!list.length) return;
+    if (k === 'tag') {
+      const t = (prompt(`Tag für ${list.length} Einträge hinzufügen:`) || '').trim(); if (!t) return;
+      let n = 0; for (const e of list) { const tags = splitList(e.Tags); if (!tags.some(x => x.toLowerCase() === t.toLowerCase())) { e.Tags = [...tags, t].join(', '); e._updated = Date.now(); n++; } }
+      bulkDone(`Tag „${t}“ bei ${n} Eintr${n === 1 ? 'ag' : 'ägen'} hinzugefügt.`);
+    } else if (k === 'field') bulkField();
+    else if (k === 'cover') {
+      let n = 0; for (const e of list) { const im = images(e)[0]; if (!im || coverChecked(e) || coverMissingHere(e)) continue; e.Cover = im; e['Cover Checked'] = 'true'; e._coverSize = ''; coverDoubt.delete(e._id); e._updated = Date.now(); n++; }
+      bulkDone(`Kachelbild bei ${n} Eintr${n === 1 ? 'ag' : 'ägen'} als geprüft markiert.`);
+    } else if (k === 'ranker') openRankerSend(list);
+    else if (k === 'del') {
+      if (!confirm(`${list.length} Einträge wirklich löschen?\n\n${list.slice(0, 8).map(e => '• ' + v(e, 'Name')).join('\n')}${list.length > 8 ? '\n…' : ''}`)) return;
+      const ids = new Set(list.map(e => e._id));
+      for (const e of list) deleteLocalImages(splitList(e['Own Images']));
+      entries = entries.filter(e => !ids.has(e._id)); selIds.clear();
+      bulkDone(`${ids.size} Einträge gelöscht.`);
+    }
+  }
+
+  // Zuletzt angesehen
+  function showRecent() {
+    const list = (ui.recent || []).map(byId).filter(Boolean);
+    openModal(`<div class="modal-head"><h2>🕘 Zuletzt angesehen</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
+      <div class="rc-list">${list.length ? list.map(e => `<button class="rc-item" data-rc="${esc(e._id)}">${coverTag(e)}<span><b>${esc(v(e, 'Name'))}</b><small class="muted">${esc(IS_CHARS ? v(e, 'Universe') : natDisplay(e))}</small></span>${hasScore(e) ? `<em>${esc(v(e, 'Score').replace('.', ','))}</em>` : ''}</button>`).join('') : '<p class="muted">Noch nichts angesehen.</p>'}</div>`);
+    $('.rc-list', modal).addEventListener('click', (ev) => { ev.stopPropagation(); const b = ev.target.closest('[data-rc]'); if (b) showDetail(b.dataset.rc); });
+  }
+
   function render() {
     outOfFilter.clear(); calibBadgeSoon(); lbSoon();
+    persistFiltersSoon(); renderFilterBar(); renderSelBar();
     renderUpdateBanner();
     if (rankerTags.size) { rankerStale = new Map(); for (const e of entries) { const d = computeStale(e); if (d.length) rankerStale.set(e._id, d); } }
     const list = filtered();
@@ -2599,7 +2819,7 @@
   }
 
   function rowHTML(e) {
-    return `<tr data-id="${esc(e._id)}">
+    return `<tr data-id="${esc(e._id)}"${selIds.has(e._id) ? ' class="sel"' : ''}>
           <td class="thumb">${coverTag(e)}</td>
           <td><strong>${esc(v(e, 'Name'))}</strong></td>
           <td>${esc(natDisplay(e))}</td>
@@ -2640,7 +2860,7 @@
     const fut = ui.cardBadges.includes('fut') ? futHTML(e) : '';
     const ribbon = coverRibbonHTML(e);
     return `
-      <article class="card" data-id="${esc(e._id)}">
+      <article class="card${selIds.has(e._id) ? ' sel' : ''}" data-id="${esc(e._id)}">
         <button class="fav-btn ${isTrue(e.Favorite) ? 'on' : ''}" data-fav="${esc(e._id)}" title="Favorit">${isTrue(e.Favorite) ? '♥' : '♡'}</button>
         <div class="img${fut ? ' has-fut' : ''}">${coverTag(e)}${ribbon}${fut}
           <div class="badges">
@@ -3255,6 +3475,14 @@
           <div><dt><kbd>N</kbd></dt><dd>neuer Eintrag</dd></div>
           <div><dt><kbd>R</kbd></dt><dd>⭐ Bewertungsmodus (Kategorien)</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>diese Übersicht</dd></div>
+          <div><dt><kbd>Strg</kbd>/<kbd>⌘</kbd>-Klick</dt><dd>Kachel auswählen (Mehrfachauswahl); <kbd>Umschalt</kbd>-Klick: Bereich; <kbd>Esc</kbd> beendet</dd></div>
+        </dl>
+        <h3>Suche mit Feldangaben</h3>
+        <dl class="kv">
+          <div><dt><code>nat:schweiz</code></dt><dd>Feld enthält (auch deutsche Namen)</dd></div>
+          <div><dt><code>cup&gt;=d</code> <code>note&gt;7</code> <code>gesicht&gt;=4</code></dt><dd>vergleichen: <code>&gt;= &lt;= &gt; &lt;</code>, <code>=</code> genau</dd></div>
+          <div><dt><code>-tag:x</code> <code>-blond</code></dt><dd>Minus = ohne</dd></div>
+          <div><dt>Felder</dt><dd>${esc(Object.keys(SEARCH_KEYS).join(', '))}</dd></div>
         </dl>
         <h3>Detailansicht</h3>
         <dl class="kv">
@@ -3352,6 +3580,8 @@
   }
   function showDetail(id) {
     const e = byId(id); if (!e) return;
+    if (!Array.isArray(ui.recent)) ui.recent = [];
+    if (ui.recent[0] !== id) { ui.recent = [id, ...ui.recent.filter(x => x !== id)].slice(0, 20); saveUI(); }
     lbSetActive(id);
     const imgs = images(e);
     const skip = new Set(['Name', 'AKA', 'Exact Birthdate', 'Favorite', 'Tags', 'Notes', 'Profile URL', 'Archive URL', ...FACT_FIELDS, ...SCORE_CATS.map(c => c.f), 'Score', 'My Rating', 'Primary Category', 'Profession Category', 'Medium', 'Global Rating', 'Votes', 'Rank', 'Highest Rank']);   // stehen oben als Kennzahlen   // Bereiche/Medium stehen als Chips oben
@@ -5455,6 +5685,7 @@
     const tag = t.closest('[data-tag]');
     if (tag) { closeModal(true); $('#q').value = tag.dataset.tag; render(); return; }
     const card = t.closest('[data-id].card, tr[data-id]');
+    if (card && (selMode || ev.ctrlKey || ev.metaKey || (ev.shiftKey && selIds.size))) { selClick(card.dataset.id, ev.shiftKey); return; }
     if (card) { showDetail(card.dataset.id); return; }
     if (t === overlay) closeModal();
   });
@@ -5589,7 +5820,11 @@
     else if (ev.target.id === 'pt-min') { ui.ptMin = Number(ev.target.value); saveUI(); render(); }
   });
   $('#sf').addEventListener('click', (ev) => { if (ev.target.closest('#sf-clear')) { statFilter = null; render(); } });
-  $('#xf').addEventListener('input', (ev) => { const sel = ev.target.closest('[data-xf]'); if (!sel) return; xfVals[sel.dataset.xf] = sel.value; render(); });
+  $('#xf').addEventListener('input', (ev) => {
+    const sel = ev.target.closest('[data-xf]'); if (!sel) return;
+    if (sel.value === '__rgpick') { sel.value = xfVals[sel.dataset.xf] || ''; pickRange(sel.dataset.xf); return; }
+    xfVals[sel.dataset.xf] = sel.value; render();
+  });
   $('#btn-view-cfg').addEventListener('click', showViewSettings);
   initLeaderboard();
   $('#folder-input').addEventListener('change', (ev) => onFolderPicked(ev.target.files));
@@ -5617,6 +5852,21 @@
   applyCardLook();
   if (ui.sort === 'mine') ui.sort = 'score';
   if (['young', 'old', 'height'].includes(ui.sort)) ui.sort = 'name';   // Sortierung nach Alter/Größe entfernt   // „Meine Bewertung“ ist jetzt die Tool-Note
+  $('#fbar').addEventListener('click', (ev) => {
+    const t = ev.target;
+    const ap = t.closest('[data-view-apply]'); if (ap) { const x = views.find(y => y.id === ap.dataset.viewApply); if (x) { setFilterState(x.st); render(); } return; }
+    const dl = t.closest('[data-view-del]'); if (dl) { const x = views.find(y => y.id === dl.dataset.viewDel); if (x && confirm(`Ansicht „${x.name}“ löschen?`)) { views = views.filter(y => y !== x); saveViews(); render(); } return; }
+    if (t.closest('[data-view-save]')) { saveViewDialog(); return; }
+    const ch = t.closest('[data-chip]'); if (ch) removeChip(ch.dataset.chip);
+  });
+  $('#selbar').addEventListener('click', (ev) => { const b = ev.target.closest('[data-sb]'); if (b) bulkAction(b.dataset.sb); });
+  $('#btn-select').addEventListener('click', () => setSelMode(!selMode));
+  $('#btn-recent').addEventListener('click', showRecent);
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape' || (!selMode && !selIds.size) || !$('#overlay').hidden) return;
+    if (document.querySelector('.calib, .slide, .viewer, .rater, .crop-ed')) return;
+    setSelMode(false);
+  });
   $('#btn-reset').addEventListener('click', () => {
     $('#q').value = ''; Object.keys(FILTERS).forEach(id => $('#' + id).value = '');
     $('#f-active').value = ''; $('#f-rating').value = ''; $('#f-cat').value = ''; $('#f-ranker').value = ''; $('#f-missing').value = ''; $('#f-status').value = ''; $('#f-fav').checked = false;
@@ -5641,11 +5891,11 @@
     SYNC = ToolSync.create({
       tool: IS_CHARS ? 'b-organizer-chars' : 'b-organizer',   // Charaktere: eigener Ordner tool-daten/b-organizer-chars/
       collections: { entries: { type: 'array', id: '_id' }, duels: { type: 'array', id: 'id' } },
-      fields: ['primaryOrder', 'pairsResetAt'],
+      fields: ['primaryOrder', 'pairsResetAt', 'views'],
       shards: IS_CHARS ? 8 : 32,
       stampDelay: 1500,
       // vor dem Abgleich noch nicht gespeicherte Feldänderungen stempeln (sonst fehlt _fu in der Cloud-Fassung)
-      get: async () => { if (stampFields()) { try { await idbSet('entries', entries); } catch {} } return { entries, duels, primaryOrder, pairsResetAt }; },
+      get: async () => { if (stampFields()) { try { await idbSet('entries', entries); } catch {} } return { entries, duels, primaryOrder, pairsResetAt, views }; },
       mergeItem: mergeEntry,
       apply: async (d) => {
         entries = (d.entries || []).filter(e => e && typeof e === 'object').map(derive); entriesGen++;
@@ -5654,6 +5904,7 @@
         if (Array.isArray(d.duels)) { duels = d.duels.filter(x => x && x.id); fineCache = null; if (typeof cbSugDirty === "function") cbSugDirty(); }
         if (d.pairsResetAt && typeof d.pairsResetAt === 'object') { pairsResetAt = d.pairsResetAt; try { await idbSet('pairsResetAt', pairsResetAt); } catch {} }
         if (Array.isArray(d.primaryOrder)) { primaryOrder = normPrimaryOrder(d.primaryOrder); try { await idbSet('primaryOrder', primaryOrder); } catch {} }
+        if (Array.isArray(d.views)) { views = d.views.filter(x => x && x.id && x.name); try { await idbSet('views', views); } catch {} }
         try { await save(); await idbSet('duels', duels); } catch { return false; }
         refreshFilters(); render();
         return true;
@@ -6293,6 +6544,7 @@
       try { duels = (await idbGet('duels')) || []; } catch { duels = []; }
       try { pairsResetAt = (await idbGet('pairsResetAt')) || {}; } catch { pairsResetAt = {}; }
       try { primaryOrder = normPrimaryOrder(await idbGet('primaryOrder')); } catch {}
+      try { const vw = await idbGet('views'); views = Array.isArray(vw) ? vw : []; } catch { views = []; }
       // Einmalig: Einträge mit Archiv-Kopie gelten als auf Babepedia gelöscht (Archiv-Übernahme = Original weg)
       if (!IS_CHARS) try {
         if (!localStorage.getItem('bp-organizer-archmig1')) {
@@ -6339,6 +6591,7 @@
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
     ready = true;
     refreshFilters();
+    if (ui.flt) setFilterState(ui.flt);   // Filter vom letzten Mal
     render();
     initSync();
     readRankerStatus().catch(() => {});

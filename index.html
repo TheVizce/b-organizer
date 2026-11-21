@@ -62,7 +62,7 @@
   </header>
 
   <section class="toolbar">
-    <input type="search" id="q" placeholder="Suchen: Name, AKA, Tags, Notizen…" autocomplete="off">
+    <input type="search" id="q" placeholder="Suchen: Name, AKA, Tags, Notizen…" autocomplete="off" title="Freie Wörter oder Feldangaben, z. B.  nat:schweiz  cup>=d  note>=7  gesicht>=4  haar:blond  -tag:x  (Minus = ohne). Mehr unter Daten → Tastenkürzel.">
     <select id="f-nationality"><option value="">Nationalität: alle</option></select>
     <select id="f-cat"><option value="">Bereich: alle</option></select>
     <select id="f-hair"><option value="">Haarfarbe: alle</option></select>
@@ -154,8 +154,11 @@
     <button class="btn ghost" id="btn-browse" title="Bilder der aktuellen Liste durchblättern">🖼 Blättern</button>
     <button class="btn ghost" id="btn-slide" title="Diashow der aktuellen Liste">▶ Diashow</button>
     <button class="btn ghost" id="btn-view-cfg" title="Kacheln und Filter anpassen">⚙︎ Ansicht</button>
+    <button class="btn ghost" id="btn-select" title="Mehrere Einträge auswählen und gemeinsam bearbeiten (auch Strg/⌘-Klick auf Kacheln)">☑ Auswählen</button>
+    <button class="btn ghost" id="btn-recent" title="Zuletzt angesehene Einträge">🕘 Zuletzt</button>
     <button class="btn ghost" id="btn-reset" title="Filter zurücksetzen">✕ Filter</button>
   </section>
+  <div id="fbar" class="fbar" hidden></div>
 
   <div id="upd-banner" class="upd-banner bp-only" hidden></div>
   <div class="layout">
@@ -169,6 +172,7 @@
   </div>
 
   <div class="toasts" id="toasts"></div>
+  <div id="selbar" class="selbar" hidden></div>
 
   <!-- GitHub-Sync (gemeinsam für alle Tools, Einstellungen auf der Startseite) -->
   <script src="/startseite/sync-v1.js"></script>
