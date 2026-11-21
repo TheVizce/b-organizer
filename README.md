@@ -372,3 +372,4 @@ Ein alter Batch aus Version 12.2 wird automatisch übernommen.
 - Berufe → Bereiche: Camgirl zu Erotik (statt Digitale Inhalte), Internet Personality und Virtual Influencer zu Digitale Inhalte (statt Sonstige), First Responder zu Wissenschaft & Bildung (Gesundheit), Tippfehler „Musican: DJ“ zu Musik; Regel erkennt Cam-/Webcam-Berufe als Erotik.
 - Berufe → Bereiche: Playboy Model und Centerfold zu Erotik (Glamour Model bleibt Modeln), Military Personnel zu Sonstige.
 - Noten-Filter: „Babepedia-Note 7, Tool-Note ≠ 7 / fehlt“ – findet pauschal vergebene 7er auf Babepedia, die die Tool-Note (noch) nicht bestätigt.
+- Noten-Filter: „nur Tool-Note (auf Babepedia noch offen)“ entfernt (dafür gibt es „Babepedia-Noten angleichen“ bzw. Zu erledigen → „Babepedia-Note nicht angeglichen“); „nur eine der beiden Noten vorhanden“ zählt Einträge ohne Babepedia-Profil nicht mehr mit.

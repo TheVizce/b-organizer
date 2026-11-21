@@ -2138,7 +2138,7 @@
         const st = ratingDiff(e).state;
         if (rf === 'diff' && st !== 'diff') return false;
         if (rf === 'same' && st !== 'same') return false;
-        if (rf === 'missing' && !(st === 'site-only' || st === 'mine-only')) return false;
+        if (rf === 'missing' && !(st === 'site-only' || (st === 'mine-only' && profileStatus(e) === 'ok'))) return false;   // ohne Babepedia-Profil gibt es dort nichts nachzutragen
         if (rf === 'site-only' && st !== 'site-only') return false;
         if (rf === 'mine-only' && st !== 'mine-only') return false;
         if (rf === 'none' && st !== 'none') return false;
