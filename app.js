@@ -240,12 +240,12 @@
   const PROFESSION_CATEGORIES = [
       ['Modeling', ['Beauty pageant contestant', 'Centerfold', 'Fitness Model', 'Glamour Model', 'Gravure Idol', 'Model', 'Playboy Model', 'Plus Size Model', 'Race Queen', 'Ring Girl', 'Supermodel']],
       ['Acting & Performing', ['Actress', 'Ballet Dancer', 'Burlesque Dancer', 'Comedian', 'Cultural / Specialty Dancer', 'Music Video / Commercial Dancer', 'Showgirl', 'Stuntwoman', 'Voice Actress']],
-      ['Digital Content', ['ASMR Star', 'Blogger', 'Camgirl', 'Content Creator (Non-Adult)', 'Cosplayer', 'Digital Creator', 'Gamer', 'Influencer', 'Podcaster', 'TikTok Star', 'YouTuber']],
-      ['Adult Industry', ['Adult Model', 'Fetish Model', 'AV Idol', 'Dominatrix', 'Escort', 'Exotic Dancer', 'Hotwife', 'MILF Porn Star', 'Porn Star', 'Stripper']],
+      ['Digital Content', ['ASMR Star', 'Blogger', 'Content Creator (Non-Adult)', 'Cosplayer', 'Digital Creator', 'Gamer', 'Influencer', 'Internet Personality', 'Podcaster', 'TikTok Star', 'Virtual Influencer', 'YouTuber']],
+      ['Adult Industry', ['Adult Model', 'Fetish Model', 'AV Idol', 'Camgirl', 'Dominatrix', 'Escort', 'Exotic Dancer', 'Hotwife', 'MILF Porn Star', 'Porn Star', 'Stripper']],
       ['TV & Media', ['Celebrity', 'Director', 'Journalist', 'Presenter', 'Producer', 'Radio Host', 'Reality TV Star', 'Sports reporter', 'TV Host', 'Weather Girl']],
       ['Music', ['Musician', 'Musician: Country Singer', 'Musician: DJ', 'Musician: J-pop Idol', 'Musician: K-pop Idol', 'Musician: Rapper', 'Musician: Singer']],
       ['Athletics & Sports', ['Bodybuilder', 'Cheerleader', 'Fitness Trainer', 'Golf Instructor', 'Horseriding Instructor', 'Sportswoman']],
-      ['Science / Health / Education', ['Cybersecurity expert', 'Dentist', 'Doctor - Physician', 'Nurse', 'Professor', 'Programmer', 'Science Communicator', 'Sex Therapist', 'Teacher', 'Veterinarian']],
+      ['Science / Health / Education', ['Cybersecurity expert', 'Dentist', 'Doctor - Physician', 'First Responder', 'Nurse', 'Professor', 'Programmer', 'Science Communicator', 'Sex Therapist', 'Teacher', 'Veterinarian']],
       ['Business / Law / Politics', ['Activist', 'Barrister', 'Business Woman', 'Lawyer', 'Military Personnel', 'Political Commentator', 'Politician', 'Realtor', 'Royalty']],
       ['Creative & Design', ['Artist', 'Author', 'Fashion Designer', 'Graphic Designer', 'Photographer', 'Writer']],
       ['Service & Hospitality', ['Barista', 'Bartender', 'Beautician', 'Flight Attendant', 'Hairdresser', 'Hooters Girl', 'Nail Designer']],
@@ -254,9 +254,9 @@
   // Für Werte, die (noch) nicht in der Liste stehen: Regeln nach Wortbestandteilen
   const PROFESSION_RULES = [
       [/sportswoman|athlete|player|boxer|fighter|skater|racer|gymnast|swimmer|surfer|skier|wrestler|cyclist|runner/i, 'Athletics & Sports'],
-      [/musician|singer|rapper|\bdj\b|pop idol|band/i, 'Music'],
+      [/musician|musican|singer|rapper|\bdj\b|pop idol|band/i, 'Music'],
       [/scientist|engineer|doctor|physician|biologist|researcher|veterinar|pharmacist|psycholog|paramedic|midwife/i, 'Science / Health / Education'],
-      [/porn|adult (film|actress|model)|onlyfans|fetish|nude model|erotic/i, 'Adult Industry'],
+      [/porn|adult (film|actress|model|content)|onlyfans|fetish|nude model|erotic|cam ?girl|cam ?model|webcam/i, 'Adult Industry'],
       [/hairdresser|hair ?stylist|barber|waitress|stewardess/i, 'Service & Hospitality'],
       [/model/i, 'Modeling'],
       [/dancer|actress|performer/i, 'Acting & Performing'],
