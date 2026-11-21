@@ -1518,3 +1518,18 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .rc-item span { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .rc-item em { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; }
 .selbar[hidden], .fbar[hidden] { display: none !important; }
+/* Sympathie: bekannt / unbekannt */
+.kn-tgl { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-right: 8px; }
+.kn-b { background: none; border: 0; color: var(--muted); font: inherit; font-size: 12px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+.kn-b + .kn-b { border-left: 1px solid var(--border); }
+.kn-b.on { background: var(--surface-2); color: var(--text, #fff); font-weight: 600; }
+.sym-row.kn-nein .kn-b.on { background: color-mix(in srgb, #8aa4c8 25%, transparent); color: #c9d8ee; }
+.sym-row.kn-nein .sc-btn.unk { border-style: dashed; }
+.sym-row.kn-nein .sc-btn.unk.on { background: #6f87ab; border-color: #8aa4c8; border-style: solid; color: #fff; }
+.sym-row.kn-nein .sc-note { color: #9fb3d1; font-style: italic; }
+.sym-row.kn-open .sc-btn.dim { opacity: .55; }
+.sym-row.kn-open .kn-tgl { border-color: var(--warn); }
+.kn-ask { color: var(--warn); font-weight: 600; }
+.fut-s.unk b { color: #9fb3d1; font-style: italic; font-weight: 600; }
+.sym-row .sc-btns { flex-wrap: wrap; row-gap: 6px; }
+@media (max-width: 640px) { .sym-row .kn-tgl { display: flex; width: 100%; margin: 0; } .sym-row .kn-b { flex: 1; } }

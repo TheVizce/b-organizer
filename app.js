@@ -24,21 +24,21 @@
   ];
   // Eigene Felder (werden vom Import nie überschrieben, außer der Import bringt selbst Werte mit)
   const OWN_FIELDS = ['Favorite', 'In Ranker', 'My Rating', 'Tags', 'Notes', 'Own Images', 'Own Image URLs', 'Cover',
-    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder', 'Cover Online', 'Cover Crop'];
+    'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Profile Deleted', 'Deleted Since', 'Cover Checked', 'Official Images', 'Scene Images', 'Fan Art', 'Primary Category', 'Image Folder', 'Cover Online', 'Cover Crop', 'Known'];
   const NO_CSV = new Set(['Own Images', 'Cover', 'Cover Online', 'Cover Crop']); // lokale Bilder gibt es nur im Browser
   const ALL_FIELDS = [...FIELDS, ...OWN_FIELDS];
 
   const GROUPS = IS_CHARS ? [
     { title: 'Allgemein', fields: ['Name', 'Full Name', 'AKA', 'Universe', 'Origin', 'Medium', 'Style', 'Species', 'Role', 'First Appearance', 'Adult'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Body type'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'Tags', 'Notes', 'Cover Checked'] },
+    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Known', 'Sympathy Score', 'Score', 'Tags', 'Notes', 'Cover Checked'] },
     { title: 'Darstellung', fields: ['Voice Actor', 'Actress'] },
     { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder'] },
     { title: 'Links', fields: ['Wiki URL', 'Reference Links'] }
   ] : [
     { title: 'Allgemein', fields: ['Name', 'AKA', 'Born', 'Exact Birthdate', 'Died', 'Birthplace', 'Nationality', 'Ethnicity', 'Professions', 'Profession Category', 'Sexuality', 'Years active', 'Active', 'Active till'] },
     { title: 'Aussehen', fields: ['Hair color', 'Eye color', 'Height', 'Weight', 'Body type', 'Measurements', 'Bra/Cup', 'Boobs', 'Tattoos', 'Piercings'] },
-    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
+    { title: 'Eigene Angaben', fields: ['Favorite', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Known', 'Sympathy Score', 'Score', 'My Rating (old)', 'Tags', 'Notes', 'Cover Checked'] },   // "In Ranker" bleibt in den Daten, wird aber nicht mehr angezeigt
     { title: 'Babepedia', fields: ['Profile URL', 'Profile Deleted', 'Deleted Since', 'Archive URL', 'Babe ID', 'Global Rating', 'Votes', 'User Rating', 'Rank', 'Highest Rank', 'Peakdays', 'Scraped At'] },
     { title: 'Bilder', fields: ['Own Images', 'Own Image URLs', 'Image Folder', 'Main Image URL', 'Image 2 URL', 'Image 3 URL', 'Image 4 URL', 'User Upload Image URLs', 'Gallery Links'] },
     { title: 'Links', fields: ['Website', 'Instagram', 'X / Twitter', 'TikTok', 'YouTube', 'Twitch', 'Reddit', 'IMDb', 'OnlyFans 1', 'OnlyFans 2', 'Fansly', 'Thronly', 'Boobpedia Link'] }
@@ -60,6 +60,7 @@
     'Style': ['', '2D Anime/Manga', '2D Cartoon/Comic', '2D Pixel', '3D Spiel/CGI', 'Realfilm', 'Sonstiges'],
     'Role': ['', 'Hauptfigur', 'Nebenfigur', 'Antagonistin', 'spielbare Figur', 'Begleiterin'],
     'Adult': ['', 'ja', 'nein', 'unklar'],
+    'Known': ['', 'ja', 'nein'],
     'First Appearance': 'num'
   };
   // Charaktere: Werte auf Deutsch (wie im Ranker-Reiter „Charaktere“) und als feste Auswahl, damit nichts zerfasert
@@ -91,7 +92,7 @@
   const HINTS = {
     'Reference Links': 'ein Link pro Zeile – z. B. Fandom, Wikipedia, MyAnimeList, Booru; erscheinen in der Detailansicht mit dem Namen der Seite', 'Wiki URL': 'Hauptquelle, z. B. die Fandom-Seite',
     'Height': 'in cm', 'Weight': 'in kg', 'Measurements': 'Brust-Taille-Hüfte, z. B. 86-61-89', 'Bra/Cup': 'nur Cup, z. B. D',
-    'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': '1–5, 2,5 = unbekannt/wirkt durchschnittlich (Leitfaden in der Detailansicht)', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
+    'Tags': 'kommagetrennt', 'My Rating': '1–10, wird aus den Kategorien berechnet, sobald Gesicht, Body und Hot/Cute bewertet sind', 'Score': 'berechnet (1–10 mit Nachkomma)', 'My Rating (old)': 'Bewertung vor dem Kategorie-System', 'Face Score': '1–5, inkl. Haare', 'Body Score': '1–5', 'Hot Score': '1–5', 'Cute Score': '1–5', 'Sympathy Score': 'Bekannt: 1–5 · Unbekannt: Eindruck 2 / 2,5 / 3', 'Known': 'kennst du die Person/Figur? Steuert die Sympathie-Skala', 'User Rating': 'deine Bewertung auf Babepedia', 'Years active': 'Startjahr', 'Active till': 'Endjahr, falls inaktiv',
     'User Upload Image URLs': 'kommagetrennt', 'Own Image URLs': 'Bild-Adressen, die du selbst einträgst – Babepedia-Updates ändern sie nie. ✕ entfernt einen Link, ★ macht ihn zum Kachelbild.', 'Gallery Links': 'kommagetrennt',
     'Exact Birthdate': 'aus = nur Jahr bekannt', 'Professions': 'kommagetrennt, wie auf Babepedia',
     'Universe': 'Franchise/Werk, z. B. Overwatch, Fire Emblem (im Ranker: Herkunft)', 'Origin': 'konkreter Teil, z. B. Fire Emblem Fates', 'Species': 'z. B. Human, Humanoid, Elfe, Android',
@@ -393,6 +394,20 @@
   // Leitfaden (nur Beschriftung): Bekannte nutzen 1–5, bei Unbekannten bewegt der Eindruck nur zwischen 2 und 3
   const SYMPATHY_LABELS = { 5: 'Bekannt: sehr sympathisch', 4: 'Bekannt: eher sympathisch', 3: 'Bekannt: durchschnittlich sympathisch · Unbekannt: wirkt eher sympathisch',
     2.5: 'Unbekannt: wirkt durchschnittlich sympathisch', 2: 'Bekannt: eher unsympathisch · Unbekannt: wirkt eher unsympathisch', 1: 'Bekannt: sehr unsympathisch' };
+  // Bekanntheit: 'ja' | 'nein' | '' (offen). Unbekannte bekommen nur einen Eindruck (2 / 2,5 / 3).
+  const knownOf = (e) => { const k = String((e && e.Known) || '').toLowerCase(); return k === 'ja' ? 'ja' : k === 'nein' ? 'nein' : ''; };
+  const SYM_KNOWN = [1, 2, 3, 4, 5], SYM_UNKNOWN = [2, 2.5, 3];
+  const SYM_UNK_LABELS = { 2: 'wirkt eher unsympathisch', 2.5: 'wirkt durchschnittlich', 3: 'wirkt eher sympathisch' };
+  const SYM_KNOWN_LABELS = { 1: 'sehr unsympathisch', 2: 'eher unsympathisch', 3: 'durchschnittlich', 4: 'eher sympathisch', 5: 'sehr sympathisch' };
+  // einmalige Vorbelegung aus vorhandenen Sympathie-Werten (1/4/5 gibt es nur bei Bekannten, 2,5 nur bei Unbekannten)
+  function migrateKnown(e) {
+    if (e._kn) return false;
+    e._kn = 1;   // nur einmal je Eintrag
+    if (knownOf(e)) return true;
+    const x = num(e['Sympathy Score']);
+    e.Known = x == null ? '' : x === 2.5 ? 'nein' : [2, 3].includes(x) ? '' : 'ja';
+    return true;
+  }
   const SCORE_ANCHORS = '1 = schwach für meine Liste · 3 = typisch · 5 = gehört zu den Besten';
   // Gesamt (1–5) → 10er-Skala. Oberhalb von 3 (= typisch = 7) zählt jeder Punkt doppelt, darunter dreifach,
   // damit die Enden erreichbar sind: 4,5 → 10 · 4 → 9 · 3,5 → 8 · 3 → 7 · 2,5 → 5,5 · 2 → 4 · 1,5 → 2,5 · 1 → 1
@@ -459,6 +474,7 @@
   function derive(e) {
     if (!e._id) e._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     applyScore(e);
+    if (migrateKnown(e)) kindsMigrated++;
     if (IS_CHARS) { germanizeChar(e); if (migrateCharImgs(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } if (dropCharGender(e)) kindsMigrated++; if (migrateKinds(e)) { e._updated = Math.max(Date.now(), e._updated || 0); kindsMigrated++; } return e; }   // Babepedia-Bereinigungen gelten nur für Personen
     // Standings verlinken seit Nov. 2026 auf /battles/babe/<Name> – Profil-Link ist /babe/<Name>
     if (/\/battles\/babe\//i.test(e['Profile URL'] || '')) { e['Profile URL'] = e['Profile URL'].replace(/\/battles\/babe\//i, '/babe/'); deriveChanged = true; }
@@ -2016,6 +2032,8 @@
     { k: 'score', label: 'Tool-Note nicht vergeben', test: e => rateable(e) && !hasScore(e) },
     { k: 'primary', label: 'Hauptbereich nicht bestätigt', hint: 'mehrere Bereiche, Hauptbereich automatisch', bp: true, test: e => catList(e).length > 1 && !(primaryCat(e) || {}).manual },
     { k: 'missing', label: 'Werte fehlen', hint: () => CORE_FIELDS.filter(([f]) => f !== '__img').map(([, l]) => l).join(', '), test: e => CORE_FIELDS.some(([f]) => f !== '__img' && isMissing(e, f)) },
+    { k: 'known', label: 'Bekanntheit offen', hint: 'bewertet, aber „kenne ich / kenne ich nicht“ fehlt', test: e => rateable(e) && !knownOf(e) && SCORE_CATS.some(c => num(v(e, c.f)) != null) },
+    { k: 'unkimp', label: 'Unbekannt, noch kein Eindruck', hint: 'Sympathie bei Unbekannten: wirkt eher sympathisch / durchschnittlich / eher unsympathisch', test: e => rateable(e) && knownOf(e) === 'nein' && num(v(e, 'Sympathy Score')) == null },
     { k: 'quick', label: 'Schnell angelegt – noch ausfüllen', hint: 'bis du den Eintrag einmal über „Bearbeiten“ speicherst', chars: true, test: e => !!e._quick },
     { k: 'adult', label: 'Volljährig ungeklärt', chars: true, test: e => v(e, 'Adult') !== 'ja' && v(e, 'Adult') !== 'nein' },
     { k: 'kind', label: 'Bilder mit unklarer Bildart', chars: true, test: e => images(e).some(u => imgKind(e, u) === 'unk') },
@@ -2240,7 +2258,7 @@
     'Own Images': 'Eigene Bilder', 'Own Image URLs': 'Eigene Bild-Links', 'Main Image URL': 'Hauptbild', 'Image 2 URL': 'Bild 2', 'Image 3 URL': 'Bild 3', 'Image 4 URL': 'Bild 4',
     'User Upload Image URLs': 'Nutzer-Bilder (Babepedia)', 'Gallery Links': 'Galerien', 'Primary Category': 'Hauptbereich',
     'Global Rating': 'Babepedia Ø', 'User Rating': 'Meine Babepedia-Note', 'Score': 'Tool-Note', 'My Rating': 'Tool-Note (gerundet)',
-    'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie',
+    'My Rating (old)': 'Alte eigene Note', 'Face Score': 'Gesicht', 'Body Score': 'Body', 'Hot Score': 'Hot', 'Cute Score': 'Cute', 'Sympathy Score': 'Sympathie', 'Known': 'Bekannt',
     '__cats': 'Kategorien kompakt (G B H C S)', 'Profile Deleted': 'Babepedia-Profil gelöscht', 'Scraped At': 'Zuletzt von Babepedia geholt', 'Deleted Since': 'Gelöscht festgestellt am', '__status': 'Profil-Status', 'Cover Checked': 'Kachelbild geprüft', 'Cover Online': 'Online-Ersatz fürs Kachelbild', 'Cover Crop': 'Bildausschnitt fürs Kachelbild', 'Own Image URLs': 'Eigene Bild-Links',
     'Full Name': 'Voller Name', 'Universe': 'Universum', 'Origin': 'Ursprünglich (Titel)', 'Medium': 'Medium', 'Style': 'Stil', 'Species': 'Spezies',
     'Role': 'Rolle', 'First Appearance': 'Erstauftritt', 'Official Images': 'Offizielle Artworks', 'Scene Images': 'Szenenbilder', 'Fan Art': 'Fan-Artworks', 'Adult': 'Volljährig (Kanon)', 'Voice Actor': 'Sprecherin', 'Actress': 'Darstellerin', 'Wiki URL': 'Wiki-Link', 'Reference Links': 'Referenz-Links'
@@ -2258,9 +2276,9 @@
     ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']]
     : [['f-nationality', 'Nationalität'], ['f-cat', 'Bereich'], ['f-hair', 'Haarfarbe'], ['f-eyes', 'Augenfarbe'], ['f-body', 'Figur'],
     ['f-active', 'Aktiv'], ['f-rating', 'Noten'], ['f-ranker', 'Ranker'], ['f-missing', 'Fehlende Werte'], ['f-status', 'Profil-Status'], ['f-todo', 'Zu erledigen'], ['f-fav', 'nur Favoriten']];
-  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Cover Checked', 'Origin', 'Role', 'Adult', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
+  const EXTRA_FILTER_CHOICES = IS_CHARS ? ['Known', 'Cover Checked', 'Origin', 'Role', 'Adult', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Actress', 'Tags', 'Favorite',
     'Score', 'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'] : ['Cover Checked', 'Ethnicity', 'Sexuality', 'Professions', 'Geburtsland', 'Geburtsjahrzehnt', 'Altersgruppe', 'Größenklasse', 'Gewichtsklasse', 'Cup-Gruppe', 'Boobs', 'Tattoos', 'Piercings',
-    'Karrierestart', 'Tags', 'Score', 'User Rating', 'Babepedia-Ø (grob)', 'Exact Birthdate', 'Favorite',
+    'Karrierestart', 'Tags', 'Score', 'User Rating', 'Babepedia-Ø (grob)', 'Known', 'Exact Birthdate', 'Favorite',
     'Face Score', 'Body Score', 'Hot Score', 'Cute Score', 'Sympathy Score'];
   const MULTI_FIELDS = new Set(['Professions', 'Tags', 'AKA']);
   const DEF_CARD_FIELDS = IS_CHARS ? ['Universe', 'Medium'] : ['Nationality', 'Alter', 'Height'];
@@ -2672,10 +2690,10 @@
   // Suche mit Feldangaben: nat:schweiz  cup>=d  note>=7  -tag:blond  (Rest: freie Wörter, „-wort“ = ohne)
   const SEARCH_KEYS = IS_CHARS
     ? { name: 'Name', uni: 'Universe', universum: 'Universe', medium: 'Medium', stil: 'Style', spezies: 'Species', rolle: 'Role', herkunft: 'Origin', haar: 'Hair color', augen: 'Eye color', figur: 'Body type',
-        tag: 'Tags', tags: 'Tags', notiz: 'Notes', sprecherin: 'Voice Actor', note: 'Score', gesicht: 'Face Score', body: 'Body Score', hot: 'Hot Score', cute: 'Cute Score', sym: 'Sympathy Score', jahr: 'First Appearance' }
+        tag: 'Tags', tags: 'Tags', notiz: 'Notes', sprecherin: 'Voice Actor', bekannt: 'Known', note: 'Score', gesicht: 'Face Score', body: 'Body Score', hot: 'Hot Score', cute: 'Cute Score', sym: 'Sympathy Score', jahr: 'First Appearance' }
     : { name: 'Name', nat: 'Nationality', land: 'Nationality', haar: 'Hair color', augen: 'Eye color', figur: 'Body type', cup: 'Bra/Cup', größe: 'Height', groesse: 'Height', gr: 'Height', gewicht: 'Weight',
         alter: 'Alter', jahr: 'Geburtsjahr', note: 'Score', gesicht: 'Face Score', body: 'Body Score', hot: 'Hot Score', cute: 'Cute Score', sym: 'Sympathy Score', bp: 'Global Rating', rang: 'Rank',
-        tag: 'Tags', tags: 'Tags', beruf: 'Professions', bereich: 'Profession Category', notiz: 'Notes', ethnie: 'Ethnicity', ort: 'Birthplace', tattoo: 'Tattoos', piercing: 'Piercings' };
+        tag: 'Tags', tags: 'Tags', beruf: 'Professions', bereich: 'Profession Category', notiz: 'Notes', ethnie: 'Ethnicity', ort: 'Birthplace', tattoo: 'Tattoos', piercing: 'Piercings', bekannt: 'Known' };
   const CUP_RANK = ['AAA', 'AA', 'A', 'B', 'C', 'D', 'DD', 'DDD', 'E', 'F', 'FF', 'G', 'GG', 'H', 'HH', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
   const cupRank = (x) => { const m = String(x || '').toUpperCase().match(/[A-Z]+/); if (!m) return null; const i = CUP_RANK.indexOf(m[0]); return i < 0 ? (m[0].startsWith('Z') ? 40 : null) : i; };
   function parseSearch(q) {
@@ -2845,6 +2863,7 @@
     const st = SCORE_CATS.map(c => {
       const x = num(v(e, c.f)), unset = x == null;
       const sg = !hl && sugFor(e._id, c.f, 0.75);
+      if (c.f === 'Sympathy Score' && knownOf(e) === 'nein') return `<span class="fut-s unk${unset ? ' unset' : ''}" title="Sympathie – unbekannt, ${unset ? 'noch kein Eindruck (zählt als 2,5)' : 'Eindruck: ' + (SYM_UNK_LABELS[x] || x)}"><b>${unset ? '?' : '~' + futV(x)}</b><i>${esc(c.short)}</i></span>`;
       return `<span class="fut-s${unset ? ' unset' : ''}${hl && hl.f === c.f ? ' chg ' + hl.dir : ''}${sg ? ' sug ' + (sg.to > sg.from ? 'up' : 'down') : ''}" title="${esc(c.label)}${unset && c.f === 'Sympathy Score' ? ' – nicht gesetzt, zählt als 2,5' : ''}${sg ? ` · Abgleich: eher ${fmtV(sg.to)} (${sg.level})` : ''}"><b>${futV(x)}${sg ? `<sup>${sg.to > sg.from ? '▲' : '▼'}</sup>` : ''}</b><i>${esc(c.short)}</i></span>`;
     }).join('');
     const r = ratingDiff(e), site = num(e['User Rating']);
@@ -3065,9 +3084,9 @@
 
   // ---------- Eigenschaft ↔ Tool-Note (nach dem Vorbild der Tag-Statistik im Image Ranker) ----------
   const PT_PROPS = IS_CHARS
-    ? ['Universe', 'Medium', 'Style', 'Origin', 'Species', 'Role', 'Hair color', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Tags', 'Favorite']
+    ? ['Universe', 'Medium', 'Style', 'Origin', 'Species', 'Role', 'Hair color', 'Eye color', 'Body type', 'Erster Auftritt (Jahrzehnt)', 'Voice Actor', 'Known', 'Tags', 'Favorite']
     : ['__primary', 'Profession Category', 'Nationality', 'Geburtsland', 'Ethnicity', 'Hair color', 'Eye color', 'Body type', 'Boobs', 'Cup-Gruppe', 'Größenklasse', 'Gewichtsklasse',
-       'Altersgruppe', 'Geburtsjahrzehnt', 'Karrierestart', 'Sexuality', 'Tattoos', 'Piercings', 'Babepedia-Ø (grob)', 'Active', 'Tags', 'Favorite'];
+       'Altersgruppe', 'Geburtsjahrzehnt', 'Karrierestart', 'Sexuality', 'Tattoos', 'Piercings', 'Babepedia-Ø (grob)', 'Active', 'Known', 'Tags', 'Favorite'];
   const ptLabel = (f) => f === '__primary' ? 'Hauptbereich' : f === 'Profession Category' ? 'Berufskategorie' : lab(f);
   function propStatsHTML(list) {
     const f = PT_PROPS.includes(ui.ptProp) ? ui.ptProp : PT_PROPS[0];
@@ -3344,7 +3363,24 @@
     return f.replace(/ URL$/, '');
   }
 
+  function symRow(e, c, idx, active) {
+    const cur = num(e[c.f]), kn = knownOf(e), id = esc(e._id);
+    const tgl = `<span class="kn-tgl" title="Kennst du sie? (U schaltet um)"><button class="kn-b ${kn === 'ja' ? 'on' : ''}" data-known="ja" data-id="${id}">kenne ich</button><button class="kn-b ${kn === 'nein' ? 'on' : ''}" data-known="nein" data-id="${id}">kenne ich nicht</button></span>`;
+    let btns = '', note = '';
+    if (kn === 'nein') {
+      btns = SYM_UNKNOWN.map((n, i) => `<button class="sc-btn unk ${cur === n ? 'on' : ''}" data-score="${c.f}" data-val="${n}" data-id="${id}" title="${esc(SYM_UNK_LABELS[n])} (Taste ${i + 1})">${n === 2.5 ? '2½' : n}</button>`).join('');
+      note = cur != null ? `Eindruck: ${SYM_UNK_LABELS[cur] || String(cur).replace('.', ',')}` : 'noch kein Eindruck – zählt als 2,5';
+    } else {
+      btns = SYM_KNOWN.map(n => `<button class="sc-btn ${cur === n ? 'on' : ''}${kn ? '' : ' dim'}" data-score="${c.f}" data-val="${n}" data-id="${id}" title="${esc(SYM_KNOWN_LABELS[n])}">${n}</button>`).join('');
+      note = kn === 'ja' ? (cur != null ? SYM_KNOWN_LABELS[cur] || String(cur).replace('.', ',') : 'nicht gesetzt – zählt als 2,5')
+        : `<b class="kn-ask">Kennst du sie?</b> ${cur != null ? `· aktuell ${String(cur).replace('.', ',')}` : ''}`;
+    }
+    const fv = cur != null && !symUnknown(c, cur) ? fineVal(e, c.f) : null;
+    const fineTag = fv ? `<small class="sc-fine ${fv.x - cur > 0.04 ? 'up' : fv.x - cur < -0.04 ? 'down' : ''}" title="Feinwert aus ${fv.n} Duell${fv.n === 1 ? '' : 'en'}">${fmt2(fv.x)}</small>` : '';
+    return `<div class="sc-row sym-row kn-${kn || 'open'} ${active ? 'active' : ''}" data-sc-idx="${idx}"><span class="sc-lbl">${esc(c.label)}${fineTag}</span><span class="sc-btns">${tgl}${btns}${cur != null ? `<button class="sc-clear" data-score="${c.f}" data-val="" data-id="${id}" title="entfernen">✕</button>` : ''}</span><span class="sc-note">${note}</span></div>`;
+  }
   function scoreRow(e, c, idx, active) {
+    if (c.f === 'Sympathy Score') return symRow(e, c, idx, active);
     const cur = num(e[c.f]);
     const vals = c.vals || (c.half ? [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] : [1, 2, 3, 4, 5]);
     const btns = vals.map(n => `<button class="sc-btn ${cur === n ? 'on' : ''} ${n % 1 ? 'half' : ''}" data-score="${c.f}" data-val="${n}" data-id="${esc(e._id)}" title="${esc(c.f === 'Sympathy Score' ? SYMPATHY_LABELS[n] : String(n).replace('.', ','))}">${n % 1 ? (cur === n ? Math.floor(n) + '½' : '½') : n}</button>`).join('');
@@ -3402,11 +3438,23 @@
     e._calibKeep = Object.assign({}, e._calibKeep, { [f]: { v: num(v(e, f)), n } });
     e._updated = Date.now(); saveQuiet(); cbSugDirty(); refreshItem(id);
   }
+  function setKnown(id, k) {
+    const e = byId(id); if (!e) return;
+    const prev = knownOf(e), next = prev === k ? '' : k;
+    e.Known = next;
+    // Wert passt nicht mehr zur Skala → Sympathie leeren (alter Wert per ↶ zurück)
+    const x = num(e['Sympathy Score']);
+    if (x != null && ((next === 'nein' && !SYM_UNKNOWN.includes(x)) || (next === 'ja' && x === 2.5))) { pushUndo(id, 'Sympathy Score', String(x), ''); e['Sympathy Score'] = ''; derive(e); toast('Sympathie passte nicht zur Skala und wurde geleert (↶ holt sie zurück).'); }
+    e._updated = Date.now(); saveQuiet(); refreshItem(id);
+    if (typeof cbSugDirty === 'function') cbSugDirty();
+  }
   function setScore(id, f, val, noUndo) {
     const e = byId(id); if (!e) return;
     if (!rateable(e) && val !== '') { toast('Erst „Volljährig (Kanon)“ auf „ja“ setzen – Minderjährige werden nicht bewertet.'); return; }
     const prev = e[f] == null ? '' : String(e[f]);
     e[f] = val === '' ? '' : String(val);
+    // Sympathie bei offener Bekanntheit: eindeutige Werte legen sie fest (1/4/5 → bekannt, 2,5 → unbekannt)
+    if (f === 'Sympathy Score' && val !== '' && !knownOf(e)) { const x = Number(val); if (x === 2.5) e.Known = 'nein'; else if (![2, 3].includes(x)) e.Known = 'ja'; }
     e._updated = Date.now();
     derive(e);
     saveQuiet(); refreshItem(id);
@@ -3476,6 +3524,7 @@
           <div><dt><kbd>N</kbd></dt><dd>neuer Eintrag</dd></div>
           <div><dt><kbd>R</kbd></dt><dd>⭐ Bewertungsmodus (Kategorien)</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>diese Übersicht</dd></div>
+          <div><dt><kbd>U</kbd> (Bewertungsmodus)</dt><dd>Sympathie: kenne ich / kenne ich nicht umschalten; unbekannt: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> = wirkt eher unsympathisch / durchschnittlich / eher sympathisch</dd></div>
           <div><dt><kbd>Strg</kbd>/<kbd>⌘</kbd>-Klick</dt><dd>Kachel auswählen (Mehrfachauswahl); <kbd>Umschalt</kbd>-Klick: Bereich; <kbd>Esc</kbd> beendet</dd></div>
         </dl>
         <h3>Suche mit Feldangaben</h3>
@@ -4631,6 +4680,7 @@
       const rsk = t.closest('[data-sug-keep]'); if (rsk) { keepSuggestion(rsk.dataset.sugKeep, rsk.dataset.cat); return raterCats(); }
       if (rater.cmp && t.closest('.rt-cmp')) { rater.cmp.remove(); rater.cmp = null; return; }
       const ad = t.closest('[data-adult]'); if (ad) { setAdult(ad.dataset.id, ad.dataset.adult); raterCats(); return; }
+      const kb = t.closest('[data-known]'); if (kb) { setKnown(kb.dataset.id, kb.dataset.known); raterCats(); return; }
       const sc = t.closest('[data-score]');
       if (sc) { raterSet(SCORE_CATS.findIndex(c => c.f === sc.dataset.score), sc.dataset.val === '' ? '' : Number(sc.dataset.val), false); return; }
       const rs = t.closest('[data-ref-set]'); if (rs) { rater.preview = null; raterSet(rater.cat, Number(rs.dataset.refSet), false); return; }
@@ -4806,7 +4856,7 @@
       if ((fz.perCat[o.c.f] || 0) >= PLACE_PER_CAT && calib.n < cats.length * PLACE_PER_CAT) continue;
       const seen = new Set(latestDuels().filter(d => d.cat === o.c.f && (d.a === F._id || d.b === F._id) && pairFresh(d, o.c)).map(d => d.a === F._id ? d.b : d.a));
       const cnt = new Map(); for (const d of duels) if (d.cat === o.c.f) { cnt.set(d.a, (cnt.get(d.a) || 0) + 1); cnt.set(d.b, (cnt.get(d.b) || 0) + 1); }
-      const pool = entries.filter(b => b !== F && rateable(b) && !seen.has(b._id) && !calib.skip.has([F._id, b._id].sort().join('|')) && (() => { const y = num(v(b, o.c.f)); return y != null && !symUnknown(o.c, y) && Math.abs(y - o.x) <= (o.c.vals ? 1 : 0.5); })());
+      const pool = entries.filter(b => b !== F && rateable(b) && !seen.has(b._id) && (o.c.f !== 'Sympathy Score' || knownOf(b) === knownOf(F)) && !calib.skip.has([F._id, b._id].sort().join('|')) && (() => { const y = num(v(b, o.c.f)); return y != null && !symUnknown(o.c, y) && Math.abs(y - o.x) <= (o.c.vals ? 1 : 0.5); })());
       if (!pool.length) continue;
       // gleicher Wert bevorzugt; gut belegte Gegner (viele Duelle) sind verlässlichere Maßstäbe
       pool.sort((p, q) => Math.abs(num(v(p, o.c.f)) - o.x) - Math.abs(num(v(q, o.c.f)) - o.x) || (cnt.get(q._id) || 0) - (cnt.get(p._id) || 0) || Math.random() - .5);
@@ -4875,7 +4925,7 @@
     for (const a of order.slice(0, 60)) {
       const va = val(a), la = L(a);
       const dir = Math.max(la.up, la.down) >= 0.45 ? (la.up > la.down ? 1 : -1) : 0;
-      const opts = pool.filter(b => b !== a && Math.abs(val(b) - va) <= maxGap && !seen.has([a._id, b._id].sort().join('|')) && !skip.has([a._id, b._id].sort().join('|')));
+      const opts = pool.filter(b => b !== a && Math.abs(val(b) - va) <= maxGap && (c.f !== 'Sympathy Score' || knownOf(a) === knownOf(b)) && !seen.has([a._id, b._id].sort().join('|')) && !skip.has([a._id, b._id].sort().join('|')));
       if (!opts.length) continue;
       const scoreB = (b) => {
         const d = val(b) - va, lb = L(b);
@@ -5040,7 +5090,8 @@
       for (const o of list) { const t = tab.get(o.opp) || [0, 0, 0]; t[o.s === 1 ? 0 : o.s === 0 ? 2 : 1]++; tab.set(o.opp, t); }
       out.push({ e, c, from: x0, to: best, conf, level: lvl[1], cls: lvl[2], n: list.length, tab: [...tab.entries()].sort((a, b) => a[0] - b[0]) });
     }
-    return out.sort((a, b) => b.conf - a.conf || b.n - a.n);
+    // Sympathie bei Unbekannten: nur Vorschläge innerhalb 2–3 (Eindruck), sonst müsste erst die Bekanntheit geändert werden
+    return out.filter(x => !(x.c.f === 'Sympathy Score' && knownOf(x.e) === 'nein' && !SYM_UNKNOWN.includes(x.to))).sort((a, b) => b.conf - a.conf || b.n - a.n);
   }
   // ---------- Feinwerte: genauere Kategorie-Werte aus eigenem Wert + Abgleich-Duellen ----------
   // Gleiches Modell wie die Vorschläge (logistisch, Prior = eigener Wert), aber stetig und auf ±0,5 um den eigenen
@@ -5456,6 +5507,10 @@
     if (k === 'n' || k === 'N') { ev.preventDefault(); $('.rt-notes textarea', rater.el).focus(); return; }
     if (k === 'k' || k === 'K') { ev.preventDefault(); raterCover(); return; }
     if (/^[1-5]$/.test(k) && !rateable(raterEntry())) return;
+    if (k === 'u' || k === 'U') { ev.preventDefault(); const e = raterEntry(); setKnown(e._id, knownOf(e) === 'ja' ? 'nein' : 'ja'); rater.cat = SCORE_CATS.findIndex(c => c.f === 'Sympathy Score'); raterCats(); return; }
+    if (/^[1-5]$/.test(k) && SCORE_CATS[rater.cat].f === 'Sympathy Score' && knownOf(raterEntry()) === 'nein') {
+      if (+k > 3) return; rater.preview = null; raterSet(rater.cat, SYM_UNKNOWN[+k - 1], !!ui.raterAdvance); return;
+    }
     if (/^[1-5]$/.test(k)) { rater.preview = null; raterSet(rater.cat, Number(k), !!ui.raterAdvance); return; }
     if ((k === '.' || k === ',') && rater.last != null) {
       const c = SCORE_CATS[rater.last], cur = num(raterEntry()[c.f]);
@@ -5610,6 +5665,8 @@
       const box = t.closest('.score-box'); if (box) box.outerHTML = scoreBox(byId(ad.dataset.id));
       return;
     }
+    const kb = t.closest('[data-known]');
+    if (kb && !t.closest('.rater')) { setKnown(kb.dataset.id, kb.dataset.known); const box = t.closest('.score-box'); if (box) box.outerHTML = scoreBox(byId(kb.dataset.id)); return; }
     const sc = t.closest('[data-score]');
     if (sc && !t.closest('.rater')) {
       setScore(sc.dataset.id, sc.dataset.score, sc.dataset.val);
