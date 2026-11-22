@@ -1979,6 +1979,14 @@
   const FILTERS = IS_CHARS ? { 'f-nationality': 'Universe', 'f-hair': 'Hair color', 'f-eyes': 'Species', 'f-body': 'Style' }
     : { 'f-nationality': 'Nationality', 'f-hair': 'Hair color', 'f-eyes': 'Eye color', 'f-body': 'Body type' };
 
+  // Figur von schmal nach voll (Muskulös/Sportlich als „trainiert“ zwischen schlank und durchschnittlich)
+  const BODY_ORDER = ['Petite', 'Zierlich', 'Slim', 'Schlank', 'Athletic', 'Athletisch', 'Sportlich', 'Muscular', 'Muskulös', 'Average', 'Durchschnittlich', 'Curvy', 'Kurvig', 'Chubby', 'Mollig', 'BBW'];
+  const MAIN_ORDER = { 'Body type': BODY_ORDER };
+  const rangeTest = (want, val, ord) => {   // want: __ge:/__le:/__rg:lo|hi
+    const i = ord.indexOf(val); if (i < 0) return false;
+    if (want.startsWith('__rg:')) { const [lo, hi] = want.slice(5).split('|').map(k => ord.indexOf(k)); return i >= Math.min(lo, hi) && i <= Math.max(lo, hi); }
+    const at = ord.indexOf(want.slice(5)); return want[2] === 'g' ? i >= at : i <= at;
+  };
   function refreshFilters() {
     refreshCatFilter();
     renderExtraFilters();
@@ -1994,6 +2002,23 @@
       const first = sel.options[0].outerHTML;
       const shownTxt = (x) => field === 'Nationality' ? `${natFlagDE.get(x) || ''} ${x}`.trim() : deList(field, x);
       const sortTxt = (x) => field === 'Nationality' ? x : shownTxt(x);
+      const ord = MAIN_ORDER[field];
+      if (ord) {
+        // geordnete Werte: Bereich / mindestens / höchstens / genau
+        const keys = [...vals].sort((a, b) => (ord.indexOf(a) + 1 || 99) - (ord.indexOf(b) + 1 || 99) || a.localeCompare(b));
+        const cnt = (pred) => entries.filter(e => { const x = v(e, field); return x && pred(x); }).length;
+        const o = (val, txt) => `<option value="${esc(val)}">${esc(txt)}</option>`;
+        let rg = '';
+        if (cur.startsWith('__rg:')) { const [lo, hi] = cur.slice(5).split('|'); rg = o(cur, `${deList(field, lo)} bis ${deList(field, hi)} (${cnt(x => rangeTest(cur, x, ord))})`); }
+        sel.innerHTML = first
+          + `<optgroup label="Bereich">${rg}<option value="__rgpick">zwischen …</option></optgroup>`
+          + `<optgroup label="mindestens">${keys.slice(1).map(k => o('__ge:' + k, `≥ ${deList(field, k)} (${cnt(x => rangeTest('__ge:' + k, x, ord))})`)).join('')}</optgroup>`
+          + `<optgroup label="höchstens">${keys.slice(0, -1).map(k => o('__le:' + k, `≤ ${deList(field, k)} (${cnt(x => rangeTest('__le:' + k, x, ord))})`)).join('')}</optgroup>`
+          + `<optgroup label="genau">${keys.map(k => o(k, `${deList(field, k)} (${cnt(x => x === k)})`)).join('')}</optgroup>`;
+        sel.value = (vals.has(cur) || /^__(ge|le|rg):/.test(cur)) ? cur : '';
+        if (sel.value !== cur && /^__(ge|le|rg):/.test(cur)) sel.value = '';
+        continue;
+      }
       sel.innerHTML = first + [...vals].sort((a, b) => sortTxt(a).localeCompare(sortTxt(b), 'de'))
         .map(x => `<option value="${esc(x)}">${esc(shownTxt(x))}</option>`).join('');
       sel.value = vals.has(cur) ? cur : '';
@@ -2169,6 +2194,7 @@
       if (act && String(v(e, 'Active') || 'false') !== act) return false;
       for (const [f, val] of Object.entries(fv)) {
         if (!val) continue;
+        if (MAIN_ORDER[f] && /^__(ge|le|rg):/.test(val)) { if (!rangeTest(val, v(e, f), MAIN_ORDER[f])) return false; continue; }
         if (f === 'Nationality' ? !natNames(e).some(n => deNat(n) === val) : v(e, f) !== val) return false;
       }
       for (const c of conds) if (searchCond(e, c) === c.neg) return false;
@@ -2357,7 +2383,7 @@
       const counts = new Map(); let empty = 0;
       for (const e of entries) { const vals = xfValues(e, f); if (!vals.length) empty++; vals.forEach(x => counts.set(x, (counts.get(x) || 0) + 1)); }
       const isNum = ['Alter', 'Geburtsjahr', 'Height', 'Weight', 'My Rating', 'User Rating', 'Score', 'Global Rating'].includes(f) || / Score$/.test(f);
-      const ord = GROUPED[f] && GROUPED[f].order;
+      const ord = (GROUPED[f] && GROUPED[f].order) || MAIN_ORDER[f];
       const keys = [...counts.keys()].sort((a, b) => ord ? ord.indexOf(a) - ord.indexOf(b) : isNum ? (num(a) - num(b)) : a.localeCompare(b, 'de'));
       const cur = xfVals[f] || '';
       // geordnete Werte (Zahlen, Noten, Gruppen): zusätzlich „mindestens …“ / „höchstens …“
@@ -2603,7 +2629,13 @@
   function setFilterState(st, withSort = true) {
     if (!st) return;
     $('#q').value = st.q || '';
-    for (const id of SIMPLE_F()) $('#' + id).value = (st.sel || {})[id] || '';
+    let needRefresh = false;
+    for (const id of SIMPLE_F()) {
+      const el = $('#' + id), val = (st.sel || {})[id] || '';
+      if (/^__(ge|le|rg):/.test(val) && ![...el.options].some(o => o.value === val)) { const o = document.createElement('option'); o.value = val; el.appendChild(o); needRefresh = true; }
+      el.value = val;
+    }
+    if (needRefresh) refreshFilters();
     $('#f-fav').checked = !!st.fav;
     for (const k of Object.keys(xfVals)) delete xfVals[k];
     for (const [k, x] of Object.entries(st.xf || {})) { if (!ui.extraFilters.includes(k)) ui.extraFilters.push(k); xfVals[k] = x; }
@@ -2674,9 +2706,11 @@
   }
 
   // „zwischen …“ für geordnete Zusatzfilter
-  function pickRange(f) {
-    const ord = xfOrder[f] || []; if (ord.length < 2) return;
-    const cur = (xfVals[f] || '').startsWith('__rg:') ? xfVals[f].slice(5).split('|') : [ord[0], ord[ord.length - 1]];
+  function pickRange(f, main) {
+    // main: { ord, cur, set } für Hauptfilter (z. B. Figur); sonst Zusatzfilter
+    const ord = main ? main.ord : (xfOrder[f] || []); if (ord.length < 2) return;
+    const curV = main ? main.cur : (xfVals[f] || '');
+    const cur = curV.startsWith('__rg:') ? curV.slice(5).split('|') : [ord[0], ord[ord.length - 1]];
     const opts = (sel) => ord.map(k => `<option value="${esc(k)}" ${k === sel ? 'selected' : ''}>${esc(deVal(f, k).replace(/(\d)\.(\d)/g, '$1,$2'))}</option>`).join('');
     openModal(`<div class="modal-head"><h2>${esc(lab(f))}: Bereich</h2><div class="actions"><button class="x" data-action="close" aria-label="Schließen">×</button></div></div>
       <form class="qa" id="rg-form"><div class="qa-row"><label class="qa-f"><span>von</span><select name="lo">${opts(cur[0])}</select></label><label class="qa-f"><span>bis (einschließlich)</span><select name="hi">${opts(cur[1])}</select></label><button class="btn primary" type="submit">Übernehmen</button></div></form>`);
@@ -2684,6 +2718,7 @@
       ev.preventDefault();
       let lo = ev.target.elements.lo.value, hi = ev.target.elements.hi.value;
       if (ord.indexOf(lo) > ord.indexOf(hi)) [lo, hi] = [hi, lo];
+      if (main) { closeModal(true); main.set(`__rg:${lo}|${hi}`); return; }
       xfVals[f] = `__rg:${lo}|${hi}`; closeModal(true); renderExtraFilters(); render();
     });
   }
@@ -5834,6 +5869,19 @@
   });
   let searchTimer = null;
   $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); });
+  // Hauptfilter mit Reihenfolge (Figur): „zwischen …“ öffnet die Bereichsauswahl
+  let mainPrev = {};
+  Object.entries(FILTERS).forEach(([id, field]) => {
+    const sel = $('#' + id); if (!MAIN_ORDER[field]) return;
+    sel.addEventListener('focus', () => { mainPrev[id] = sel.value; });
+    sel.addEventListener('input', (ev) => {
+      if (sel.value !== '__rgpick') { mainPrev[id] = sel.value; return; }
+      ev.stopImmediatePropagation();
+      const before = mainPrev[id] || ''; sel.value = before;
+      const keys = [...sel.querySelectorAll('optgroup[label="genau"] option')].map(o => o.value);
+      pickRange(field, { ord: keys, cur: before, set: (val) => { refreshFilters(); const o = document.createElement('option'); o.value = val; sel.appendChild(o); sel.value = val; refreshFilters(); sel.value = val; mainPrev[id] = val; render(); } });
+    });
+  });
   ['#f-nationality', '#f-hair', '#f-eyes', '#f-body', '#f-active', '#f-fav', '#f-rating', '#f-cat', '#f-ranker', '#f-missing', '#f-status'].forEach(s => $(s).addEventListener('input', render));
   // Bild-Filter: ungeprüfte Einträge im Hintergrund prüfen, Liste danach aktualisieren
   $('#f-missing').addEventListener('input', (ev) => { if (filterNeedsImages(ev.target.value)) scanImages(false); });
