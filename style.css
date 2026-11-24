@@ -1533,3 +1533,8 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .fut-s.unk b { color: #9fb3d1; font-style: italic; font-weight: 600; }
 .sym-row .sc-btns { flex-wrap: wrap; row-gap: 6px; }
 @media (max-width: 640px) { .sym-row .kn-tgl { display: flex; width: 100%; margin: 0; } .sym-row .kn-b { flex: 1; } }
+/* Diashow am Handy: Zähler darf schrumpfen, Knöpfe bleiben immer erreichbar */
+.sl-top { padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+.sl-top .sl-count { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-top > :not(.sl-count) { flex: none; }
+@media (max-width: 600px) { .sl-top { gap: 5px; } .sl-top .btn.small { padding-inline: 9px; } .sl-top .sl-speed { min-width: 34px; } .sl-count .sl-long { display: none; } }

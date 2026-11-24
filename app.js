@@ -4521,7 +4521,7 @@
       const sc = scoreOf(e);
       $('.sl-meta', s.el).textContent = s.cfg.infoNote ? [natDisplay(e), age(e) != null ? age(e) + ' J.' : '', sc ? `Tool-Note ${sc.ten.toFixed(1).replace('.', ',')}` : '', it.n > 1 ? `Bild ${it.k + 1}/${it.n}` : ''].filter(Boolean).join(' · ') : '';
       const entriesTotal = new Set(s.items.map(x => x.id)).size;
-      $('.sl-count', s.el).textContent = `${j + 1} / ${s.items.length} Bilder · ${entriesTotal} Einträge`;
+      $('.sl-count', s.el).innerHTML = `${j + 1} / ${s.items.length}<span class="sl-long"> Bilder · ${entriesTotal} Einträge</span>`;
       slideSpeedText();
       slideSchedule();
       // nächstes Bild vorladen
