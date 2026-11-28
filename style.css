@@ -1538,3 +1538,5 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .sl-top .sl-count { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sl-top > :not(.sl-count) { flex: none; }
 @media (max-width: 600px) { .sl-top { gap: 5px; } .sl-top .btn.small { padding-inline: 9px; } .sl-top .sl-speed { min-width: 34px; } .sl-count .sl-long { display: none; } }
+/* Bewertungsmodus am Handy: kein Einordnen-Knopf in der Navigation (sprengte das Layout; „danach einordnen“ oben reicht) */
+@media (max-width: 700px) { .rt-nav .rt-placebtn { display: none !important; } }
